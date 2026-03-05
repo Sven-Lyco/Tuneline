@@ -1,28 +1,26 @@
 import styled from '@emotion/styled';
-import type { Feedback, Player, Song } from '../types';
+import type { Feedback } from '../types';
+import type { GameStateForClient, SongFull, SongMeta } from '@tuneline/shared';
 import { PLAYER_COLORS } from '../constants';
 import { Vinyl } from '../components/Vinyl';
 import { Wave } from '../components/Wave';
 import { DropZone } from '../components/DropZone';
 
 interface GameScreenProps {
-  players: Player[];
-  playerIndex: number;
-  round: number;
-  rounds: number;
-  scores: Record<number, number>;
-  song: Song;
-  timeline: Song[];
-  slot: number | null;
-  setSlot: (slot: number | null) => void;
+  myPlayerId: string;
+  gameState: GameStateForClient;
+  currentSong: SongMeta;
+  revealedSong: SongFull | null;
   feedback: Feedback;
   revealed: boolean;
   playing: boolean;
+  slot: number | null;
+  setSlot: (slot: number | null) => void;
   onToggleAudio: () => void;
   onPlace: () => void;
 }
 
-// ── Layout ────────────────────────────────────────────────────
+// ── Layout ─────────────────────────────────────────────────────
 
 const Screen = styled.div`
   min-height: 100vh;
@@ -42,7 +40,7 @@ const GameBody = styled.div`
   width: 100%;
 `;
 
-// ── Header ────────────────────────────────────────────────────
+// ── Header ─────────────────────────────────────────────────────
 
 const Header = styled.div`
   display: flex;
@@ -111,7 +109,7 @@ const PlayerScore = styled.span`
   color: #06d6a0;
 `;
 
-// ── Song Card ─────────────────────────────────────────────────
+// ── Song Card ──────────────────────────────────────────────────
 
 const SongArea = styled.div`
   display: flex;
@@ -205,7 +203,6 @@ const AudioButton = styled.button`
   }
 `;
 
-
 const PlacementHint = styled.div`
   font-size: 0.75rem;
   color: #7a7a8e;
@@ -213,7 +210,15 @@ const PlacementHint = styled.div`
   text-align: center;
 `;
 
-// ── Feedback bar ──────────────────────────────────────────────
+const WaitingLabel = styled.div`
+  font-size: 0.75rem;
+  color: #7a7a8e;
+  margin-top: 0.6rem;
+  text-align: center;
+  animation: pulse 1.5s ease-in-out infinite;
+`;
+
+// ── Feedback bar ───────────────────────────────────────────────
 
 const FeedbackBar = styled.div<{ ok: string }>`
   text-align: center;
@@ -228,7 +233,7 @@ const FeedbackBar = styled.div<{ ok: string }>`
   animation: slideIn 0.3s ease-out;
 `;
 
-// ── Timeline ──────────────────────────────────────────────────
+// ── My Timeline ────────────────────────────────────────────────
 
 const TimelineSection = styled.div`
   flex-shrink: 0;
@@ -254,17 +259,9 @@ const TimelineArea = styled.div`
   min-height: 150px;
   padding: 0.5rem 0;
 
-  &::-webkit-scrollbar {
-    height: 5px;
-  }
-  &::-webkit-scrollbar-track {
-    background: #12121a;
-    border-radius: 3px;
-  }
-  &::-webkit-scrollbar-thumb {
-    background: #2a2a3a;
-    border-radius: 3px;
-  }
+  &::-webkit-scrollbar { height: 5px; }
+  &::-webkit-scrollbar-track { background: #12121a; border-radius: 3px; }
+  &::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
 `;
 
 const TimelineInner = styled.div`
@@ -281,8 +278,7 @@ const SongTile = styled.div<{ highlight: string }>`
   padding: 0.8rem 1rem;
   text-align: center;
   min-width: 150px;
-  box-shadow: ${({ highlight }) =>
-    highlight === 'true' ? '0 0 24px rgba(6,214,160,0.25)' : 'none'};
+  box-shadow: ${({ highlight }) => (highlight === 'true' ? '0 0 24px rgba(6,214,160,0.25)' : 'none')};
   animation: ${({ highlight }) => (highlight === 'true' ? 'pop 0.4s ease-out' : 'none')};
   transition: all 0.3s;
   flex-shrink: 0;
@@ -316,7 +312,74 @@ const TileArtist = styled.div`
   margin-top: 2px;
 `;
 
-// ── Place Button ──────────────────────────────────────────────
+// ── Other players ──────────────────────────────────────────────
+
+const OthersSection = styled.div`
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  padding: 0 2rem 0.5rem;
+  flex-shrink: 0;
+
+  &::-webkit-scrollbar { height: 4px; }
+  &::-webkit-scrollbar-track { background: transparent; }
+  &::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+`;
+
+const OtherPlayerPanel = styled.div<{ isActive: string; borderColor: string }>`
+  background: #12121a;
+  border: 1px solid ${({ isActive, borderColor }) => (isActive === 'true' ? borderColor : '#1e1e2e')};
+  border-radius: 14px;
+  padding: 0.75rem 1rem;
+  min-width: 200px;
+  flex-shrink: 0;
+`;
+
+const OtherPlayerHeader = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+`;
+
+const OtherDot = styled.div<{ bg: string }>`
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: ${({ bg }) => bg};
+`;
+
+const OtherName = styled.div`
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #e8e8f0;
+  flex: 1;
+`;
+
+const OtherScore = styled.div`
+  font-family: 'Space Mono', monospace;
+  font-size: 0.75rem;
+  color: #06d6a0;
+  font-weight: 700;
+`;
+
+const OtherTimeline = styled.div`
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+`;
+
+const MiniTile = styled.div`
+  background: #1a1a26;
+  border: 1px solid #2a2a3a;
+  border-radius: 6px;
+  padding: 0.2rem 0.4rem;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.65rem;
+  color: #ff2d78;
+`;
+
+// ── Place Button ───────────────────────────────────────────────
 
 const PlaceButtonRow = styled.div`
   display: flex;
@@ -346,59 +409,70 @@ const PlaceButton = styled.button<{ ready: string }>`
   }
 `;
 
-// ── Component ─────────────────────────────────────────────────
+// ── Component ──────────────────────────────────────────────────
 
 export function GameScreen({
-  players,
-  playerIndex,
-  round,
-  rounds,
-  scores,
-  song,
-  timeline,
-  slot,
-  setSlot,
+  myPlayerId,
+  gameState,
+  currentSong,
+  revealedSong,
   feedback,
   revealed,
   playing,
+  slot,
+  setSlot,
   onToggleAudio,
   onPlace,
 }: GameScreenProps) {
-  const isReady = slot !== null && !revealed;
-  const centered = timeline.length <= 4;
+  const isMyTurn = gameState.currentPlayerId === myPlayerId;
+  const myPlayer = gameState.players.find((p) => p.id === myPlayerId);
+  const activePlayer = gameState.players.find((p) => p.id === gameState.currentPlayerId);
+  const otherPlayers = gameState.players.filter((p) => p.id !== myPlayerId);
+
+  const myTimeline = [...(myPlayer?.timeline ?? [])].sort((a, b) => a.year - b.year);
+  const isReady = isMyTurn && slot !== null && !revealed;
+  const centered = myTimeline.length <= 4;
+
+  // For the song card: show year from revealedSong after placement
+  const displayYear = revealed && revealedSong ? revealedSong.year : null;
 
   return (
     <Screen>
-      {/* Header — full width */}
+      {/* Header */}
       <Header>
         <HeaderTitle>TUNELINE</HeaderTitle>
-        <RoundBadge>RUNDE {round}/{rounds}</RoundBadge>
+        <RoundBadge>RUNDE {gameState.round}/{gameState.rounds}</RoundBadge>
         <PlayerBadges>
-          {players.map((p, i) => (
-            <PlayerChip key={i} active={String(i === playerIndex)} borderColor="#ff2d78">
-              <PlayerDot bg={PLAYER_COLORS[i]} />
-              <PlayerName active={String(i === playerIndex)}>{p.name}</PlayerName>
-              <PlayerScore>{scores[i]}</PlayerScore>
+          {gameState.players.map((p, i) => (
+            <PlayerChip
+              key={p.id}
+              active={String(p.id === gameState.currentPlayerId)}
+              borderColor={PLAYER_COLORS[i] ?? '#ff2d78'}
+            >
+              <PlayerDot bg={PLAYER_COLORS[i] ?? '#7a7a8e'} />
+              <PlayerName active={String(p.id === gameState.currentPlayerId)}>
+                {p.name}{p.id === myPlayerId ? ' (du)' : ''}
+              </PlayerName>
+              <PlayerScore>{p.score}</PlayerScore>
             </PlayerChip>
           ))}
         </PlayerBadges>
       </Header>
 
-      {/* Vertically centered game body */}
       <GameBody>
         {/* Song Card */}
         <SongArea>
-          <CurrentPlayerLabel color={PLAYER_COLORS[playerIndex]}>
-            ● {players[playerIndex]?.name} ist dran
+          <CurrentPlayerLabel color={PLAYER_COLORS[gameState.players.findIndex((p) => p.id === gameState.currentPlayerId)] ?? '#ff2d78'}>
+            ● {activePlayer?.name ?? '?'} ist dran
           </CurrentPlayerLabel>
           <SongCard>
             <SongCardAccent />
             <SongCardBody>
-              <Vinyl spinning={playing} cover={song.cover} size={120} />
+              <Vinyl spinning={playing} cover={currentSong.cover} size={120} />
               <SongInfo>
-                <SongTitle>{song.title}</SongTitle>
-                <SongArtist>{song.artist}</SongArtist>
-                {revealed && <RevealedYear>{song.year}</RevealedYear>}
+                <SongTitle>{currentSong.title}</SongTitle>
+                <SongArtist>{currentSong.artist}</SongArtist>
+                {displayYear !== null && <RevealedYear>{displayYear}</RevealedYear>}
                 {!revealed && (
                   <AudioButton onClick={onToggleAudio}>
                     {playing ? '⏸ Pause' : '▶ Play'}
@@ -407,8 +481,11 @@ export function GameScreen({
               </SongInfo>
             </SongCardBody>
             <Wave active={playing} />
-            {!revealed && (
-              <PlacementHint>Wähle die richtige Position in der Timeline ↓</PlacementHint>
+            {!revealed && isMyTurn && (
+              <PlacementHint>Wähle die richtige Position in deiner Timeline ↓</PlacementHint>
+            )}
+            {!revealed && !isMyTurn && (
+              <WaitingLabel>Warten auf {activePlayer?.name ?? '?'}…</WaitingLabel>
             )}
           </SongCard>
         </SongArea>
@@ -418,23 +495,24 @@ export function GameScreen({
           <FeedbackBar ok={String(feedback === 'ok')}>
             {feedback === 'ok'
               ? '✓ Richtig platziert! +1 Punkt'
-              : `✗ Falsch! Der Song war von ${song.year}.`}
+              : `✗ Falsch! Der Song war von ${revealedSong?.year ?? '?'}.`}
           </FeedbackBar>
         )}
 
-        {/* Timeline */}
+        {/* My Timeline */}
         <TimelineSection>
           <TimelineLabel>— Deine Timeline —</TimelineLabel>
           <TimelineArea style={{ justifyContent: centered ? 'center' : 'flex-start' }}>
             <TimelineInner>
-              <DropZone active={slot === 0} onClick={() => setSlot(0)} disabled={revealed} />
-              {timeline.map((s, i) => {
-                const isNewSong = revealed && feedback === 'ok' && s === song;
+              <DropZone
+                active={slot === 0}
+                onClick={() => isMyTurn && !revealed && setSlot(0)}
+                disabled={!isMyTurn || revealed}
+              />
+              {myTimeline.map((s, i) => {
+                const isNewSong = revealed && feedback === 'ok' && revealedSong?.id === s.id;
                 return (
-                  <div
-                    key={`${s.id || s.title}-${i}`}
-                    style={{ display: 'flex', alignItems: 'center' }}
-                  >
+                  <div key={`${s.id}-${i}`} style={{ display: 'flex', alignItems: 'center' }}>
                     <SongTile highlight={String(isNewSong)}>
                       <TileYear>{s.year}</TileYear>
                       <TileTitle>{s.title}</TileTitle>
@@ -442,8 +520,8 @@ export function GameScreen({
                     </SongTile>
                     <DropZone
                       active={slot === i + 1}
-                      onClick={() => setSlot(i + 1)}
-                      disabled={revealed}
+                      onClick={() => isMyTurn && !revealed && setSlot(i + 1)}
+                      disabled={!isMyTurn || revealed}
                     />
                   </div>
                 );
@@ -452,10 +530,48 @@ export function GameScreen({
           </TimelineArea>
         </TimelineSection>
 
+        {/* Other players' timelines */}
+        {otherPlayers.length > 0 && (
+          <OthersSection>
+            {otherPlayers.map((p, _idx) => {
+              const globalIdx = gameState.players.findIndex((gp) => gp.id === p.id);
+              const sortedTl = [...p.timeline].sort((a, b) => a.year - b.year);
+              return (
+                <OtherPlayerPanel
+                  key={p.id}
+                  isActive={String(p.id === gameState.currentPlayerId)}
+                  borderColor={PLAYER_COLORS[globalIdx] ?? '#7a7a8e'}
+                >
+                  <OtherPlayerHeader>
+                    <OtherDot bg={PLAYER_COLORS[globalIdx] ?? '#7a7a8e'} />
+                    <OtherName>{p.name}</OtherName>
+                    <OtherScore>{p.score} Pkt</OtherScore>
+                  </OtherPlayerHeader>
+                  <OtherTimeline>
+                    {sortedTl.length === 0 ? (
+                      <span style={{ fontSize: '0.65rem', color: '#3a3a5a' }}>leer</span>
+                    ) : (
+                      sortedTl.map((s, si) => (
+                        <MiniTile key={`${s.id}-${si}`} title={`${s.title} — ${s.artist}`}>
+                          {s.year}
+                        </MiniTile>
+                      ))
+                    )}
+                  </OtherTimeline>
+                </OtherPlayerPanel>
+              );
+            })}
+          </OthersSection>
+        )}
+
         {/* Place Button */}
         <PlaceButtonRow>
           <PlaceButton ready={String(isReady)} disabled={!isReady} onClick={onPlace}>
-            {slot !== null ? 'Hier platzieren ▶' : 'Position wählen...'}
+            {!isMyTurn
+              ? `Warten auf ${activePlayer?.name ?? '?'}…`
+              : slot !== null
+              ? 'Hier platzieren ▶'
+              : 'Position wählen...'}
           </PlaceButton>
         </PlaceButtonRow>
       </GameBody>

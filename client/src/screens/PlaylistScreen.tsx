@@ -232,7 +232,13 @@ export function PlaylistScreen({ selected, onToggle, onConfirm, onLogout }: Play
           >
             <CoverWrapper>
               {p.coverUrl ? (
-                <CoverImg src={p.coverUrl} alt={p.name} />
+                <CoverImg
+                  src={p.coverUrl}
+                  alt={p.name}
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                  }}
+                />
               ) : (
                 <CoverPlaceholder>🎵</CoverPlaceholder>
               )}

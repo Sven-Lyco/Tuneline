@@ -1,0 +1,50 @@
+# Local development: runs client (Vite) and server (tsx watch) separately
+# For production, use the Dockerfile instead.
+services:
+  server:
+    build:
+      context: .
+      target: builder
+    working_dir: /app
+    command: npm run dev:server
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - FRONTEND_ORIGIN=http://localhost:5174
+      - NODE_ENV=development
+    volumes:
+      - ./server/src:/app/server/src
+      - ./shared/src:/app/shared/src
+    develop:
+      watch:
+        - action: sync
+          path: ./server/src
+          target: /app/server/src
+        - action: sync
+          path: ./shared/src
+          target: /app/shared/src
+
+  client:
+    build:
+      context: .
+      target: builder
+    working_dir: /app
+    command: npm run dev:client
+    ports:
+      - "5174:5174"
+    environment:
+      - VITE_SERVER_URL=http://localhost:3001
+    volumes:
+      - ./client/src:/app/client/src
+      - ./shared/src:/app/shared/src
+    develop:
+      watch:
+        - action: sync
+          path: ./client/src
+          target: /app/client/src
+        - action: sync
+          path: ./shared/src
+          target: /app/shared/src
+    depends_on:
+      - server

@@ -8,10 +8,6 @@ export interface Song {
   preview: string | null;
 }
 
-export interface Player {
-  name: string;
-}
-
 export interface SpotifyPlaylist {
   id: string;
   name: string;
@@ -20,5 +16,14 @@ export interface SpotifyPlaylist {
   ownerName: string;
 }
 
-export type Screen = 'login' | 'playlists' | 'menu' | 'loading' | 'game' | 'result';
+export type Screen =
+  | 'login'
+  | 'join'
+  | 'playlists'
+  | 'menu'
+  | 'loading'
+  | 'lobby'
+  | 'game'
+  | 'result';
+
 export type Feedback = 'ok' | 'no' | null;

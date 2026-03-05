@@ -1,15 +1,17 @@
 import styled from '@emotion/styled';
-import type { Player, SpotifyPlaylist } from '../types';
-import { PLAYER_COLORS } from '../constants';
+import type { SpotifyPlaylist } from '../types';
+import type { AudioMode } from '@tuneline/shared';
 import { Label } from '../components/Label';
 
 interface MenuScreenProps {
   playlists: SpotifyPlaylist[];
-  players: Player[];
-  setPlayers: (players: Player[]) => void;
+  hostName: string;
+  setHostName: (name: string) => void;
   rounds: number;
   setRounds: (rounds: number) => void;
-  onStart: () => void;
+  audioMode: AudioMode;
+  setAudioMode: (mode: AudioMode) => void;
+  onCreateRoom: () => void;
   onChangePlaylists: () => void;
 }
 
@@ -107,69 +109,8 @@ const ChangeLink = styled.button`
   }
 `;
 
-const PlayerList = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 1.4rem;
-`;
-
-const PlayerRow = styled.div`
-  display: flex;
-  gap: 0.4rem;
-  align-items: center;
-`;
-
-const PlayerBadge = styled.div<{ bg: string }>`
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: ${({ bg }) => bg};
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 0.75rem;
-  color: #08080d;
-  flex-shrink: 0;
-`;
-
-const RemoveButton = styled.button`
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(255, 60, 60, 0.12);
-  color: #ff6b6b;
-  cursor: pointer;
-  font-size: 0.9rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  &:hover {
-    background: rgba(255, 60, 60, 0.22);
-  }
-`;
-
-const AddPlayerButton = styled.button`
-  padding: 0.45rem;
-  border-radius: 10px;
-  border: 1.5px dashed #2a2a3a;
-  background: transparent;
-  color: #7a7a8e;
-  font-family: 'Outfit', sans-serif;
-  font-size: 0.78rem;
-  cursor: pointer;
-
-  &:hover {
-    border-color: #4a4a6a;
-    color: #9a9aae;
-  }
-`;
-
-const PlayerInput = styled.input`
-  flex: 1;
+const NameInput = styled.input`
+  width: 100%;
   padding: 0.55rem 0.7rem;
   border-radius: 10px;
   border: 1.5px solid #2a2a3a;
@@ -178,9 +119,35 @@ const PlayerInput = styled.input`
   font-family: 'Outfit', sans-serif;
   font-size: 0.82rem;
   outline: none;
+  margin-bottom: 1.4rem;
+  box-sizing: border-box;
 
   &:focus {
     border-color: #3a3a5a;
+  }
+`;
+
+const AudioRow = styled.div`
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.4rem;
+`;
+
+const ModeButton = styled.button<{ active: string }>`
+  flex: 1;
+  padding: 0.45rem;
+  border-radius: 10px;
+  border: 1.5px solid ${({ active }) => (active === 'true' ? '#a855f7' : '#2a2a3a')};
+  background: ${({ active }) =>
+    active === 'true' ? 'rgba(168,85,247,0.08)' : 'transparent'};
+  color: ${({ active }) => (active === 'true' ? '#a855f7' : '#7a7a8e')};
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.78rem;
+  cursor: pointer;
+
+  &:hover {
+    border-color: #a855f7;
+    color: #a855f7;
   }
 `;
 
@@ -195,7 +162,8 @@ const RoundButton = styled.button<{ active: string }>`
   padding: 0.5rem;
   border-radius: 10px;
   border: 1.5px solid ${({ active }) => (active === 'true' ? '#06d6a0' : '#2a2a3a')};
-  background: ${({ active }) => (active === 'true' ? 'rgba(6, 214, 160, 0.07)' : 'transparent')};
+  background: ${({ active }) =>
+    active === 'true' ? 'rgba(6, 214, 160, 0.07)' : 'transparent'};
   color: ${({ active }) => (active === 'true' ? '#06d6a0' : '#7a7a8e')};
   font-family: 'Outfit', sans-serif;
   font-size: 0.82rem;
@@ -208,7 +176,7 @@ const RoundButton = styled.button<{ active: string }>`
   }
 `;
 
-const StartButton = styled.button`
+const CreateButton = styled.button`
   width: 100%;
   padding: 0.85rem;
   border-radius: 14px;
@@ -231,11 +199,13 @@ const StartButton = styled.button`
 
 export function MenuScreen({
   playlists,
-  players,
-  setPlayers,
+  hostName,
+  setHostName,
   rounds,
   setRounds,
-  onStart,
+  audioMode,
+  setAudioMode,
+  onCreateRoom,
   onChangePlaylists,
 }: MenuScreenProps) {
   return (
@@ -255,34 +225,29 @@ export function MenuScreen({
           <ChangeLink onClick={onChangePlaylists}>ändern</ChangeLink>
         </PlaylistRow>
 
-        <Label>Spieler</Label>
-        <PlayerList>
-          {players.map((p, i) => (
-            <PlayerRow key={i}>
-              <PlayerBadge bg={PLAYER_COLORS[i]}>{i + 1}</PlayerBadge>
-              <PlayerInput
-                value={p.name}
-                onChange={(e) => {
-                  const next = [...players];
-                  next[i] = { name: e.target.value };
-                  setPlayers(next);
-                }}
-              />
-              {players.length > 2 && (
-                <RemoveButton onClick={() => setPlayers(players.filter((_, j) => j !== i))}>
-                  ×
-                </RemoveButton>
-              )}
-            </PlayerRow>
-          ))}
-          {players.length < 10 && (
-            <AddPlayerButton
-              onClick={() => setPlayers([...players, { name: `Spieler ${players.length + 1}` }])}
-            >
-              + Spieler hinzufügen
-            </AddPlayerButton>
-          )}
-        </PlayerList>
+        <Label>Dein Name</Label>
+        <NameInput
+          placeholder="z.B. Alex"
+          value={hostName}
+          maxLength={30}
+          onChange={(e) => setHostName(e.target.value)}
+        />
+
+        <Label>Audio</Label>
+        <AudioRow>
+          <ModeButton
+            active={String(audioMode === 'all')}
+            onClick={() => setAudioMode('all')}
+          >
+            🔊 Alle hören
+          </ModeButton>
+          <ModeButton
+            active={String(audioMode === 'host-only')}
+            onClick={() => setAudioMode('host-only')}
+          >
+            📺 Nur Host
+          </ModeButton>
+        </AudioRow>
 
         <Label>Runden</Label>
         <RoundsRow>
@@ -293,7 +258,7 @@ export function MenuScreen({
           ))}
         </RoundsRow>
 
-        <StartButton onClick={onStart}>Spiel starten</StartButton>
+        <CreateButton onClick={onCreateRoom}>Raum erstellen →</CreateButton>
       </Card>
     </Screen>
   );

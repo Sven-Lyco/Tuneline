@@ -39,7 +39,8 @@ Tuneline/
         spotify.ts          PKCE auth + Token-Management + Playlist/Track-Laden
       utils/
         shuffle.ts          shuffle<T>()
-        audio.ts            playAudio, stopAudio, toggleAudio (iTunes Preview via HTMLAudioElement)
+        audio.ts            playAudio, stopAudio, toggleAudio, getVolume, setVolume
+                            (iTunes Preview via HTMLAudioElement; Lautstärke in localStorage)
       components/
         GlobalStyles.tsx    Emotion Global — @keyframes + CSS Reset
         Vinyl.tsx           Drehendes Vinyl mit Cover-Art
@@ -103,7 +104,8 @@ Tuneline/
 ### Socket.io Events (Überblick)
 
 ```text
-Client → Server: create_room, join_room, start_game, place_song, kick_player, return_to_lobby
+Client → Server: create_room, join_room, start_game, update_settings,
+                  place_song, kick_player, return_to_lobby
 Server → Client: room_created, room_joined, room_updated, game_started,
                   placement_result, game_over, player_disconnected,
                   player_reconnected, player_kicked, error
@@ -114,13 +116,21 @@ Server → Client: room_created, room_joined, room_updated, game_started,
 - **Server** (`rooms.ts`): `startGame()` verteilt Startsongs, `placeSong()` prüft Platzierung und gibt `correct`/`gameOver` zurück
 - **Client** (`App.tsx`): verwaltet Socket-State, leitet Events an Screens weiter — nicht verändern ohne Rückfrage
 - Gameover-Bedingung: `currentSongIndex >= deck.length || (currentPlayerIndex === 0 && round > rounds)`
+- Songs ohne iTunes-Preview werden vor `start_game` herausgefiltert (garantiert Ton für jeden Song)
+- Bei Punktgleichstand am Ende: `ResultScreen` zeigt "Unentschieden!" statt arbiträrem Sieger
+- Server trackt `lastCorrectSong` pro Spieler → `winnerLastSong` wird mit `game_over` gesendet und in ResultScreen hervorgehoben
+- Lautstärke-Regler im GameScreen (pro Gerät), gespeichert in localStorage
 
 ## Deployment (Coolify)
 
 - `Dockerfile` baut Client (Vite) + Server (tsup CJS) in einem Multi-Stage-Build
+  - Builder-Stage: `NODE_ENV=development npm ci` (damit devDependencies nicht übersprungen werden)
+  - `VITE_*`-Variablen sind Build-Zeit-Variablen → als `ARG` im Dockerfile deklariert, in Coolify als Build-Args setzen
 - Server serviert in Production das Client-Build als statische Dateien
 - Env-Variablen in Coolify setzen: `PORT`, `FRONTEND_ORIGIN`, `NODE_ENV=production`
 - Health-Check: `GET /health` → `{ ok: true }`
+- `app.set('trust proxy', 1)` — nötig hinter Coolify-Nginx für Rate-Limiter
+- `helmet({ contentSecurityPolicy: false })` + `compression()` — CSP deaktiviert wegen Spotify/iTunes/Google Fonts
 - Sticky Sessions empfohlen bei mehreren Instanzen (Socket.io)
 
 ## Geplante Features (Backlog)

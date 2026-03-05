@@ -274,7 +274,7 @@ export function MenuScreen({
               )}
             </PlayerRow>
           ))}
-          {players.length < 6 && (
+          {players.length < 10 && (
             <AddPlayerButton
               onClick={() => setPlayers([...players, { name: `Spieler ${players.length + 1}` }])}
             >

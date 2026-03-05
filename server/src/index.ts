@@ -15,6 +15,7 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 const app = express();
 const httpServer = createServer(app);
 
+app.set('trust proxy', 1); // Trust Coolify's reverse proxy for correct client IPs
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression());
 

@@ -226,21 +226,34 @@ export function ResultScreen({ players, isHost, lastSong, lastCorrect, lastPlaye
     .map((p, i) => ({ ...p, color: PLAYER_COLORS[i] ?? '#7a7a8e' }))
     .sort((a, b) => b.score - a.score);
 
-  const winner = ranked[0];
-  const winnerOriginalIndex = players.findIndex((p) => p.id === winner?.id);
-  const winnerColor = PLAYER_COLORS[winnerOriginalIndex] ?? '#7a7a8e';
+  const topScore = ranked[0]?.score ?? 0;
+  const isTie = ranked.filter((p) => p.score === topScore).length > 1;
+
+  const winner = isTie ? null : ranked[0];
+  const winnerOriginalIndex = winner ? players.findIndex((p) => p.id === winner.id) : -1;
+  const winnerColor = winnerOriginalIndex >= 0 ? (PLAYER_COLORS[winnerOriginalIndex] ?? '#7a7a8e') : '#7a7a8e';
   const winnerIsLastPlayer = winner?.id === lastPlayerId;
-  // Use winner's last correctly placed song for highlight; fall back to global last if winner went last
-  const highlightSong = winnerLastSong ?? (winnerIsLastPlayer && lastCorrect ? lastSong : null);
+  const highlightSong = winner
+    ? (winnerLastSong ?? (winnerIsLastPlayer && lastCorrect ? lastSong : null))
+    : null;
 
   return (
     <Screen>
-      <Confetti />
+      {!isTie && <Confetti />}
       <Card>
         <GameOverLabel>Spiel beendet</GameOverLabel>
-        <Crown>👑</Crown>
-        <WinnerName>{winner?.name}</WinnerName>
-        <WinnerScore>gewinnt mit {winner?.score} Punkten!</WinnerScore>
+        <Crown>{isTie ? '🤝' : '👑'}</Crown>
+        {isTie ? (
+          <>
+            <WinnerName>Unentschieden!</WinnerName>
+            <WinnerScore>{topScore} Punkte — kein Sieger</WinnerScore>
+          </>
+        ) : (
+          <>
+            <WinnerName>{winner?.name}</WinnerName>
+            <WinnerScore>gewinnt mit {winner?.score} Punkten!</WinnerScore>
+          </>
+        )}
 
         <Rankings>
           {ranked.map((r, i) => (
@@ -253,7 +266,7 @@ export function ResultScreen({ players, isHost, lastSong, lastCorrect, lastPlaye
           ))}
         </Rankings>
 
-        {winner && (
+        {!isTie && winner && (
           <TimelinesSection>
             <TimelinePlayer>
               <TimelineLabel color={winnerColor}>{winner.name}</TimelineLabel>

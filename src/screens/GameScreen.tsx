@@ -205,10 +205,6 @@ const AudioButton = styled.button`
   }
 `;
 
-const NoAudio = styled.div`
-  font-size: 0.75rem;
-  color: #ff6b6b;
-`;
 
 const PlacementHint = styled.div`
   font-size: 0.75rem;
@@ -403,12 +399,11 @@ export function GameScreen({
                 <SongTitle>{song.title}</SongTitle>
                 <SongArtist>{song.artist}</SongArtist>
                 {revealed && <RevealedYear>{song.year}</RevealedYear>}
-                {!revealed && song.preview && (
+                {!revealed && (
                   <AudioButton onClick={onToggleAudio}>
                     {playing ? '⏸ Pause' : '▶ Play'}
                   </AudioButton>
                 )}
-                {!revealed && !song.preview && <NoAudio>Kein Audio</NoAudio>}
               </SongInfo>
             </SongCardBody>
             <Wave active={playing} />

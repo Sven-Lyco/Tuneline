@@ -1,11 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import styled from '@emotion/styled';
-import type { Feedback, Genre, Player, Screen, Song } from './types';
-import { FALLBACK_SONGS } from './constants';
-import { loadSongsForGenres } from './api/deezer';
+import type { Feedback, Player, Screen, Song, SpotifyPlaylist } from './types';
+import {
+  handleAuthCallback,
+  isAuthenticated,
+  getValidToken,
+  loadSongsFromPlaylists,
+  logout,
+} from './api/spotify';
+import { initSpotifyPlayer, playTrack, stopTrack, toggleTrack } from './utils/audio';
 import { shuffle } from './utils/shuffle';
-import { playAudio, stopAudio, toggleAudio } from './utils/audio';
 import { GlobalStyles } from './components/GlobalStyles';
+import { LoginScreen } from './screens/LoginScreen';
+import { PlaylistScreen } from './screens/PlaylistScreen';
 import { MenuScreen } from './screens/MenuScreen';
 import { LoadingScreen } from './screens/LoadingScreen';
 import { GameScreen } from './screens/GameScreen';
@@ -55,15 +62,15 @@ const BgGlowBottom = styled.div`
   pointer-events: none;
 `;
 
-// ── App State ─────────────────────────────────────────────────
+// ── App ────────────────────────────────────────────────────────
 
 export default function App() {
   // Navigation
-  const [screen, setScreen] = useState<Screen>('menu');
+  const [screen, setScreen] = useState<Screen>('login');
 
   // Setup
+  const [selectedPlaylists, setSelectedPlaylists] = useState<SpotifyPlaylist[]>([]);
   const [players, setPlayers] = useState<Player[]>([{ name: 'Spieler 1' }, { name: 'Spieler 2' }]);
-  const [genres, setGenres] = useState<Genre[]>(['pop']);
   const [rounds, setRounds] = useState(10);
   const [loadingMsg, setLoadingMsg] = useState('');
 
@@ -79,24 +86,66 @@ export default function App() {
   const [round, setRound] = useState(1);
   const [playing, setPlaying] = useState(false);
 
-  const toggleGenre = (g: Genre) =>
-    setGenres((prev) =>
-      prev.includes(g) ? (prev.length > 1 ? prev.filter((x) => x !== g) : prev) : [...prev, g]
-    );
+  // ── Auth init ────────────────────────────────────────────────
 
-  // ── Start Game ────────────────────────────────────────────
+  useEffect(() => {
+    const init = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+
+      if (code) {
+        window.history.replaceState({}, '', window.location.pathname);
+        const success = await handleAuthCallback(code);
+        if (success) {
+          setScreen('playlists');
+          void initSpotifyPlayer(getValidToken);
+        }
+      } else if (isAuthenticated()) {
+        const token = await getValidToken();
+        if (token) {
+          setScreen('playlists');
+          void initSpotifyPlayer(getValidToken);
+        }
+      }
+    };
+
+    void init();
+  }, []);
+
+  // ── Playlist selection ───────────────────────────────────────
+
+  const togglePlaylist = useCallback((playlist: SpotifyPlaylist) => {
+    setSelectedPlaylists((prev) =>
+      prev.some((p) => p.id === playlist.id)
+        ? prev.filter((p) => p.id !== playlist.id)
+        : [...prev, playlist]
+    );
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    void stopTrack();
+    logout();
+    setSelectedPlaylists([]);
+    setScreen('login');
+  }, []);
+
+  // ── Start Game ───────────────────────────────────────────────
 
   const start = useCallback(async () => {
     setScreen('loading');
-    setLoadingMsg('Songs werden von Deezer geladen...');
+    setLoadingMsg('Songs werden von Spotify geladen...');
 
     const needed = rounds * players.length + players.length + 5;
-    let songs = await loadSongsForGenres(genres, needed);
+    const songs = await loadSongsFromPlaylists(
+      selectedPlaylists.map((p) => p.id),
+      needed
+    );
 
     if (songs.length < players.length + 3) {
-      setLoadingMsg('Deezer nicht erreichbar – nutze Fallback-Songs...');
-      songs = shuffle(FALLBACK_SONGS);
-      await new Promise((r) => setTimeout(r, 800));
+      setLoadingMsg('Nicht genug Songs gefunden. Bitte andere Playlisten wählen.');
+      await new Promise((r) => setTimeout(r, 2000));
+      setScreen('playlists');
+      return;
     }
 
     const tls: Record<number, Song[]> = {};
@@ -105,7 +154,7 @@ export default function App() {
       tls[i] = [songs[i]];
       scs[i] = 0;
     });
-    const dk = songs.slice(players.length);
+    const dk = shuffle(songs.slice(players.length));
 
     setDeck(dk);
     setTimelines(tls);
@@ -118,13 +167,13 @@ export default function App() {
     setRound(1);
     setScreen('game');
 
-    if (dk[0]?.preview) {
-      playAudio(dk[0].preview);
+    if (dk[0]?.uri) {
+      void playTrack(dk[0].uri);
       setPlaying(true);
     }
-  }, [genres, rounds, players]);
+  }, [selectedPlaylists, rounds, players]);
 
-  // ── Place Song ────────────────────────────────────────────
+  // ── Place Song ───────────────────────────────────────────────
 
   const place = useCallback(() => {
     if (slot === null || !deck[songIndex]) return;
@@ -143,7 +192,7 @@ export default function App() {
     }
 
     setRevealed(true);
-    stopAudio();
+    void stopTrack();
     setPlaying(false);
 
     if (correct) {
@@ -163,7 +212,7 @@ export default function App() {
         nextSongIndex >= deck.length || (nextPlayerIndex === 0 && round >= rounds);
 
       if (gameOver) {
-        stopAudio();
+        void stopTrack();
         setScreen('result');
       } else {
         setSongIndex(nextSongIndex);
@@ -173,8 +222,8 @@ export default function App() {
         setFeedback(null);
         setRevealed(false);
 
-        if (deck[nextSongIndex]?.preview) {
-          playAudio(deck[nextSongIndex].preview);
+        if (deck[nextSongIndex]?.uri) {
+          void playTrack(deck[nextSongIndex].uri);
           setPlaying(true);
         } else {
           setPlaying(false);
@@ -184,16 +233,15 @@ export default function App() {
   }, [slot, deck, songIndex, timelines, playerIndex, players, round, rounds]);
 
   const handleToggleAudio = useCallback(() => {
-    const isNowPlaying = toggleAudio();
-    setPlaying(isNowPlaying);
+    toggleTrack()
+      .then(setPlaying)
+      .catch(() => {});
   }, []);
 
   const handleRestart = useCallback(() => {
-    stopAudio();
+    void stopTrack();
     setScreen('menu');
   }, []);
-
-  useEffect(() => () => stopAudio(), []);
 
   const currentSong = deck[songIndex];
   const currentTimeline = [...(timelines[playerIndex] || [])].sort((a, b) => a.year - b.year);
@@ -205,15 +253,26 @@ export default function App() {
       <BgGlowTop />
       <BgGlowBottom />
 
+      {screen === 'login' && <LoginScreen />}
+
+      {screen === 'playlists' && (
+        <PlaylistScreen
+          selected={selectedPlaylists}
+          onToggle={togglePlaylist}
+          onConfirm={() => setScreen('menu')}
+          onLogout={handleLogout}
+        />
+      )}
+
       {screen === 'menu' && (
         <MenuScreen
+          playlists={selectedPlaylists}
           players={players}
           setPlayers={setPlayers}
-          genres={genres}
-          onToggleGenre={toggleGenre}
           rounds={rounds}
           setRounds={setRounds}
-          onStart={start}
+          onStart={() => void start()}
+          onChangePlaylists={() => setScreen('playlists')}
         />
       )}
 

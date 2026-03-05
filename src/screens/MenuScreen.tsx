@@ -1,17 +1,19 @@
 import styled from '@emotion/styled';
-import type { Genre, Player } from '../types';
-import { GENRE_META, PLAYER_COLORS } from '../constants';
+import type { Player, SpotifyPlaylist } from '../types';
+import { PLAYER_COLORS } from '../constants';
 import { Label } from '../components/Label';
 
 interface MenuScreenProps {
+  playlists: SpotifyPlaylist[];
   players: Player[];
   setPlayers: (players: Player[]) => void;
-  genres: Genre[];
-  onToggleGenre: (genre: Genre) => void;
   rounds: number;
   setRounds: (rounds: number) => void;
   onStart: () => void;
+  onChangePlaylists: () => void;
 }
+
+// ── Styles ─────────────────────────────────────────────────────
 
 const Screen = styled.div`
   display: flex;
@@ -54,25 +56,54 @@ const Card = styled.div`
   max-width: 450px;
 `;
 
-const GenreGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.45rem;
+const PlaylistRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   margin-bottom: 1.4rem;
+  flex-wrap: wrap;
 `;
 
-const GenreButton = styled.button<{ color: string; active: string }>`
-  padding: 0.55rem 0.4rem;
-  border-radius: 10px;
-  border: 1.5px solid ${({ active, color }) => (active === 'true' ? color : '#2a2a3a')};
-  background: ${({ active, color }) => (active === 'true' ? `${color}12` : 'transparent')};
-  color: ${({ active, color }) => (active === 'true' ? color : '#7a7a8e')};
+const PlaylistBadge = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  background: rgba(29, 185, 84, 0.08);
+  border: 1px solid rgba(29, 185, 84, 0.3);
+  border-radius: 20px;
+  font-size: 0.75rem;
+  color: #1db954;
+  max-width: 160px;
+`;
+
+const BadgeCover = styled.img`
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  object-fit: cover;
+  flex-shrink: 0;
+`;
+
+const BadgeName = styled.span`
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+
+const ChangeLink = styled.button`
+  background: transparent;
+  border: none;
+  color: #7a7a8e;
   font-family: 'Outfit', sans-serif;
-  font-size: 0.78rem;
-  font-weight: 500;
+  font-size: 0.75rem;
   cursor: pointer;
-  transition: all 0.25s;
-  box-shadow: ${({ active, color }) => (active === 'true' ? `0 0 18px ${color}18` : 'none')};
+  padding: 0.2rem 0;
+  text-decoration: underline;
+
+  &:hover {
+    color: #9a9aae;
+  }
 `;
 
 const PlayerList = styled.div`
@@ -195,21 +226,16 @@ const StartButton = styled.button`
   }
 `;
 
-const ApiNote = styled.div`
-  margin-top: 0.75rem;
-  text-align: center;
-  font-size: 0.65rem;
-  color: #555;
-`;
+// ── Component ──────────────────────────────────────────────────
 
 export function MenuScreen({
+  playlists,
   players,
   setPlayers,
-  genres,
-  onToggleGenre,
   rounds,
   setRounds,
   onStart,
+  onChangePlaylists,
 }: MenuScreenProps) {
   return (
     <Screen>
@@ -217,19 +243,16 @@ export function MenuScreen({
       <Subtitle>Musik · Timeline · Challenge</Subtitle>
 
       <Card>
-        <Label>Genres wählen</Label>
-        <GenreGrid>
-          {(Object.entries(GENRE_META) as [Genre, (typeof GENRE_META)[Genre]][]).map(([k, m]) => (
-            <GenreButton
-              key={k}
-              color={m.color}
-              active={String(genres.includes(k))}
-              onClick={() => onToggleGenre(k)}
-            >
-              {m.icon} {m.label}
-            </GenreButton>
+        <Label>Playlisten</Label>
+        <PlaylistRow>
+          {playlists.map((p) => (
+            <PlaylistBadge key={p.id}>
+              {p.coverUrl && <BadgeCover src={p.coverUrl} alt={p.name} />}
+              <BadgeName>{p.name}</BadgeName>
+            </PlaylistBadge>
           ))}
-        </GenreGrid>
+          <ChangeLink onClick={onChangePlaylists}>ändern</ChangeLink>
+        </PlaylistRow>
 
         <Label>Spieler</Label>
         <PlayerList>
@@ -269,8 +292,7 @@ export function MenuScreen({
           ))}
         </RoundsRow>
 
-        <StartButton onClick={onStart}>🎵 Spiel starten</StartButton>
-        <ApiNote>Songs werden live von der Deezer API geladen</ApiNote>
+        <StartButton onClick={onStart}>Spiel starten</StartButton>
       </Card>
     </Screen>
   );

@@ -193,7 +193,8 @@ io.on('connection', (socket) => {
         gameState,
         nextSong,
       });
-      log(roomCode, 'place_song', `"${result.song.title}" pos=${position} correct=${result.correct} round=${gameState.round}/${gameState.rounds}`);
+      const playerName = gameState.players.find((p) => p.id === result.lastPlayerId)?.name ?? '?';
+      log(roomCode, 'place_song', `${playerName} "${result.song.title}" pos=${position} correct=${result.correct} round=${gameState.round}/${gameState.rounds}`);
     }
   });
 

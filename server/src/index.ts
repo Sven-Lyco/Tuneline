@@ -15,7 +15,7 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 const app = express();
 const httpServer = createServer(app);
 
-app.use(helmet());
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression());
 
 const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {

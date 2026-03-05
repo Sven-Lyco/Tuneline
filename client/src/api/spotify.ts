@@ -274,7 +274,7 @@ export async function loadSongsFromPlaylists(
 
   const shuffled = shuffle(allSongs);
 
-  // Enrich with iTunes preview URLs in parallel
+  // Enrich with iTunes preview URLs in parallel, then drop songs without a preview
   const enriched = await Promise.all(
     shuffled.map(async (song) => ({
       ...song,
@@ -282,5 +282,5 @@ export async function loadSongsFromPlaylists(
     }))
   );
 
-  return enriched;
+  return enriched.filter((s) => s.preview !== null);
 }

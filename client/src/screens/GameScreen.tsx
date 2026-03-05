@@ -1,3 +1,4 @@
+import React from 'react';
 import styled from '@emotion/styled';
 import type { Feedback } from '../types';
 import type { GameStateForClient, SongFull, SongMeta } from '@tuneline/shared';
@@ -14,9 +15,11 @@ interface GameScreenProps {
   feedback: Feedback;
   revealed: boolean;
   playing: boolean;
+  volume: number;
   slot: number | null;
   setSlot: (slot: number | null) => void;
   onToggleAudio: () => void;
+  onVolumeChange: (v: number) => void;
   onPlace: () => void;
 }
 
@@ -200,6 +203,53 @@ const AudioButton = styled.button`
 
   &:hover {
     background: rgba(255, 45, 120, 0.18);
+  }
+`;
+
+const AudioControls = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+`;
+
+const VolumeIcon = styled.span`
+  font-size: 0.85rem;
+  color: #7a7a8e;
+  flex-shrink: 0;
+`;
+
+const VolumeSlider = styled.input`
+  -webkit-appearance: none;
+  appearance: none;
+  width: 90px;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    #ff2d78 0%,
+    #ff2d78 var(--val),
+    #2a2a3a var(--val),
+    #2a2a3a 100%
+  );
+  outline: none;
+  cursor: pointer;
+
+  &::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #ff2d78;
+    cursor: pointer;
+  }
+  &::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #ff2d78;
+    border: none;
+    cursor: pointer;
   }
 `;
 
@@ -419,9 +469,11 @@ export function GameScreen({
   feedback,
   revealed,
   playing,
+  volume,
   slot,
   setSlot,
   onToggleAudio,
+  onVolumeChange,
   onPlace,
 }: GameScreenProps) {
   const isMyTurn = gameState.currentPlayerId === myPlayerId;
@@ -474,9 +526,21 @@ export function GameScreen({
                 <SongArtist>{currentSong.artist}</SongArtist>
                 {displayYear !== null && <RevealedYear>{displayYear}</RevealedYear>}
                 {!revealed && (
-                  <AudioButton onClick={onToggleAudio}>
-                    {playing ? '⏸ Pause' : '▶ Play'}
-                  </AudioButton>
+                  <AudioControls>
+                    <AudioButton onClick={onToggleAudio}>
+                      {playing ? '⏸ Pause' : '▶ Play'}
+                    </AudioButton>
+                    <VolumeIcon>{volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊'}</VolumeIcon>
+                    <VolumeSlider
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={volume}
+                      style={{ '--val': `${volume * 100}%` } as React.CSSProperties}
+                      onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
+                    />
+                  </AudioControls>
                 )}
               </SongInfo>
             </SongCardBody>

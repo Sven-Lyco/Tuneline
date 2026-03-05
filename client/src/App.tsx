@@ -16,7 +16,7 @@ import {
   loadSongsFromPlaylists,
   logout,
 } from './api/spotify';
-import { playAudio, stopAudio, toggleAudio } from './utils/audio';
+import { playAudio, stopAudio, toggleAudio, getVolume, setVolume } from './utils/audio';
 import { socket } from './socket';
 import { GlobalStyles } from './components/GlobalStyles';
 import { LoginScreen } from './screens/LoginScreen';
@@ -129,6 +129,7 @@ export default function App() {
   const [resultWinnerLastSong, setResultWinnerLastSong] = useState<SongFull | null>(null);
   const [slot, setSlot] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [volume, setVolumeState] = useState(() => getVolume());
   const [errorMsg, setErrorMsg] = useState('');
 
   const showError = useCallback((msg: string) => {
@@ -377,6 +378,11 @@ export default function App() {
     setPlaying(toggleAudio());
   }, []);
 
+  const handleVolumeChange = useCallback((v: number) => {
+    setVolume(v);
+    setVolumeState(v);
+  }, []);
+
   // ── Kick / Leave ──────────────────────────────────────────────
 
   const handleKick = useCallback((playerId: string) => {
@@ -469,9 +475,11 @@ export default function App() {
           feedback={feedback}
           revealed={revealed}
           playing={playing}
+          volume={volume}
           slot={slot}
           setSlot={setSlot}
           onToggleAudio={handleToggleAudio}
+          onVolumeChange={handleVolumeChange}
           onPlace={handlePlace}
         />
       )}

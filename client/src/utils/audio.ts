@@ -1,9 +1,20 @@
+const VOLUME_KEY = 'tuneline_volume';
 let gAudio: HTMLAudioElement | null = null;
+
+export function getVolume(): number {
+  const stored = localStorage.getItem(VOLUME_KEY);
+  return stored !== null ? parseFloat(stored) : 0.8;
+}
+
+export function setVolume(v: number): void {
+  localStorage.setItem(VOLUME_KEY, String(v));
+  if (gAudio) gAudio.volume = v;
+}
 
 export function playAudio(url: string): void {
   stopAudio();
   gAudio = new Audio(url);
-  gAudio.volume = 0.8;
+  gAudio.volume = getVolume();
   gAudio.play().catch(() => {});
 }
 

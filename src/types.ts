@@ -5,6 +5,7 @@ export interface Song {
   artist: string;
   year: number;
   cover: string | null;
+  preview: string | null;
 }
 
 export interface Player {

@@ -8,7 +8,7 @@ import {
   loadSongsFromPlaylists,
   logout,
 } from './api/spotify';
-import { initSpotifyPlayer, playTrack, stopTrack, toggleTrack } from './utils/audio';
+import { playAudio, stopAudio, toggleAudio } from './utils/audio';
 import { shuffle } from './utils/shuffle';
 import { GlobalStyles } from './components/GlobalStyles';
 import { LoginScreen } from './screens/LoginScreen';
@@ -98,13 +98,11 @@ export default function App() {
         const success = await handleAuthCallback(code);
         if (success) {
           setScreen('playlists');
-          void initSpotifyPlayer(getValidToken);
         }
       } else if (isAuthenticated()) {
         const token = await getValidToken();
         if (token) {
           setScreen('playlists');
-          void initSpotifyPlayer(getValidToken);
         }
       }
     };
@@ -123,7 +121,7 @@ export default function App() {
   }, []);
 
   const handleLogout = useCallback(() => {
-    void stopTrack();
+    stopAudio();
     logout();
     setSelectedPlaylists([]);
     setScreen('login');
@@ -167,8 +165,8 @@ export default function App() {
     setRound(1);
     setScreen('game');
 
-    if (dk[0]?.uri) {
-      void playTrack(dk[0].uri);
+    if (dk[0]?.preview) {
+      playAudio(dk[0].preview);
       setPlaying(true);
     }
   }, [selectedPlaylists, rounds, players]);
@@ -192,7 +190,7 @@ export default function App() {
     }
 
     setRevealed(true);
-    void stopTrack();
+    stopAudio();
     setPlaying(false);
 
     if (correct) {
@@ -212,7 +210,7 @@ export default function App() {
         nextSongIndex >= deck.length || (nextPlayerIndex === 0 && round >= rounds);
 
       if (gameOver) {
-        void stopTrack();
+        stopAudio();
         setScreen('result');
       } else {
         setSongIndex(nextSongIndex);
@@ -222,8 +220,8 @@ export default function App() {
         setFeedback(null);
         setRevealed(false);
 
-        if (deck[nextSongIndex]?.uri) {
-          void playTrack(deck[nextSongIndex].uri);
+        if (deck[nextSongIndex]?.preview) {
+          playAudio(deck[nextSongIndex].preview);
           setPlaying(true);
         } else {
           setPlaying(false);
@@ -233,13 +231,11 @@ export default function App() {
   }, [slot, deck, songIndex, timelines, playerIndex, players, round, rounds]);
 
   const handleToggleAudio = useCallback(() => {
-    toggleTrack()
-      .then(setPlaying)
-      .catch(() => {});
+    setPlaying(toggleAudio());
   }, []);
 
   const handleRestart = useCallback(() => {
-    void stopTrack();
+    stopAudio();
     setScreen('menu');
   }, []);
 

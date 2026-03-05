@@ -1,5 +1,6 @@
 import type { Song, SpotifyPlaylist } from '../types';
 import { shuffle } from '../utils/shuffle';
+import { findPreview } from './itunes';
 
 const CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID as string;
 const REDIRECT_URI = import.meta.env.VITE_REDIRECT_URI as string;
@@ -215,6 +216,7 @@ function parseTrack(item: SpotifyTracksResponse['items'][number]): Song | null {
     artist: t.artists?.[0]?.name ?? 'Unknown',
     year,
     cover: t.album?.images?.[0]?.url ?? null,
+    preview: null,
   };
 }
 
@@ -261,5 +263,15 @@ export async function loadSongsFromPlaylists(
     }
   }
 
-  return shuffle(allSongs);
+  const shuffled = shuffle(allSongs);
+
+  // Enrich with iTunes preview URLs in parallel
+  const enriched = await Promise.all(
+    shuffled.map(async (song) => ({
+      ...song,
+      preview: await findPreview(song.artist, song.title),
+    }))
+  );
+
+  return enriched;
 }

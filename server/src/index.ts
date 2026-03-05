@@ -72,11 +72,11 @@ io.on('connection', (socket) => {
   const isLimited = makeRateLimiter();
   log(null, 'connect', socket.id);
 
-  socket.on('create_room', ({ hostName }) => {
+  socket.on('create_room', ({ hostName, rounds, audioMode }) => {
     if (isLimited('create_room')) return;
     if (typeof hostName !== 'string' || !hostName.trim()) return;
 
-    const { roomCode, playerId, playerToken } = rooms.createRoom(socket.id, hostName);
+    const { roomCode, playerId, playerToken } = rooms.createRoom(socket.id, hostName, rounds ?? 5, audioMode ?? 'all');
     socket.join(roomCode);
     socket.emit('room_created', { roomCode, playerId, playerToken });
     const lobby = rooms.getLobbyState(roomCode);
@@ -130,6 +130,23 @@ io.on('connection', (socket) => {
 
     io.to(roomCode).emit('game_started', { gameState, currentSong });
     log(roomCode, 'start_game', `songs=${songs.length} rounds=${rounds} audio=${audioMode} players=${gameState.players.length}`);
+  });
+
+  socket.on('update_settings', ({ rounds, audioMode }) => {
+    if (isLimited('update_settings')) return;
+
+    const roomCode = rooms.getRoomCodeForSocket(socket.id);
+    if (!roomCode) return;
+
+    const result = rooms.updateSettings(socket.id, roomCode, rounds, audioMode);
+    if (!result.ok) {
+      socket.emit('error', { message: result.error });
+      return;
+    }
+
+    const lobby = rooms.getLobbyState(roomCode);
+    if (lobby) io.to(roomCode).emit('room_updated', { room: lobby });
+    log(roomCode, 'update_settings', `rounds=${rounds} audio=${audioMode}`);
   });
 
   socket.on('place_song', ({ position }) => {

@@ -94,7 +94,7 @@ export class RoomManager {
     }, ROOM_TTL_MS);
   }
 
-  createRoom(socketId: string, hostName: string): { roomCode: string; playerId: string; playerToken: string } {
+  createRoom(socketId: string, hostName: string, rounds: number, audioMode: AudioMode): { roomCode: string; playerId: string; playerToken: string } {
     const code = this.newCode();
     const playerId = this.newPlayerId();
     const token = this.newToken();
@@ -120,8 +120,8 @@ export class RoomManager {
       currentSongIndex: 0,
       currentPlayerIndex: 0,
       round: 1,
-      rounds: 3,
-      audioMode: 'all',
+      rounds: Math.max(1, Math.min(rounds, 20)),
+      audioMode,
       cleanupTimer: setTimeout(() => {}, 0),
     };
 
@@ -272,6 +272,25 @@ export class RoomManager {
     }
 
     return { ok: true, correct, song, gameOver, lastPlayerId: playerId };
+  }
+
+  updateSettings(
+    socketId: string,
+    roomCode: string,
+    rounds: number,
+    audioMode: AudioMode,
+  ): { ok: true } | { ok: false; error: string } {
+    const room = this.rooms.get(roomCode);
+    if (!room) return { ok: false, error: 'Raum nicht gefunden.' };
+
+    const playerId = room.socketToPlayer.get(socketId);
+    const player = playerId ? room.players.get(playerId) : null;
+    if (!player?.isHost) return { ok: false, error: 'Nur der Host kann Einstellungen ändern.' };
+    if (room.status !== 'lobby') return { ok: false, error: 'Einstellungen können nur in der Lobby geändert werden.' };
+
+    room.rounds = Math.max(1, Math.min(rounds, 20));
+    room.audioMode = audioMode;
+    return { ok: true };
   }
 
   returnToLobby(socketId: string, roomCode: string): { ok: true } | { ok: false; error: string } {

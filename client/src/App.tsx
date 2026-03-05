@@ -291,7 +291,7 @@ export default function App() {
   const handleCreateRoom = useCallback(() => {
     const name = hostName.trim() || 'Host';
     if (!socket.connected) socket.connect();
-    socket.emit('create_room', { hostName: name });
+    socket.emit('create_room', { hostName: name, rounds, audioMode });
     setLobbyState({
       roomCode: '',
       players: [],
@@ -315,16 +315,17 @@ export default function App() {
   const handleAudioModeChange = useCallback(
     (mode: AudioMode) => {
       setAudioMode(mode);
-      // Optimistically update lobby; server will confirm via room_updated when start_game sends it
       setLobbyState((prev) => prev ? { ...prev, audioMode: mode } : prev);
+      socket.emit('update_settings', { rounds, audioMode: mode });
     },
-    [],
+    [rounds],
   );
 
   const handleRoundsChange = useCallback((r: number) => {
     setRounds(r);
     setLobbyState((prev) => prev ? { ...prev, rounds: r } : prev);
-  }, []);
+    socket.emit('update_settings', { rounds: r, audioMode });
+  }, [audioMode]);
 
   // ── Start Game (host only) ────────────────────────────────────
 

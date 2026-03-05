@@ -49,7 +49,7 @@ export interface GameStateForClient {
 // ─── Socket.io Events ────────────────────────────────────────────────────────
 
 export interface ClientToServerEvents {
-  create_room: (data: { hostName: string }) => void;
+  create_room: (data: { hostName: string; rounds: number; audioMode: AudioMode }) => void;
   join_room: (data: {
     roomCode: string;
     playerName: string;
@@ -60,6 +60,7 @@ export interface ClientToServerEvents {
     rounds: number;
     audioMode: AudioMode;
   }) => void;
+  update_settings: (data: { rounds: number; audioMode: AudioMode }) => void;
   place_song: (data: { position: number }) => void;
   kick_player: (data: { playerId: string }) => void;
   return_to_lobby: () => void;

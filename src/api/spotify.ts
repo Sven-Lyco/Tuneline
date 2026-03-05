@@ -202,6 +202,15 @@ interface SpotifyTracksResponse {
   next: string | null;
 }
 
+// Remove year hints from track titles, e.g.:
+// "Song - 2018 Remaster", "Song (2018 Remaster)", "Song - Remastered 2018",
+// "Song - Live 1985", "Song (Anniversary Edition 1999)"
+const YEAR_PATTERN = /[\s–-]+[\[(]?(?:remaster(?:ed)?|live|single version|anniversary|deluxe)?[\s]?\d{4}[\s]?(?:remaster(?:ed)?|version|edit|mix|anniversary)?[\])]?$/i;
+
+function sanitizeTitle(raw: string): string {
+  return raw.replace(YEAR_PATTERN, '').trim();
+}
+
 function parseTrack(item: SpotifyTracksResponse['items'][number]): Song | null {
   const t = item.track;
   if (!t?.id || !t.uri || !t.name) return null;
@@ -212,7 +221,7 @@ function parseTrack(item: SpotifyTracksResponse['items'][number]): Song | null {
   return {
     id: t.id,
     uri: t.uri,
-    title: t.name,
+    title: sanitizeTitle(t.name),
     artist: t.artists?.[0]?.name ?? 'Unknown',
     year,
     cover: t.album?.images?.[0]?.url ?? null,

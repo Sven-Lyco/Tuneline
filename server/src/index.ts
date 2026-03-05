@@ -2,6 +2,8 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+import compression from 'compression';
 import type { ClientToServerEvents, ServerToClientEvents } from '@tuneline/shared';
 import { join } from 'path';
 import { RoomManager } from './rooms.js';
@@ -12,6 +14,9 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 
 const app = express();
 const httpServer = createServer(app);
+
+app.use(helmet());
+app.use(compression());
 
 const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
   cors: {

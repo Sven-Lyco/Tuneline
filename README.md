@@ -1,16 +1,57 @@
-# React + Vite
+# Tuneline
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Digitales Musik-Timeline-Partyspiel, inspiriert von Hitster.
 
-Currently, two official plugins are available:
+Spieler horen einen Song-Ausschnitt und mussen ihn chronologisch in ihre wachsende Timeline einordnen. Wer richtig platziert, behalt die Karte und bekommt einen Punkt. Je mehr Karten auf der Timeline, desto schwieriger wird es.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Spielprinzip
 
-## React Compiler
+1. Der Host wahlt Playlisten aus seinem Spotify-Account aus
+2. Songs werden mit Metadaten (Titel, Interpret, Jahr) von Spotify geladen
+3. Audio-Vorschau (30s) kommt von der iTunes Search API
+4. 2-6 Spieler, konfigurierbare Rundenzahl
+5. Wer den Song chronologisch korrekt platziert, bekommt einen Punkt
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Tech Stack
 
-## Expanding the ESLint configuration
+- **React 19 + TypeScript 5** mit Vite
+- **Emotion** (`@emotion/styled`) fur CSS-in-JS
+- **Spotify Web API** (PKCE OAuth) fur Playlist-Metadaten
+- **iTunes Search API** fur 30s Audio-Previews (geplant, ersetzt aktuell Spotify SDK)
+- **Design**: Dunkles Neon-Theme, Space Mono + Outfit Fonts
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Setup
+
+1. Spotify Developer App erstellen unter [developer.spotify.com](https://developer.spotify.com)
+2. Redirect URI eintragen: `http://[::1]:5174/callback`
+3. `.env.local` anlegen:
+
+```env
+VITE_SPOTIFY_CLIENT_ID=deine_client_id_hier
+VITE_REDIRECT_URI=http://[::1]:5174/callback
+```
+
+4. Dependencies installieren und starten:
+
+```bash
+npm install
+npm run dev
+```
+
+## Scripts
+
+```bash
+npm run dev        # Vite Dev-Server -> http://[::1]:5174
+npm run build      # Production Build
+npm run preview    # Preview Build -> http://[::1]:5174
+npm run typecheck  # TypeScript-Prufung
+npm run lint       # ESLint
+npm run format     # Prettier
+```
+
+## Geplante Features
+
+- **Online-Multiplayer** via WebSockets / Socket.io mit Einladungslinks
+- **iTunes Audio-Previews** als Ersatz fur Spotify Web Playback SDK (kein Premium benotigt, multiplayer-fahig)
+- **Weitere Spielmodi** (Jahrzehnt-Modus, nur ein Genre, etc.)
+- **Soundeffekte** bei richtigem/falschem Platzieren

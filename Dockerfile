@@ -2,13 +2,19 @@
 FROM node:22-alpine AS builder
 WORKDIR /app
 
+# Accept VITE_* build-time variables (injected by Coolify or docker build --build-arg)
+ARG VITE_SPOTIFY_CLIENT_ID
+ARG VITE_REDIRECT_URI
+ARG VITE_SERVER_URL
+
 # Copy workspace manifests first for layer caching
 COPY package.json package-lock.json ./
 COPY shared/package.json ./shared/
 COPY client/package.json ./client/
 COPY server/package.json ./server/
 
-RUN npm ci
+# Always install all deps (incl. devDependencies) in builder — NODE_ENV=production would skip them
+RUN NODE_ENV=development npm ci
 
 # Copy source
 COPY shared/ ./shared/

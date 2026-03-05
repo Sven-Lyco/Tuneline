@@ -107,46 +107,6 @@ const ChangeLink = styled.button`
   }
 `;
 
-const PlayerCountRow = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
-`;
-
-const StepButton = styled.button`
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  border: 1.5px solid #2a2a3a;
-  background: transparent;
-  color: #e8e8f0;
-  font-family: 'Outfit', sans-serif;
-  font-size: 1.1rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: border-color 0.2s;
-
-  &:hover:not(:disabled) {
-    border-color: #4a4a6a;
-  }
-
-  &:disabled {
-    opacity: 0.3;
-    cursor: default;
-  }
-`;
-
-const PlayerCountLabel = styled.span`
-  font-family: 'Space Mono', monospace;
-  font-size: 1rem;
-  color: #e8e8f0;
-  min-width: 24px;
-  text-align: center;
-`;
-
 const PlayerList = styled.div`
   display: flex;
   flex-direction: column;
@@ -172,6 +132,40 @@ const PlayerBadge = styled.div<{ bg: string }>`
   font-size: 0.75rem;
   color: #08080d;
   flex-shrink: 0;
+`;
+
+const RemoveButton = styled.button`
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 60, 60, 0.12);
+  color: #ff6b6b;
+  cursor: pointer;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    background: rgba(255, 60, 60, 0.22);
+  }
+`;
+
+const AddPlayerButton = styled.button`
+  padding: 0.45rem;
+  border-radius: 10px;
+  border: 1.5px dashed #2a2a3a;
+  background: transparent;
+  color: #7a7a8e;
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.78rem;
+  cursor: pointer;
+
+  &:hover {
+    border-color: #4a4a6a;
+    color: #9a9aae;
+  }
 `;
 
 const PlayerInput = styled.input`
@@ -262,23 +256,6 @@ export function MenuScreen({
         </PlaylistRow>
 
         <Label>Spieler</Label>
-        <PlayerCountRow>
-          <StepButton
-            disabled={players.length <= 2}
-            onClick={() => setPlayers(players.slice(0, -1))}
-          >
-            −
-          </StepButton>
-          <PlayerCountLabel>{players.length}</PlayerCountLabel>
-          <StepButton
-            disabled={players.length >= 10}
-            onClick={() =>
-              setPlayers([...players, { name: `Spieler ${players.length + 1}` }])
-            }
-          >
-            +
-          </StepButton>
-        </PlayerCountRow>
         <PlayerList>
           {players.map((p, i) => (
             <PlayerRow key={i}>
@@ -291,8 +268,20 @@ export function MenuScreen({
                   setPlayers(next);
                 }}
               />
+              {players.length > 2 && (
+                <RemoveButton onClick={() => setPlayers(players.filter((_, j) => j !== i))}>
+                  ×
+                </RemoveButton>
+              )}
             </PlayerRow>
           ))}
+          {players.length < 10 && (
+            <AddPlayerButton
+              onClick={() => setPlayers([...players, { name: `Spieler ${players.length + 1}` }])}
+            >
+              + Spieler hinzufügen
+            </AddPlayerButton>
+          )}
         </PlayerList>
 
         <Label>Runden</Label>

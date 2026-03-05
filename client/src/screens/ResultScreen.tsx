@@ -9,6 +9,7 @@ interface ResultScreenProps {
   lastSong: SongFull | null;
   lastCorrect: boolean;
   lastPlayerId: string;
+  winnerLastSong: SongFull | null;
   onRestart: () => void;
 }
 
@@ -220,7 +221,7 @@ const RestartButton = styled.button`
 
 const RANK_MEDALS = ['🥇', '🥈', '🥉'];
 
-export function ResultScreen({ players, isHost, lastSong, lastCorrect, lastPlayerId, onRestart }: ResultScreenProps) {
+export function ResultScreen({ players, isHost, lastSong, lastCorrect, lastPlayerId, winnerLastSong, onRestart }: ResultScreenProps) {
   const ranked = [...players]
     .map((p, i) => ({ ...p, color: PLAYER_COLORS[i] ?? '#7a7a8e' }))
     .sort((a, b) => b.score - a.score);
@@ -229,6 +230,8 @@ export function ResultScreen({ players, isHost, lastSong, lastCorrect, lastPlaye
   const winnerOriginalIndex = players.findIndex((p) => p.id === winner?.id);
   const winnerColor = PLAYER_COLORS[winnerOriginalIndex] ?? '#7a7a8e';
   const winnerIsLastPlayer = winner?.id === lastPlayerId;
+  // Use winner's last correctly placed song for highlight; fall back to global last if winner went last
+  const highlightSong = winnerLastSong ?? (winnerIsLastPlayer && lastCorrect ? lastSong : null);
 
   return (
     <Screen>
@@ -256,13 +259,13 @@ export function ResultScreen({ players, isHost, lastSong, lastCorrect, lastPlaye
               <TimelineLabel color={winnerColor}>{winner.name}</TimelineLabel>
               <TimelineScroll>
                 {winner.timeline.map((song) => (
-                  <SongTile key={song.id} highlight={winnerIsLastPlayer && lastCorrect && song.id === lastSong?.id}>
+                  <SongTile key={song.id} highlight={song.id === highlightSong?.id}>
                     <TileYear>{song.year}</TileYear>
                     <TileTitle>{song.title}</TileTitle>
                     <TileArtist>{song.artist}</TileArtist>
                   </SongTile>
                 ))}
-                {winnerIsLastPlayer && !lastCorrect && lastSong && (
+                {winnerIsLastPlayer && !lastCorrect && lastSong && !winnerLastSong && (
                   <MissedCard>
                     <MissedX>✕</MissedX>
                     <MissedYear>{lastSong.year}</MissedYear>

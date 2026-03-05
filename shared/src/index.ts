@@ -97,6 +97,7 @@ export interface ServerToClientEvents {
     lastSong: SongFull;
     lastCorrect: boolean;
     lastPlayerId: string;
+    winnerLastSong: SongFull | null;
   }) => void;
   player_disconnected: (data: { playerId: string }) => void;
   player_reconnected: (data: { playerId: string }) => void;

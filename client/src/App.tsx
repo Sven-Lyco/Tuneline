@@ -126,6 +126,7 @@ export default function App() {
   const [resultLastSong, setResultLastSong] = useState<SongFull | null>(null);
   const [resultLastCorrect, setResultLastCorrect] = useState(false);
   const [resultLastPlayerId, setResultLastPlayerId] = useState('');
+  const [resultWinnerLastSong, setResultWinnerLastSong] = useState<SongFull | null>(null);
   const [slot, setSlot] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -229,13 +230,14 @@ export default function App() {
       }, 2200);
     });
 
-    socket.on('game_over', ({ players, lastSong, lastCorrect, lastPlayerId }) => {
+    socket.on('game_over', ({ players, lastSong, lastCorrect, lastPlayerId, winnerLastSong }) => {
       stopAudio();
       setPlaying(false);
       setResultPlayers(players);
       setResultLastSong(lastSong);
       setResultLastCorrect(lastCorrect);
       setResultLastPlayerId(lastPlayerId);
+      setResultWinnerLastSong(winnerLastSong ?? null);
       setScreen('result');
     });
 
@@ -481,6 +483,7 @@ export default function App() {
           lastSong={resultLastSong}
           lastCorrect={resultLastCorrect}
           lastPlayerId={resultLastPlayerId}
+          winnerLastSong={resultWinnerLastSong}
           onRestart={handleRestart}
         />
       )}

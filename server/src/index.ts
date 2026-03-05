@@ -171,12 +171,17 @@ io.on('connection', (socket) => {
 
     if (result.gameOver) {
       const players = rooms.getPlayers(roomCode);
-      if (players) io.to(roomCode).emit('game_over', {
-        players,
-        lastSong: result.song,
-        lastCorrect: result.correct,
-        lastPlayerId: result.lastPlayerId,
-      });
+      if (players) {
+        const winner = [...players].sort((a, b) => b.score - a.score)[0];
+        const winnerLastSong = winner ? rooms.getLastCorrectSong(roomCode, winner.id) : null;
+        io.to(roomCode).emit('game_over', {
+          players,
+          lastSong: result.song,
+          lastCorrect: result.correct,
+          lastPlayerId: result.lastPlayerId,
+          winnerLastSong,
+        });
+      }
       log(roomCode, 'game_over', players?.map((p) => `${p.name}=${p.score}`).join(' ') ?? '');
     } else {
       const gameState = rooms.getGameState(roomCode);

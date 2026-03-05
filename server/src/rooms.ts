@@ -38,6 +38,7 @@ interface Room {
   round: number;
   rounds: number;
   audioMode: AudioMode;
+  lastCorrectSong: Map<string, SongFull>; // playerId → last correctly placed song
   cleanupTimer: ReturnType<typeof setTimeout>;
 }
 
@@ -122,6 +123,7 @@ export class RoomManager {
       round: 1,
       rounds: Math.max(1, Math.min(rounds, 20)),
       audioMode,
+      lastCorrectSong: new Map(),
       cleanupTimer: setTimeout(() => {}, 0),
     };
 
@@ -254,6 +256,7 @@ export class RoomManager {
     if (correct) {
       player.score++;
       player.timeline.splice(clampedPosition, 0, song);
+      room.lastCorrectSong.set(playerId, song);
     }
 
     room.currentSongIndex++;
@@ -306,6 +309,7 @@ export class RoomManager {
     room.currentSongIndex = 0;
     room.currentPlayerIndex = 0;
     room.round = 1;
+    room.lastCorrectSong = new Map();
     for (const p of room.players.values()) {
       p.timeline = [];
       p.score = 0;
@@ -347,6 +351,10 @@ export class RoomManager {
       return { roomCode: room.code, playerId };
     }
     return null;
+  }
+
+  getLastCorrectSong(roomCode: string, playerId: string): SongFull | null {
+    return this.rooms.get(roomCode)?.lastCorrectSong.get(playerId) ?? null;
   }
 
   getRoomCodeForSocket(socketId: string): string | null {

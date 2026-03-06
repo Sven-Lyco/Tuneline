@@ -86,8 +86,8 @@ const CodeText = styled.div`
 `;
 
 const CopyHint = styled.div`
-  font-size: 0.7rem;
-  color: #3a3a5a;
+  font-size: 0.78rem;
+  color: #4a4a6a;
   white-space: nowrap;
 `;
 
@@ -117,13 +117,13 @@ const PlayerDot = styled.div<{ bg: string }>`
 
 const PlayerName = styled.div<{ faded: string }>`
   flex: 1;
-  font-size: 0.9rem;
+  font-size: 1rem;
   font-weight: 500;
   color: ${({ faded }) => (faded === 'true' ? '#4a4a6a' : '#e8e8f0')};
 `;
 
 const PlayerBadge = styled.div`
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   color: #7a7a8e;
   padding: 0.15rem 0.5rem;
   border: 1px solid #2a2a3a;
@@ -148,7 +148,7 @@ const KickButton = styled.button`
 
 const WaitingDots = styled.span`
   color: #7a7a8e;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   animation: pulse 1.5s ease-in-out infinite;
 `;
 
@@ -166,7 +166,7 @@ const ModeButton = styled.button<{ active: string }>`
   background: ${({ active }) => (active === 'true' ? 'rgba(168,85,247,0.08)' : 'transparent')};
   color: ${({ active }) => (active === 'true' ? '#a855f7' : '#7a7a8e')};
   font-family: 'Outfit', sans-serif;
-  font-size: 0.78rem;
+  font-size: 0.9rem;
   cursor: pointer;
 
   &:hover {
@@ -189,7 +189,7 @@ const RoundButton = styled.button<{ active: string }>`
   background: ${({ active }) => (active === 'true' ? 'rgba(6, 214, 160, 0.07)' : 'transparent')};
   color: ${({ active }) => (active === 'true' ? '#06d6a0' : '#7a7a8e')};
   font-family: 'Outfit', sans-serif;
-  font-size: 0.82rem;
+  font-size: 0.95rem;
   cursor: pointer;
 
   &:hover {
@@ -220,7 +220,7 @@ const StartButton = styled.button<{ ready: string }>`
 const WaitingMsg = styled.div`
   text-align: center;
   color: #7a7a8e;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   padding: 1rem 0;
 `;
 

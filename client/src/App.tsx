@@ -190,6 +190,11 @@ export default function App() {
       }
     });
 
+    socket.on('game_loading', () => {
+      setLoadingMsg('Host lädt Songs…');
+      setScreen('loading');
+    });
+
     socket.on('game_started', ({ gameState: gs, currentSong: cs }) => {
       setGameState(gs);
       setCurrentSong(cs);
@@ -261,6 +266,7 @@ export default function App() {
       socket.off('room_created');
       socket.off('room_joined');
       socket.off('room_updated');
+      socket.off('game_loading');
       socket.off('game_started');
       socket.off('placement_result');
       socket.off('game_over');
@@ -335,6 +341,7 @@ export default function App() {
   const handleStartGame = useCallback(async () => {
     setScreen('loading');
     setLoadingMsg('Songs werden geladen…');
+    socket.emit('start_loading');
 
     const playerCount = lobbyState?.players.length ?? 1;
     const needed = rounds * playerCount + playerCount + 5;

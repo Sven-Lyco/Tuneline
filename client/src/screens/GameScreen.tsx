@@ -68,10 +68,12 @@ const HeaderTitle = styled.div`
 `;
 
 const RoundBadge = styled.div`
-  font-family: 'Space Mono', monospace;
-  font-size: 0.75rem;
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 600;
   color: #7a7a8e;
-  letter-spacing: 3px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
 `;
 
 const PlayerBadges = styled.div`
@@ -123,9 +125,10 @@ const SongArea = styled.div`
 `;
 
 const CurrentPlayerLabel = styled.div<{ color: string }>`
-  font-family: 'Space Mono', monospace;
-  font-size: 0.65rem;
-  letter-spacing: 4px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
   text-transform: uppercase;
   color: ${({ color }) => color};
   margin-bottom: 0.9rem;
@@ -176,15 +179,15 @@ const SongTitle = styled.div`
 `;
 
 const SongArtist = styled.div`
-  font-size: 1rem;
+  font-size: 1.05rem;
   color: #7a7a8e;
   margin-bottom: 0.6rem;
 `;
 
 const RevealedYear = styled.div`
-  font-family: 'Space Mono', monospace;
+  font-family: 'Outfit', sans-serif;
   font-size: 2.5rem;
-  font-weight: 700;
+  font-weight: 800;
   color: #06d6a0;
   animation: pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 `;
@@ -254,14 +257,14 @@ const VolumeSlider = styled.input`
 `;
 
 const PlacementHint = styled.div`
-  font-size: 0.75rem;
+  font-size: 0.88rem;
   color: #7a7a8e;
   margin-top: 0.6rem;
   text-align: center;
 `;
 
 const WaitingLabel = styled.div`
-  font-size: 0.75rem;
+  font-size: 0.88rem;
   color: #7a7a8e;
   margin-top: 0.6rem;
   text-align: center;
@@ -294,10 +297,10 @@ const TimelineSection = styled.div`
 
 const TimelineLabel = styled.div`
   font-family: 'Space Mono', monospace;
-  font-size: 0.6rem;
-  letter-spacing: 3px;
+  font-size: 0.75rem;
+  letter-spacing: 2px;
   text-transform: uppercase;
-  color: #3a3a5a;
+  color: #4a4a6a;
   text-align: center;
 `;
 
@@ -309,9 +312,17 @@ const TimelineArea = styled.div`
   min-height: 150px;
   padding: 0.5rem 0;
 
-  &::-webkit-scrollbar { height: 5px; }
-  &::-webkit-scrollbar-track { background: #12121a; border-radius: 3px; }
-  &::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+  &::-webkit-scrollbar {
+    height: 5px;
+  }
+  &::-webkit-scrollbar-track {
+    background: #12121a;
+    border-radius: 3px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: #2a2a3a;
+    border-radius: 3px;
+  }
 `;
 
 const TimelineInner = styled.div`
@@ -328,22 +339,23 @@ const SongTile = styled.div<{ highlight: string }>`
   padding: 0.8rem 1rem;
   text-align: center;
   min-width: 150px;
-  box-shadow: ${({ highlight }) => (highlight === 'true' ? '0 0 24px rgba(6,214,160,0.25)' : 'none')};
+  box-shadow: ${({ highlight }) =>
+    highlight === 'true' ? '0 0 24px rgba(6,214,160,0.25)' : 'none'};
   animation: ${({ highlight }) => (highlight === 'true' ? 'pop 0.4s ease-out' : 'none')};
   transition: all 0.3s;
   flex-shrink: 0;
 `;
 
 const TileYear = styled.div`
-  font-family: 'Space Mono', monospace;
-  font-size: 1.1rem;
-  font-weight: 700;
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.3rem;
+  font-weight: 500;
   color: #ff2d78;
   margin-bottom: 4px;
 `;
 
 const TileTitle = styled.div`
-  font-size: 0.78rem;
+  font-size: 0.88rem;
   font-weight: 600;
   color: #e8e8f0;
   white-space: nowrap;
@@ -353,7 +365,7 @@ const TileTitle = styled.div`
 `;
 
 const TileArtist = styled.div`
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   color: #7a7a8e;
   white-space: nowrap;
   overflow: hidden;
@@ -371,14 +383,22 @@ const OthersSection = styled.div`
   padding: 0 2rem 0.5rem;
   flex-shrink: 0;
 
-  &::-webkit-scrollbar { height: 4px; }
-  &::-webkit-scrollbar-track { background: transparent; }
-  &::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+  &::-webkit-scrollbar {
+    height: 4px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: #2a2a3a;
+    border-radius: 3px;
+  }
 `;
 
 const OtherPlayerPanel = styled.div<{ isActive: string; borderColor: string }>`
   background: #12121a;
-  border: 1px solid ${({ isActive, borderColor }) => (isActive === 'true' ? borderColor : '#1e1e2e')};
+  border: 1px solid
+    ${({ isActive, borderColor }) => (isActive === 'true' ? borderColor : '#1e1e2e')};
   border-radius: 14px;
   padding: 0.75rem 1rem;
   min-width: 200px;
@@ -400,7 +420,7 @@ const OtherDot = styled.div<{ bg: string }>`
 `;
 
 const OtherName = styled.div`
-  font-size: 0.78rem;
+  font-size: 0.88rem;
   font-weight: 600;
   color: #e8e8f0;
   flex: 1;
@@ -408,7 +428,7 @@ const OtherName = styled.div`
 
 const OtherScore = styled.div`
   font-family: 'Space Mono', monospace;
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   color: #06d6a0;
   font-weight: 700;
 `;
@@ -424,8 +444,9 @@ const MiniTile = styled.div`
   border: 1px solid #2a2a3a;
   border-radius: 6px;
   padding: 0.2rem 0.4rem;
-  font-family: 'Space Mono', monospace;
-  font-size: 0.65rem;
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 500;
   color: #ff2d78;
 `;
 
@@ -493,7 +514,9 @@ export function GameScreen({
       {/* Header */}
       <Header>
         <HeaderTitle>TUNELINE</HeaderTitle>
-        <RoundBadge>RUNDE {gameState.round}/{gameState.rounds}</RoundBadge>
+        <RoundBadge>
+          RUNDE {gameState.round}/{gameState.rounds}
+        </RoundBadge>
         <PlayerBadges>
           {gameState.players.map((p, i) => (
             <PlayerChip
@@ -503,7 +526,8 @@ export function GameScreen({
             >
               <PlayerDot bg={PLAYER_COLORS[i] ?? '#7a7a8e'} />
               <PlayerName active={String(p.id === gameState.currentPlayerId)}>
-                {p.name}{p.id === myPlayerId ? ' (du)' : ''}
+                {p.name}
+                {p.id === myPlayerId ? ' (du)' : ''}
               </PlayerName>
               <PlayerScore>{p.score}</PlayerScore>
             </PlayerChip>
@@ -514,7 +538,13 @@ export function GameScreen({
       <GameBody>
         {/* Song Card */}
         <SongArea>
-          <CurrentPlayerLabel color={PLAYER_COLORS[gameState.players.findIndex((p) => p.id === gameState.currentPlayerId)] ?? '#ff2d78'}>
+          <CurrentPlayerLabel
+            color={
+              PLAYER_COLORS[
+                gameState.players.findIndex((p) => p.id === gameState.currentPlayerId)
+              ] ?? '#ff2d78'
+            }
+          >
             ● {activePlayer?.name ?? '?'} ist dran
           </CurrentPlayerLabel>
           <SongCard>
@@ -634,8 +664,8 @@ export function GameScreen({
             {!isMyTurn
               ? `Warten auf ${activePlayer?.name ?? '?'}…`
               : slot !== null
-              ? 'Hier platzieren ▶'
-              : 'Position wählen...'}
+                ? 'Hier platzieren ▶'
+                : 'Position wählen...'}
           </PlaceButton>
         </PlaceButtonRow>
       </GameBody>

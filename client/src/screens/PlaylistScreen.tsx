@@ -57,7 +57,7 @@ const LogoutButton = styled.button`
 `;
 
 const Hint = styled.p`
-  font-size: 0.82rem;
+  font-size: 0.95rem;
   color: #7a7a8e;
   margin: 0 0 1.5rem;
   width: 100%;
@@ -140,7 +140,7 @@ const CardInfo = styled.div`
 `;
 
 const CardName = styled.div`
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 600;
   color: #e8e8f0;
   white-space: nowrap;
@@ -149,7 +149,7 @@ const CardName = styled.div`
 `;
 
 const CardMeta = styled.div`
-  font-size: 0.68rem;
+  font-size: 0.78rem;
   color: #7a7a8e;
   margin-top: 2px;
 `;
@@ -164,7 +164,7 @@ const Footer = styled.div`
 `;
 
 const SelectedCount = styled.div`
-  font-size: 0.82rem;
+  font-size: 0.95rem;
   color: #7a7a8e;
   flex: 1;
 `;

@@ -6,11 +6,12 @@ interface LabelProps {
 }
 
 const StyledLabel = styled.div`
-  font-family: 'Space Mono', monospace;
-  font-size: 0.65rem;
-  letter-spacing: 3px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.75rem;
+  letter-spacing: 1.5px;
   text-transform: uppercase;
-  color: #7a7a8e;
+  font-weight: 600;
+  color: #9a9aae;
   margin-bottom: 0.7rem;
 `;
 

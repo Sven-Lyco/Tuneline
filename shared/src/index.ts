@@ -55,6 +55,7 @@ export interface ClientToServerEvents {
     playerName: string;
     playerToken?: string;
   }) => void;
+  start_loading: () => void;
   start_game: (data: {
     songs: SongFull[];
     rounds: number;
@@ -102,5 +103,6 @@ export interface ServerToClientEvents {
   player_disconnected: (data: { playerId: string }) => void;
   player_reconnected: (data: { playerId: string }) => void;
   player_kicked: (data: { playerId: string }) => void;
+  game_loading: () => void;
   error: (data: { message: string }) => void;
 }

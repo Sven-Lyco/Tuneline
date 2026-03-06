@@ -117,6 +117,14 @@ io.on('connection', (socket) => {
     log(code, 'join_room', `name="${playerName.trim()}" playerId=${result.playerId} players=${lobby.players.length}`);
   });
 
+  socket.on('start_loading', () => {
+    if (isLimited('start_loading')) return;
+    const roomCode = rooms.getRoomCodeForSocket(socket.id);
+    if (!roomCode) return;
+    socket.to(roomCode).emit('game_loading');
+    log(roomCode, 'start_loading');
+  });
+
   socket.on('start_game', ({ songs, rounds, audioMode }) => {
     if (isLimited('start_game')) return;
 

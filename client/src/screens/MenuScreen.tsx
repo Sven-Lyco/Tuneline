@@ -117,7 +117,7 @@ const NameInput = styled.input`
   background: #08080d;
   color: #e8e8f0;
   font-family: 'Outfit', sans-serif;
-  font-size: 0.82rem;
+  font-size: 1rem;
   outline: none;
   margin-bottom: 1.4rem;
   box-sizing: border-box;
@@ -142,7 +142,7 @@ const ModeButton = styled.button<{ active: string }>`
     active === 'true' ? 'rgba(168,85,247,0.08)' : 'transparent'};
   color: ${({ active }) => (active === 'true' ? '#a855f7' : '#7a7a8e')};
   font-family: 'Outfit', sans-serif;
-  font-size: 0.78rem;
+  font-size: 0.9rem;
   cursor: pointer;
 
   &:hover {
@@ -166,7 +166,7 @@ const RoundButton = styled.button<{ active: string }>`
     active === 'true' ? 'rgba(6, 214, 160, 0.07)' : 'transparent'};
   color: ${({ active }) => (active === 'true' ? '#06d6a0' : '#7a7a8e')};
   font-family: 'Outfit', sans-serif;
-  font-size: 0.82rem;
+  font-size: 0.95rem;
   font-weight: 500;
   cursor: pointer;
 

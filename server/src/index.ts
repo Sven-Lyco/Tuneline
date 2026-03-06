@@ -113,7 +113,21 @@ io.on('connection', (socket) => {
       playerToken: result.playerToken,
       room: lobby,
     });
-    io.to(code).emit('room_updated', { room: lobby });
+
+    // If reconnecting to an active game, send current game state
+    if (lobby.status === 'playing') {
+      const gameState = rooms.getGameState(code);
+      const currentSong = rooms.getCurrentSongPreview(code);
+      if (gameState && currentSong) {
+        // Resume if this reconnect cleared the pause
+        io.to(code).emit('game_resumed', { gameState, currentSong });
+        log(code, 'player_reconnected → game_resumed', `playerId=${result.playerId}`);
+      }
+      io.to(code).emit('player_reconnected', { playerId: result.playerId });
+    } else {
+      io.to(code).emit('room_updated', { room: lobby });
+    }
+
     log(code, 'join_room', `name="${playerName.trim()}" playerId=${result.playerId} players=${lobby.players.length}`);
   });
 
@@ -224,6 +238,42 @@ io.on('connection', (socket) => {
     log(roomCode, 'return_to_lobby');
   });
 
+  socket.on('skip_player', () => {
+    if (isLimited('skip_player')) return;
+
+    const roomCode = rooms.getRoomCodeForSocket(socket.id);
+    if (!roomCode) return;
+
+    const result = rooms.skipDisconnectedPlayer(socket.id, roomCode);
+    if (!result.ok) {
+      socket.emit('error', { message: result.error });
+      return;
+    }
+
+    const gameState = rooms.getGameState(roomCode);
+    const currentSong = rooms.getCurrentSongPreview(roomCode);
+
+    if (!gameState || gameState.players.length <= 1 || !currentSong) {
+      const players = rooms.getPlayers(roomCode);
+      if (players) {
+        const winner = [...players].sort((a, b) => b.score - a.score)[0];
+        const winnerLastSong = winner ? rooms.getLastCorrectSong(roomCode, winner.id) : null;
+        io.to(roomCode).emit('game_over', {
+          players,
+          lastSong: null,
+          lastCorrect: false,
+          lastPlayerId: '',
+          winnerLastSong,
+        });
+      }
+      log(roomCode, 'skip_player → game_over (≤1 player left)');
+      return;
+    }
+
+    io.to(roomCode).emit('game_resumed', { gameState, currentSong });
+    log(roomCode, 'skip_player', `resumed, currentPlayer=${gameState.currentPlayerId}`);
+  });
+
   socket.on('kick_player', ({ playerId }) => {
     if (isLimited('kick_player')) return;
     if (typeof playerId !== 'string') return;
@@ -252,10 +302,62 @@ io.on('connection', (socket) => {
     log(null, 'disconnect', socket.id);
     const info = rooms.handleDisconnect(socket.id);
     if (!info) return;
+
     io.to(info.roomCode).emit('player_disconnected', { playerId: info.playerId });
-    const lobby = rooms.getLobbyState(info.roomCode);
-    if (lobby) io.to(info.roomCode).emit('room_updated', { room: lobby });
-    log(info.roomCode, 'player_disconnected', `playerId=${info.playerId}`);
+
+    if (info.wasPlaying && info.shouldPause) {
+      const gameState = rooms.getGameState(info.roomCode);
+      if (gameState) {
+        if (info.isHost) {
+          // Host left → game over immediately
+          const players = rooms.getPlayers(info.roomCode);
+          if (players) {
+            const winner = [...players].sort((a, b) => b.score - a.score)[0];
+            const winnerLastSong = winner ? rooms.getLastCorrectSong(info.roomCode, winner.id) : null;
+            io.to(info.roomCode).emit('game_over', {
+              players,
+              lastSong: null,
+              lastCorrect: false,
+              lastPlayerId: info.playerId,
+              winnerLastSong,
+            });
+          }
+          log(info.roomCode, 'host_disconnected → game_over');
+        } else {
+          const connectedCount = gameState.players.filter((p) => p.isConnected).length;
+          if (connectedCount <= 1) {
+            // Only one player left — abort game
+            rooms.finishGame(info.roomCode);
+            const players = rooms.getPlayers(info.roomCode);
+            if (players) {
+              const winner = [...players].sort((a, b) => b.score - a.score)[0];
+              const winnerLastSong = winner ? rooms.getLastCorrectSong(info.roomCode, winner.id) : null;
+              io.to(info.roomCode).emit('game_over', {
+                players,
+                lastSong: null,
+                lastCorrect: false,
+                lastPlayerId: info.playerId,
+                winnerLastSong,
+              });
+            }
+            log(info.roomCode, 'last_player_disconnected → game_over');
+          } else {
+            io.to(info.roomCode).emit('game_paused', {
+              disconnectedPlayerId: info.playerId,
+              disconnectedPlayerName: info.playerName,
+              isHostDisconnected: false,
+              gameState,
+            });
+            log(info.roomCode, 'game_paused', `player="${info.playerName}"`);
+          }
+        }
+      }
+    } else {
+      const lobby = rooms.getLobbyState(info.roomCode);
+      if (lobby) io.to(info.roomCode).emit('room_updated', { room: lobby });
+    }
+
+    log(info.roomCode, 'player_disconnected', `playerId=${info.playerId} isHost=${info.isHost}`);
   });
 });
 

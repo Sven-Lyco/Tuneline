@@ -39,6 +39,8 @@ interface Room {
   rounds: number;
   audioMode: AudioMode;
   lastCorrectSong: Map<string, SongFull>; // playerId → last correctly placed song
+  paused: boolean;
+  pausedForPlayerId: string | null;
   cleanupTimer: ReturnType<typeof setTimeout>;
 }
 
@@ -124,6 +126,8 @@ export class RoomManager {
       rounds: Math.max(1, Math.min(rounds, 20)),
       audioMode,
       lastCorrectSong: new Map(),
+      paused: false,
+      pausedForPlayerId: null,
       cleanupTimer: setTimeout(() => {}, 0),
     };
 
@@ -140,20 +144,26 @@ export class RoomManager {
   ): JoinResult {
     const room = this.rooms.get(roomCode);
     if (!room) return { ok: false, error: 'Raum nicht gefunden.' };
-    if (room.status !== 'lobby') return { ok: false, error: 'Das Spiel läuft bereits.' };
-    if (room.players.size >= MAX_PLAYERS) return { ok: false, error: 'Der Raum ist voll.' };
 
-    // Reconnect via token
+    // Reconnect via token — must be checked BEFORE status guard
     if (playerToken) {
       for (const [id, player] of room.players) {
         if (player.token === playerToken) {
           player.socketId = socketId;
           player.isConnected = true;
           room.socketToPlayer.set(socketId, id);
+          // If game was paused waiting for this player, resume
+          if (room.paused && room.pausedForPlayerId === id) {
+            room.paused = false;
+            room.pausedForPlayerId = null;
+          }
           return { ok: true, playerId: id, playerToken };
         }
       }
     }
+
+    if (room.status !== 'lobby') return { ok: false, error: 'Das Spiel läuft bereits.' };
+    if (room.players.size >= MAX_PLAYERS) return { ok: false, error: 'Der Raum ist voll.' };
 
     const playerId = this.newPlayerId();
     const token = this.newToken();
@@ -341,16 +351,87 @@ export class RoomManager {
     return { ok: true, kickedSocketId };
   }
 
-  handleDisconnect(socketId: string): { roomCode: string; playerId: string } | null {
+  skipDisconnectedPlayer(socketId: string, roomCode: string): { ok: true } | { ok: false; error: string } {
+    const room = this.rooms.get(roomCode);
+    if (!room) return { ok: false, error: 'Raum nicht gefunden.' };
+    if (!room.paused || !room.pausedForPlayerId) return { ok: false, error: 'Spiel ist nicht pausiert.' };
+
+    const requesterId = room.socketToPlayer.get(socketId);
+    const requester = requesterId ? room.players.get(requesterId) : null;
+    if (!requester?.isHost) return { ok: false, error: 'Nur der Host kann den Spieler überspringen.' };
+
+    const skippedId = room.pausedForPlayerId;
+
+    // Remove from playerOrder permanently
+    room.playerOrder = room.playerOrder.filter((id) => id !== skippedId);
+
+    // Adjust currentPlayerIndex if needed
+    if (room.currentPlayerIndex >= room.playerOrder.length) {
+      room.currentPlayerIndex = 0;
+    }
+
+    // Advance round counter if we wrapped around
+    if (room.playerOrder.length > 0 && room.currentPlayerIndex === 0) {
+      room.round++;
+    }
+
+    room.paused = false;
+    room.pausedForPlayerId = null;
+
+    const gameOver =
+      room.playerOrder.length <= 1 ||
+      room.currentSongIndex >= room.deck.length ||
+      (room.currentPlayerIndex === 0 && room.round > room.rounds);
+
+    if (gameOver) room.status = 'finished';
+
+    return { ok: true };
+  }
+
+  handleDisconnect(socketId: string): {
+    roomCode: string;
+    playerId: string;
+    playerName: string;
+    isHost: boolean;
+    wasPlaying: boolean;
+    shouldPause: boolean;
+  } | null {
     for (const room of this.rooms.values()) {
       const playerId = room.socketToPlayer.get(socketId);
       if (!playerId) continue;
       const player = room.players.get(playerId);
-      if (player) player.isConnected = false;
+      if (!player) continue;
+
+      player.isConnected = false;
       room.socketToPlayer.delete(socketId);
-      return { roomCode: room.code, playerId };
+
+      const wasPlaying = room.status === 'playing';
+      let shouldPause = false;
+
+      if (wasPlaying && !room.paused) {
+        room.paused = true;
+        room.pausedForPlayerId = playerId;
+        shouldPause = true;
+      }
+
+      return {
+        roomCode: room.code,
+        playerId,
+        playerName: player.name,
+        isHost: player.isHost,
+        wasPlaying,
+        shouldPause,
+      };
     }
     return null;
+  }
+
+  finishGame(roomCode: string): void {
+    const room = this.rooms.get(roomCode);
+    if (!room) return;
+    room.status = 'finished';
+    room.paused = false;
+    room.pausedForPlayerId = null;
   }
 
   getLastCorrectSong(roomCode: string, playerId: string): SongFull | null {

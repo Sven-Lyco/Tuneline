@@ -131,6 +131,11 @@ export default function App() {
   const [playing, setPlaying] = useState(false);
   const [volume, setVolumeState] = useState(() => getVolume());
   const [errorMsg, setErrorMsg] = useState('');
+  const [disconnectedPlayer, setDisconnectedPlayer] = useState<{
+    id: string;
+    name: string;
+    isHostDisconnected: boolean;
+  } | null>(null);
 
   const showError = useCallback((msg: string) => {
     setErrorMsg(msg);
@@ -169,6 +174,7 @@ export default function App() {
       setMyPlayerId(playerId);
       setIsHost(true);
       sessionStorage.setItem(PLAYER_TOKEN_KEY, playerToken);
+      sessionStorage.setItem('tuneline_room_code', rc);
     });
 
     socket.on('room_joined', ({ playerId, playerToken, room }) => {
@@ -177,7 +183,10 @@ export default function App() {
       setLobbyState(room);
       setRoomCode(room.roomCode);
       sessionStorage.setItem(PLAYER_TOKEN_KEY, playerToken);
-      setScreen('lobby');
+      sessionStorage.setItem('tuneline_room_code', room.roomCode);
+      if (room.status !== 'playing') {
+        setScreen('lobby');
+      }
     });
 
     socket.on('room_updated', ({ room }) => {
@@ -254,8 +263,30 @@ export default function App() {
       showError('Du wurdest aus dem Raum entfernt.');
     });
 
+    socket.on('game_paused', ({ disconnectedPlayerId, disconnectedPlayerName, isHostDisconnected, gameState: gs }) => {
+      setGameState(gs);
+      stopAudio();
+      setPlaying(false);
+      setDisconnectedPlayer({ id: disconnectedPlayerId, name: disconnectedPlayerName, isHostDisconnected });
+    });
+
+    socket.on('game_resumed', ({ gameState: gs, currentSong: cs }) => {
+      setDisconnectedPlayer(null);
+      setGameState(gs);
+      setCurrentSong(cs);
+      setRevealedSong(null);
+      setFeedback(null);
+      setRevealed(false);
+      setSlot(null);
+      setScreen('game');
+      if (cs.preview && shouldPlayAudio(gs.audioMode, isHost)) {
+        playAudio(cs.preview);
+        setPlaying(true);
+      }
+    });
+
     socket.on('player_disconnected', () => {
-      // room_updated will follow with updated state
+      // handled via game_paused or room_updated
     });
 
     socket.on('error', ({ message }) => {
@@ -268,6 +299,8 @@ export default function App() {
       socket.off('room_updated');
       socket.off('game_loading');
       socket.off('game_started');
+      socket.off('game_paused');
+      socket.off('game_resumed');
       socket.off('placement_result');
       socket.off('game_over');
       socket.off('player_kicked');
@@ -315,7 +348,8 @@ export default function App() {
 
   const handleJoinRoom = useCallback((code: string, name: string) => {
     if (!socket.connected) socket.connect();
-    socket.emit('join_room', { roomCode: code, playerName: name });
+    const playerToken = sessionStorage.getItem(PLAYER_TOKEN_KEY) ?? undefined;
+    socket.emit('join_room', { roomCode: code, playerName: name, playerToken });
     // screen transitions in socket.on('room_joined')
   }, []);
 
@@ -406,9 +440,14 @@ export default function App() {
     setScreen('menu');
   }, []);
 
+  const handleSkipPlayer = useCallback(() => {
+    socket.emit('skip_player');
+  }, []);
+
   const handleRestart = useCallback(() => {
     stopAudio();
     setPlaying(false);
+    setDisconnectedPlayer(null);
     socket.emit('return_to_lobby');
     // screen transitions to 'lobby' via socket.on('room_updated')
   }, []);
@@ -423,7 +462,11 @@ export default function App() {
       <BgGlowBottom />
 
       {screen === 'login' && (
-        <LoginScreen onJoinAsGuest={() => setScreen('join')} />
+        <LoginScreen onJoinAsGuest={() => {
+          const savedCode = sessionStorage.getItem('tuneline_room_code') ?? '';
+          setJoinCode(savedCode);
+          setScreen('join');
+        }} />
       )}
 
       {screen === 'join' && (
@@ -476,6 +519,8 @@ export default function App() {
       {screen === 'game' && gameState && currentSong && (
         <GameScreen
           myPlayerId={myPlayerId}
+          roomCode={roomCode}
+          isHost={isHost}
           gameState={gameState}
           currentSong={currentSong}
           revealedSong={revealedSong}
@@ -488,6 +533,8 @@ export default function App() {
           onToggleAudio={handleToggleAudio}
           onVolumeChange={handleVolumeChange}
           onPlace={handlePlace}
+          disconnectedPlayer={disconnectedPlayer}
+          onSkipPlayer={handleSkipPlayer}
         />
       )}
 

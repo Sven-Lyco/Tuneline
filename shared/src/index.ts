@@ -64,6 +64,7 @@ export interface ClientToServerEvents {
   update_settings: (data: { rounds: number; audioMode: AudioMode }) => void;
   place_song: (data: { position: number }) => void;
   kick_player: (data: { playerId: string }) => void;
+  skip_player: () => void;
   return_to_lobby: () => void;
 }
 
@@ -95,10 +96,20 @@ export interface ServerToClientEvents {
   }) => void;
   game_over: (data: {
     players: RoomPlayer[];
-    lastSong: SongFull;
+    lastSong: SongFull | null;
     lastCorrect: boolean;
     lastPlayerId: string;
     winnerLastSong: SongFull | null;
+  }) => void;
+  game_paused: (data: {
+    disconnectedPlayerId: string;
+    disconnectedPlayerName: string;
+    isHostDisconnected: boolean;
+    gameState: GameStateForClient;
+  }) => void;
+  game_resumed: (data: {
+    gameState: GameStateForClient;
+    currentSong: SongMeta;
   }) => void;
   player_disconnected: (data: { playerId: string }) => void;
   player_reconnected: (data: { playerId: string }) => void;

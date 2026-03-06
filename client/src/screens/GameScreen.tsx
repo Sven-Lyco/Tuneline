@@ -9,6 +9,8 @@ import { DropZone } from '../components/DropZone';
 
 interface GameScreenProps {
   myPlayerId: string;
+  roomCode: string;
+  isHost: boolean;
   gameState: GameStateForClient;
   currentSong: SongMeta;
   revealedSong: SongFull | null;
@@ -21,6 +23,8 @@ interface GameScreenProps {
   onToggleAudio: () => void;
   onVolumeChange: (v: number) => void;
   onPlace: () => void;
+  disconnectedPlayer: { id: string; name: string; isHostDisconnected: boolean } | null;
+  onSkipPlayer: () => void;
 }
 
 // ── Layout ─────────────────────────────────────────────────────
@@ -450,6 +454,118 @@ const MiniTile = styled.div`
   color: #ff2d78;
 `;
 
+// ── Room Code (Header) ─────────────────────────────────────────
+
+const RoomCodeBadge = styled.button`
+  background: transparent;
+  border: 1px solid #2a2a3a;
+  border-radius: 8px;
+  padding: 0.25rem 0.6rem;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #4a4a6a;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+  white-space: nowrap;
+
+  &:hover {
+    border-color: #4a4a6a;
+    color: #7a7a8e;
+  }
+`;
+
+// ── Disconnect Overlay ─────────────────────────────────────────
+
+const Overlay = styled.div`
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 8, 13, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  animation: slideIn 0.3s ease-out;
+`;
+
+const DisconnectCard = styled.div`
+  background: #12121a;
+  border: 1px solid #2a2a3a;
+  border-radius: 20px;
+  padding: 2rem;
+  width: 100%;
+  max-width: 420px;
+  margin: 1.5rem;
+  text-align: center;
+`;
+
+const DisconnectIcon = styled.div`
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+`;
+
+const DisconnectTitle = styled.div`
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #e8e8f0;
+  margin-bottom: 0.5rem;
+`;
+
+const DisconnectSub = styled.div`
+  font-size: 0.88rem;
+  color: #7a7a8e;
+  margin-bottom: 1.5rem;
+  line-height: 1.5;
+`;
+
+const DisconnectRoomCode = styled.div`
+  font-family: 'Space Mono', monospace;
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: 6px;
+  color: #a855f7;
+  background: #08080d;
+  border: 1px solid #2a2a3a;
+  border-radius: 10px;
+  padding: 0.6rem 1rem;
+  margin-bottom: 1.5rem;
+`;
+
+const DisconnectActions = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+`;
+
+const SkipButton = styled.button`
+  padding: 0.75rem;
+  border-radius: 12px;
+  border: none;
+  background: linear-gradient(135deg, #ff2d78, #a855f7);
+  color: #fff;
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.2s;
+
+  &:hover {
+    opacity: 0.9;
+  }
+`;
+
+const WaitButton = styled.button`
+  padding: 0.75rem;
+  border-radius: 12px;
+  border: 1px solid #2a2a3a;
+  background: transparent;
+  color: #7a7a8e;
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.95rem;
+  cursor: default;
+`;
+
 // ── Place Button ───────────────────────────────────────────────
 
 const PlaceButtonRow = styled.div`
@@ -484,6 +600,8 @@ const PlaceButton = styled.button<{ ready: string }>`
 
 export function GameScreen({
   myPlayerId,
+  roomCode,
+  isHost,
   gameState,
   currentSong,
   revealedSong,
@@ -496,6 +614,8 @@ export function GameScreen({
   onToggleAudio,
   onVolumeChange,
   onPlace,
+  disconnectedPlayer,
+  onSkipPlayer,
 }: GameScreenProps) {
   const isMyTurn = gameState.currentPlayerId === myPlayerId;
   const myPlayer = gameState.players.find((p) => p.id === myPlayerId);
@@ -517,6 +637,12 @@ export function GameScreen({
         <RoundBadge>
           RUNDE {gameState.round}/{gameState.rounds}
         </RoundBadge>
+        <RoomCodeBadge
+          onClick={() => { void navigator.clipboard.writeText(roomCode); }}
+          title="Raum-Code kopieren"
+        >
+          {roomCode}
+        </RoomCodeBadge>
         <PlayerBadges>
           {gameState.players.map((p, i) => (
             <PlayerChip
@@ -669,6 +795,42 @@ export function GameScreen({
           </PlaceButton>
         </PlaceButtonRow>
       </GameBody>
+
+      {/* Disconnect Overlay */}
+      {disconnectedPlayer && (
+        <Overlay>
+          <DisconnectCard>
+            <DisconnectIcon>📵</DisconnectIcon>
+            <DisconnectTitle>
+              {disconnectedPlayer.isHostDisconnected
+                ? 'Host hat die Verbindung verloren'
+                : `${disconnectedPlayer.name} hat die Verbindung verloren`}
+            </DisconnectTitle>
+            <DisconnectSub>
+              {disconnectedPlayer.isHostDisconnected
+                ? 'Das Spiel wurde beendet. Ergebnis wird gleich angezeigt.'
+                : isHost
+                ? 'Teile den Raum-Code damit der Spieler wieder beitreten kann:'
+                : 'Das Spiel ist pausiert. Der Host entscheidet wie es weitergeht.'}
+            </DisconnectSub>
+
+            {!disconnectedPlayer.isHostDisconnected && (
+              <DisconnectRoomCode>{roomCode}</DisconnectRoomCode>
+            )}
+
+            {isHost && !disconnectedPlayer.isHostDisconnected && (
+              <DisconnectActions>
+                <SkipButton onClick={onSkipPlayer}>
+                  Ohne {disconnectedPlayer.name} weiterspielen
+                </SkipButton>
+                <WaitButton disabled>
+                  Warten auf Reconnect…
+                </WaitButton>
+              </DisconnectActions>
+            )}
+          </DisconnectCard>
+        </Overlay>
+      )}
     </Screen>
   );
 }

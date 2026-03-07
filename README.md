@@ -1,5 +1,8 @@
 # Tuneline
 
+> This project was fully written by [Claude](https://claude.ai) (Anthropic) in collaboration with the repository owner.
+> Use at your own risk.
+
 A digital music timeline party game inspired by Hitster.
 
 Players listen to a 30-second song preview and place it chronologically on their growing timeline. Correct placement earns a point and keeps the card — the longer the timeline, the harder it gets. 2–10 players, configurable number of rounds, online multiplayer.

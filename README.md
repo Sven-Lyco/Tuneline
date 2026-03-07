@@ -59,8 +59,3 @@ npm run format       # Prettier (client)
 Multi-stage `Dockerfile` verfügbar für Coolify oder andere Container-Plattformen.
 Der Server serviert das Client-Build als statische Dateien.
 Benötigte Env-Variablen: `PORT`, `FRONTEND_ORIGIN`, `NODE_ENV=production`.
-
-## Geplante Features
-
-- **Weitere Spielmodi** (Jahrzehnt-Modus, Team-Modus, Zeitlimit pro Zug)
-- **Soundeffekte** bei richtigem/falschem Platzieren

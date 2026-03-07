@@ -106,7 +106,7 @@ export default function App() {
   const [selectedPlaylists, setSelectedPlaylists] = useState<SpotifyPlaylist[]>([]);
   const [hostName, setHostName] = useState('');
   const [rounds, setRounds] = useState(5);
-  const [audioMode, setAudioMode] = useState<AudioMode>('all');
+  const [audioMode, setAudioMode] = useState<AudioMode>('host-only');
   const [loadingMsg, setLoadingMsg] = useState('');
 
   // Room
@@ -263,12 +263,19 @@ export default function App() {
       showError('Du wurdest aus dem Raum entfernt.');
     });
 
-    socket.on('game_paused', ({ disconnectedPlayerId, disconnectedPlayerName, isHostDisconnected, gameState: gs }) => {
-      setGameState(gs);
-      stopAudio();
-      setPlaying(false);
-      setDisconnectedPlayer({ id: disconnectedPlayerId, name: disconnectedPlayerName, isHostDisconnected });
-    });
+    socket.on(
+      'game_paused',
+      ({ disconnectedPlayerId, disconnectedPlayerName, isHostDisconnected, gameState: gs }) => {
+        setGameState(gs);
+        stopAudio();
+        setPlaying(false);
+        setDisconnectedPlayer({
+          id: disconnectedPlayerId,
+          name: disconnectedPlayerName,
+          isHostDisconnected,
+        });
+      }
+    );
 
     socket.on('game_resumed', ({ gameState: gs, currentSong: cs }) => {
       setDisconnectedPlayer(null);
@@ -307,7 +314,6 @@ export default function App() {
       socket.off('player_disconnected');
       socket.off('error');
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isHost, showError]);
 
   // ── Playlist selection ────────────────────────────────────────
@@ -316,7 +322,7 @@ export default function App() {
     setSelectedPlaylists((prev) =>
       prev.some((p) => p.id === playlist.id)
         ? prev.filter((p) => p.id !== playlist.id)
-        : [...prev, playlist],
+        : [...prev, playlist]
     );
   }, []);
 
@@ -358,17 +364,20 @@ export default function App() {
   const handleAudioModeChange = useCallback(
     (mode: AudioMode) => {
       setAudioMode(mode);
-      setLobbyState((prev) => prev ? { ...prev, audioMode: mode } : prev);
+      setLobbyState((prev) => (prev ? { ...prev, audioMode: mode } : prev));
       socket.emit('update_settings', { rounds, audioMode: mode });
     },
-    [rounds],
+    [rounds]
   );
 
-  const handleRoundsChange = useCallback((r: number) => {
-    setRounds(r);
-    setLobbyState((prev) => prev ? { ...prev, rounds: r } : prev);
-    socket.emit('update_settings', { rounds: r, audioMode });
-  }, [audioMode]);
+  const handleRoundsChange = useCallback(
+    (r: number) => {
+      setRounds(r);
+      setLobbyState((prev) => (prev ? { ...prev, rounds: r } : prev));
+      socket.emit('update_settings', { rounds: r, audioMode });
+    },
+    [audioMode]
+  );
 
   // ── Start Game (host only) ────────────────────────────────────
 
@@ -379,9 +388,7 @@ export default function App() {
 
     const playerCount = lobbyState?.players.length ?? 1;
 
-    const songs = await loadSongsFromPlaylists(
-      selectedPlaylists.map((p) => p.id),
-    );
+    const songs = await loadSongsFromPlaylists(selectedPlaylists.map((p) => p.id));
 
     if (songs.length < playerCount + 3) {
       setLoadingMsg('Nicht genug Songs. Bitte andere Playlisten wählen.');
@@ -460,11 +467,13 @@ export default function App() {
       <BgGlowBottom />
 
       {screen === 'login' && (
-        <LoginScreen onJoinAsGuest={() => {
-          const savedCode = sessionStorage.getItem('tuneline_room_code') ?? '';
-          setJoinCode(savedCode);
-          setScreen('join');
-        }} />
+        <LoginScreen
+          onJoinAsGuest={() => {
+            const savedCode = sessionStorage.getItem('tuneline_room_code') ?? '';
+            setJoinCode(savedCode);
+            setScreen('join');
+          }}
+        />
       )}
 
       {screen === 'join' && (

@@ -14,6 +14,12 @@ const TOKEN_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789';
 const ROOM_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
 const MAX_PLAYERS = 10;
 const MAX_NAME_LENGTH = 30;
+const MAX_ROOMS = 500;
+const MAX_FIELD_LENGTH = 200;
+
+function isValidAudioMode(mode: unknown): mode is AudioMode {
+  return mode === 'all' || mode === 'host-only';
+}
 
 interface InternalPlayer {
   id: string;
@@ -73,6 +79,7 @@ function isCorrectPlacement(
 
 export class RoomManager {
   private rooms = new Map<string, Room>();
+  private socketToRoom = new Map<string, string>(); // socketId → roomCode
 
   private newCode(): string {
     let code: string;
@@ -98,6 +105,8 @@ export class RoomManager {
   }
 
   createRoom(socketId: string, hostName: string, rounds: number, audioMode: AudioMode): { roomCode: string; playerId: string; playerToken: string } {
+    if (this.rooms.size >= MAX_ROOMS) throw new Error('Maximale Raumanzahl erreicht.');
+    const validMode: AudioMode = isValidAudioMode(audioMode) ? audioMode : 'all';
     const code = this.newCode();
     const playerId = this.newPlayerId();
     const token = this.newToken();
@@ -124,7 +133,7 @@ export class RoomManager {
       currentPlayerIndex: 0,
       round: 1,
       rounds: Math.max(1, Math.min(rounds, 20)),
-      audioMode,
+      audioMode: validMode,
       lastCorrectSong: new Map(),
       paused: false,
       pausedForPlayerId: null,
@@ -133,6 +142,7 @@ export class RoomManager {
 
     this.scheduleCleanup(room);
     this.rooms.set(code, room);
+    this.socketToRoom.set(socketId, code);
     return { roomCode: code, playerId, playerToken: token };
   }
 
@@ -152,6 +162,7 @@ export class RoomManager {
           player.socketId = socketId;
           player.isConnected = true;
           room.socketToPlayer.set(socketId, id);
+          this.socketToRoom.set(socketId, roomCode);
           // If game was paused waiting for this player, resume
           if (room.paused && room.pausedForPlayerId === id) {
             room.paused = false;
@@ -182,6 +193,7 @@ export class RoomManager {
     room.players.set(playerId, player);
     room.socketToPlayer.set(socketId, playerId);
     room.playerOrder.push(playerId);
+    this.socketToRoom.set(socketId, roomCode);
     this.scheduleCleanup(room);
     return { ok: true, playerId, playerToken: token };
   }
@@ -201,15 +213,19 @@ export class RoomManager {
     if (!player?.isHost) return { ok: false, error: 'Nur der Host kann das Spiel starten.' };
 
     if (!Array.isArray(songs) || songs.length < 2) {
-      return { ok: false, error: 'Zu wenige Songs.' };
+      return { ok: false, error: 'Zu wenige Songs (min. 2).' };
+    }
+
+    if (!isValidAudioMode(audioMode)) {
+      return { ok: false, error: 'Ungültiger Audio-Modus.' };
     }
 
     // Validate song structure
     for (const song of songs) {
       if (
-        typeof song.id !== 'string' ||
-        typeof song.title !== 'string' ||
-        typeof song.artist !== 'string' ||
+        typeof song.id !== 'string' || song.id.length > MAX_FIELD_LENGTH ||
+        typeof song.title !== 'string' || song.title.length > MAX_FIELD_LENGTH ||
+        typeof song.artist !== 'string' || song.artist.length > MAX_FIELD_LENGTH ||
         typeof song.year !== 'number' ||
         song.year < 1900 ||
         song.year > 2100
@@ -300,6 +316,7 @@ export class RoomManager {
     const player = playerId ? room.players.get(playerId) : null;
     if (!player?.isHost) return { ok: false, error: 'Nur der Host kann Einstellungen ändern.' };
     if (room.status !== 'lobby') return { ok: false, error: 'Einstellungen können nur in der Lobby geändert werden.' };
+    if (!isValidAudioMode(audioMode)) return { ok: false, error: 'Ungültiger Audio-Modus.' };
 
     room.rounds = Math.max(1, Math.min(rounds, 20));
     room.audioMode = audioMode;
@@ -341,6 +358,7 @@ export class RoomManager {
 
     const kickedSocketId = target.socketId;
     room.socketToPlayer.delete(target.socketId);
+    this.socketToRoom.delete(target.socketId);
     room.players.delete(targetPlayerId);
     room.playerOrder = room.playerOrder.filter((id) => id !== targetPlayerId);
 
@@ -396,34 +414,39 @@ export class RoomManager {
     wasPlaying: boolean;
     shouldPause: boolean;
   } | null {
-    for (const room of this.rooms.values()) {
-      const playerId = room.socketToPlayer.get(socketId);
-      if (!playerId) continue;
-      const player = room.players.get(playerId);
-      if (!player) continue;
+    const roomCode = this.socketToRoom.get(socketId);
+    if (!roomCode) return null;
+    this.socketToRoom.delete(socketId);
 
-      player.isConnected = false;
-      room.socketToPlayer.delete(socketId);
+    const room = this.rooms.get(roomCode);
+    if (!room) return null;
 
-      const wasPlaying = room.status === 'playing';
-      let shouldPause = false;
+    const playerId = room.socketToPlayer.get(socketId);
+    if (!playerId) return null;
 
-      if (wasPlaying && !room.paused) {
-        room.paused = true;
-        room.pausedForPlayerId = playerId;
-        shouldPause = true;
-      }
+    const player = room.players.get(playerId);
+    if (!player) return null;
 
-      return {
-        roomCode: room.code,
-        playerId,
-        playerName: player.name,
-        isHost: player.isHost,
-        wasPlaying,
-        shouldPause,
-      };
+    player.isConnected = false;
+    room.socketToPlayer.delete(socketId);
+
+    const wasPlaying = room.status === 'playing';
+    let shouldPause = false;
+
+    if (wasPlaying && !room.paused) {
+      room.paused = true;
+      room.pausedForPlayerId = playerId;
+      shouldPause = true;
     }
-    return null;
+
+    return {
+      roomCode,
+      playerId,
+      playerName: player.name,
+      isHost: player.isHost,
+      wasPlaying,
+      shouldPause,
+    };
   }
 
   finishGame(roomCode: string): void {
@@ -439,10 +462,7 @@ export class RoomManager {
   }
 
   getRoomCodeForSocket(socketId: string): string | null {
-    for (const room of this.rooms.values()) {
-      if (room.socketToPlayer.has(socketId)) return room.code;
-    }
-    return null;
+    return this.socketToRoom.get(socketId) ?? null;
   }
 
   getLobbyState(roomCode: string): LobbyState | null {

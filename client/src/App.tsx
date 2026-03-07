@@ -378,11 +378,9 @@ export default function App() {
     socket.emit('start_loading');
 
     const playerCount = lobbyState?.players.length ?? 1;
-    const needed = rounds * playerCount + playerCount + 5;
 
     const songs = await loadSongsFromPlaylists(
       selectedPlaylists.map((p) => p.id),
-      needed,
     );
 
     if (songs.length < playerCount + 3) {

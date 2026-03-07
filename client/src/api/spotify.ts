@@ -252,22 +252,17 @@ async function getPlaylistTracks(playlistId: string): Promise<Song[]> {
 
 export async function loadSongsFromPlaylists(
   playlistIds: string[],
-  limit: number
 ): Promise<Song[]> {
   const tracksByPlaylist = await Promise.all(playlistIds.map(getPlaylistTracks));
-  const perPlaylist = Math.ceil(limit / playlistIds.length);
 
   const seenIds = new Set<string>();
   const allSongs: Song[] = [];
 
   for (const tracks of tracksByPlaylist) {
-    let count = 0;
     for (const song of shuffle(tracks)) {
-      if (count >= perPlaylist) break;
       if (!seenIds.has(song.id)) {
         seenIds.add(song.id);
         allSongs.push(song);
-        count++;
       }
     }
   }

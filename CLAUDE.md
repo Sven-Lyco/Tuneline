@@ -33,7 +33,7 @@ Spieler ordnen Songs chronologisch in ihre persönliche Timeline ein. Wer richti
 Tuneline/
   client/                   ← React-Frontend (Vite)
     src/
-      types.ts              Song, SpotifyPlaylist, Screen, Feedback
+      types.ts              Song, SpotifyPlaylist, Screen, Feedback, GameResult
       constants.ts          PLAYER_COLORS
       socket.ts             Socket.io-Singleton (typed mit Shared-Events)
       api/
@@ -43,6 +43,9 @@ Tuneline/
         shuffle.ts          shuffle<T>()
         audio.ts            playAudio, stopAudio, toggleAudio, getVolume, setVolume
                             (iTunes Preview via HTMLAudioElement; Lautstärke in localStorage)
+      hooks/
+        useGameAudio.ts     playing, volume, startSong, stopSong, toggle, changeVolume
+        useSocketEvents.ts  alle Socket-Events + abgeleiteter State (screen, gameState …)
       components/
         GlobalStyles.tsx    Emotion Global — @keyframes + CSS Reset
         Vinyl.tsx           Drehendes Vinyl mit Cover-Art
@@ -50,6 +53,12 @@ Tuneline/
         DropZone.tsx        Platzierungs-Slot in der Timeline
         Confetti.tsx        Gewinner-Konfetti
         Label.tsx           Beschriftungs-Komponente
+        game/
+          GameHeader.tsx    Header-Leiste (Runde, Spieler-Chips, Raum-Code)
+          SongCard.tsx      Vinyl + Song-Info + Audio-Controls + Wave
+          MyTimeline.tsx    Eigene Timeline mit DropZones
+          OtherPlayers.tsx  Mini-Panels der anderen Spieler
+          DisconnectOverlay.tsx  Overlay bei Verbindungsverlust
       screens/
         LoginScreen.tsx     Spotify-Login + Gast-Join-Button
         JoinScreen.tsx      Raum-Code + Name eingeben (Gäste)
@@ -57,9 +66,9 @@ Tuneline/
         MenuScreen.tsx      Host-Name, Runden, Audio-Modus, Raum erstellen
         LoadingScreen.tsx   Ladebildschirm mit Spinner
         LobbyScreen.tsx     Spielerliste, Kick, Einstellungen, Start
-        GameScreen.tsx      Hauptspiel (Header + SongCard + Timeline + PlaceButton)
+        GameScreen.tsx      Hauptspiel — orchestriert game/ Sub-Komponenten
         ResultScreen.tsx    Ergebnisanzeige mit Rangliste
-      App.tsx               Spiellogik + State-Management
+      App.tsx               Routing + Handler — State via useSocketEvents/useGameAudio
       main.tsx              Entry Point
     index.html
     vite.config.js

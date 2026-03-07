@@ -27,3 +27,11 @@ export type Screen =
   | 'result';
 
 export type Feedback = 'ok' | 'no' | null;
+
+export interface GameResult {
+  players: import('@tuneline/shared').RoomPlayer[];
+  lastSong: import('@tuneline/shared').SongFull | null;
+  lastCorrect: boolean;
+  lastPlayerId: string;
+  winnerLastSong: import('@tuneline/shared').SongFull | null;
+}

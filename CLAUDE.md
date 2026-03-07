@@ -33,10 +33,12 @@ Spieler ordnen Songs chronologisch in ihre persönliche Timeline ein. Wer richti
 Tuneline/
   client/                   ← React-Frontend (Vite)
     src/
-      types.ts              Song, Player, Screen, Feedback, SpotifyPlaylist
+      types.ts              Song, SpotifyPlaylist, Screen, Feedback
       constants.ts          PLAYER_COLORS
+      socket.ts             Socket.io-Singleton (typed mit Shared-Events)
       api/
         spotify.ts          PKCE auth + Token-Management + Playlist/Track-Laden
+        itunes.ts           iTunes Preview-Suche pro Song
       utils/
         shuffle.ts          shuffle<T>()
         audio.ts            playAudio, stopAudio, toggleAudio, getVolume, setVolume
@@ -49,10 +51,12 @@ Tuneline/
         Confetti.tsx        Gewinner-Konfetti
         Label.tsx           Beschriftungs-Komponente
       screens/
-        LoginScreen.tsx     Spotify-Login
+        LoginScreen.tsx     Spotify-Login + Gast-Join-Button
+        JoinScreen.tsx      Raum-Code + Name eingeben (Gäste)
         PlaylistScreen.tsx  Playlist-Auswahl des Hosts
-        MenuScreen.tsx      Spieler/Runden-Konfiguration
+        MenuScreen.tsx      Host-Name, Runden, Audio-Modus, Raum erstellen
         LoadingScreen.tsx   Ladebildschirm mit Spinner
+        LobbyScreen.tsx     Spielerliste, Kick, Einstellungen, Start
         GameScreen.tsx      Hauptspiel (Header + SongCard + Timeline + PlaceButton)
         ResultScreen.tsx    Ergebnisanzeige mit Rangliste
       App.tsx               Spiellogik + State-Management
@@ -104,10 +108,12 @@ Tuneline/
 ### Socket.io Events (Überblick)
 
 ```text
-Client → Server: create_room, join_room, start_game, update_settings,
-                  place_song, kick_player, return_to_lobby
-Server → Client: room_created, room_joined, room_updated, game_started,
-                  placement_result, game_over, player_disconnected,
+Client → Server: create_room, join_room, start_loading, start_game,
+                  update_settings, place_song, skip_player, kick_player,
+                  return_to_lobby
+Server → Client: room_created, room_joined, room_updated, game_loading,
+                  game_started, turn_started, placement_result, game_over,
+                  game_paused, game_resumed, player_disconnected,
                   player_reconnected, player_kicked, error
 ```
 

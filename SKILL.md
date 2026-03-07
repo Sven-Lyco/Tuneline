@@ -27,6 +27,7 @@ Tuneline/                     ← npm Workspaces Monorepo
       socket.ts               Socket.io singleton
       api/
         spotify.ts            PKCE auth, getUserPlaylists, loadSongsFromPlaylists
+        itunes.ts             iTunes Preview-Suche pro Song
       utils/
         shuffle.ts            shuffle<T>()
         audio.ts              playAudio, stopAudio, toggleAudio (HTMLAudioElement)
@@ -124,9 +125,13 @@ Für jeden Song wird via iTunes Search API nach einem 30s Preview gesucht:
 
 Socket-Events:
 ```
-Client → Server: create_room, join_room, start_game, place_song, kick_player, return_to_lobby
-Server → Client: room_created, room_joined, room_updated, game_started,
-                  placement_result, game_over, player_disconnected, player_kicked, error
+Client → Server: create_room, join_room, start_loading, start_game,
+                  update_settings, place_song, skip_player, kick_player,
+                  return_to_lobby
+Server → Client: room_created, room_joined, room_updated, game_loading,
+                  game_started, turn_started, placement_result, game_over,
+                  game_paused, game_resumed, player_disconnected,
+                  player_reconnected, player_kicked, error
 ```
 
 ## Game Logic

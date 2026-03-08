@@ -87,6 +87,11 @@ const PlaceButton = styled.button<{ ready: string }>`
     transform: translateY(-2px);
     box-shadow: 0 8px 24px rgba(6, 214, 160, 0.25);
   }
+
+  @media (max-width: 480px) {
+    width: 100%;
+    padding: 1rem 2rem;
+  }
 `;
 
 // ── Component ──────────────────────────────────────────────────

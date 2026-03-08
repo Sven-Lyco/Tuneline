@@ -53,7 +53,6 @@ const TimelineArea = styled.div`
 const TimelineInner = styled.div`
   display: flex;
   align-items: center;
-  min-width: min-content;
   padding: 0.5rem 2rem;
 `;
 
@@ -108,13 +107,12 @@ export function MyTimeline({
   feedback,
   revealedSong,
 }: MyTimelineProps) {
-  const centered = timeline.length <= 4;
   const canSelect = isMyTurn && !revealed;
 
   return (
     <TimelineSection>
       <TimelineLabel>— Deine Timeline —</TimelineLabel>
-      <TimelineArea style={{ justifyContent: centered ? 'center' : 'flex-start' }}>
+      <TimelineArea>
         <TimelineInner>
           <DropZone
             active={slot === 0}

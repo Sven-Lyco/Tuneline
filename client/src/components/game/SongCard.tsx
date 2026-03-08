@@ -23,6 +23,10 @@ const SongArea = styled.div`
   align-items: center;
   padding: 0 2rem;
   flex-shrink: 0;
+
+  @media (max-width: 480px) {
+    padding: 0 1rem;
+  }
 `;
 
 const CurrentPlayerLabel = styled.div<{ color: string }>`
@@ -46,6 +50,11 @@ const Card = styled.div`
   position: relative;
   overflow: hidden;
   animation: slideIn 0.4s ease-out;
+
+  @media (max-width: 480px) {
+    padding: 1.25rem 1rem;
+    border-radius: 16px;
+  }
 `;
 
 const CardAccent = styled.div`
@@ -62,6 +71,10 @@ const CardBody = styled.div`
   align-items: center;
   gap: 1.75rem;
   margin-bottom: 1rem;
+
+  @media (max-width: 480px) {
+    gap: 1rem;
+  }
 `;
 
 const SongInfo = styled.div`
@@ -77,12 +90,20 @@ const SongTitle = styled.div`
   text-overflow: ellipsis;
   white-space: nowrap;
   margin-bottom: 0.2rem;
+
+  @media (max-width: 480px) {
+    font-size: 1.2rem;
+  }
 `;
 
 const SongArtist = styled.div`
   font-size: 1.05rem;
   color: #7a7a8e;
   margin-bottom: 0.6rem;
+
+  @media (max-width: 480px) {
+    font-size: 0.9rem;
+  }
 `;
 
 const RevealedYear = styled.div`
@@ -184,6 +205,7 @@ export function SongCard({
   onToggleAudio,
   onVolumeChange,
 }: SongCardProps) {
+  const vinylSize = window.innerWidth <= 480 ? 80 : 120;
   const displayYear = revealed && revealedSong ? revealedSong.year : null;
 
   return (
@@ -194,7 +216,7 @@ export function SongCard({
       <Card>
         <CardAccent />
         <CardBody>
-          <Vinyl spinning={playing} cover={currentSong.cover} size={120} />
+          <Vinyl spinning={playing} cover={currentSong.cover} size={vinylSize} />
           <SongInfo>
             <SongTitle>{currentSong.title}</SongTitle>
             <SongArtist>{currentSong.artist}</SongArtist>

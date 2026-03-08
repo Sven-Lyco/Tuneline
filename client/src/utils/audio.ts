@@ -11,10 +11,11 @@ export function setVolume(v: number): void {
   if (gAudio) gAudio.volume = v;
 }
 
-export function playAudio(url: string): void {
+export function playAudio(url: string, onEnded?: () => void): void {
   stopAudio();
   gAudio = new Audio(url);
   gAudio.volume = getVolume();
+  if (onEnded) gAudio.addEventListener('ended', onEnded, { once: true });
   gAudio.play().catch(() => {});
 }
 

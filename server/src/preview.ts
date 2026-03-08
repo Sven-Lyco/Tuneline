@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { logger } from './logger.js';
 
 interface ItunesTrack {
   previewUrl: string | null;
@@ -47,6 +48,7 @@ export async function previewHandler(req: Request, res: Response): Promise<void>
   const cacheKey = `${artist}|${title}`;
 
   if (cache.has(cacheKey)) {
+    logger.debug({ artist, title }, 'preview_cache_hit');
     res.json({ previewUrl: cache.get(cacheKey) ?? null });
     return;
   }
@@ -59,6 +61,7 @@ export async function previewHandler(req: Request, res: Response): Promise<void>
     );
 
     if (!response.ok) {
+      logger.warn({ artist, title, status: response.status }, 'itunes_fetch_error');
       cache.set(cacheKey, null);
       res.json({ previewUrl: null });
       return;
@@ -66,9 +69,11 @@ export async function previewHandler(req: Request, res: Response): Promise<void>
 
     const data = (await response.json()) as ItunesSearchResult;
     const previewUrl = pickBestPreview(data.results, artist, title);
+    logger.debug({ artist, title, found: previewUrl !== null }, 'preview_fetched');
     cache.set(cacheKey, previewUrl);
     res.json({ previewUrl });
-  } catch {
+  } catch (err) {
+    logger.error({ artist, title, err }, 'itunes_fetch_exception');
     res.json({ previewUrl: null });
   }
 }

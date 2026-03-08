@@ -85,10 +85,11 @@ const CodeText = styled.div`
   flex: 1;
 `;
 
-const CopyHint = styled.div`
-  font-size: 0.78rem;
+const CopyIcon = styled.div`
+  font-size: 1.1rem;
   color: #4a4a6a;
-  white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1;
 `;
 
 const PlayerList = styled.div`
@@ -277,9 +278,9 @@ export function LobbyScreen({
         <RoomCodeBlock onClick={copyCode}>
           <CodeText>{roomCode}</CodeText>
           {copied ? (
-            <CopiedFeedback>✓ Kopiert!</CopiedFeedback>
+            <CopiedFeedback>✓</CopiedFeedback>
           ) : (
-            <CopyHint>tippen zum Kopieren</CopyHint>
+            <CopyIcon>⎘</CopyIcon>
           )}
         </RoomCodeBlock>
 

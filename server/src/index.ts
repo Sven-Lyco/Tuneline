@@ -21,7 +21,15 @@ const httpServer = createServer(app);
 app.set('trust proxy', 1); // Trust Coolify's reverse proxy for correct client IPs
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression());
-app.use(pinoHttp({ logger }));
+app.use(
+  pinoHttp({
+    logger,
+    serializers: {
+      req: (req) => ({ method: req.method, url: req.url, ip: req.raw.ip }),
+      res: (res) => ({ statusCode: res.statusCode }),
+    },
+  }),
+);
 
 type IoServer = Server<ClientToServerEvents, ServerToClientEvents>;
 

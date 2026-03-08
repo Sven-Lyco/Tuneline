@@ -4,9 +4,9 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 
 export const logger = pino(
   IS_PROD
-    ? { level: 'debug' }
+    ? { level: 'DEBUG' }
     : {
-        level: 'debug',
+        level: 'DEBUG',
         transport: {
           target: 'pino-pretty',
           options: {
@@ -15,5 +15,5 @@ export const logger = pino(
             ignore: 'pid,hostname',
           },
         },
-      },
+      }
 );

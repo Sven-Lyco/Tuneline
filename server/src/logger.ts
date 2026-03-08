@@ -4,9 +4,14 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 
 export const logger = pino(
   IS_PROD
-    ? { level: 'DEBUG' }
+    ? {
+        level: 'debug',
+        formatters: {
+          level: (label) => ({ level: label.toUpperCase() }),
+        },
+      }
     : {
-        level: 'DEBUG',
+        level: 'debug',
         transport: {
           target: 'pino-pretty',
           options: {

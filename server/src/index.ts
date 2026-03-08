@@ -25,7 +25,7 @@ app.use(
   pinoHttp({
     logger,
     serializers: {
-      req: (req) => ({ method: req.method, url: req.url, ip: req.raw.ip }),
+      req: (req) => ({ method: req.method, url: req.url, ip: req.raw.ip, ua: req.raw.headers['user-agent'] }),
       res: (res) => ({ statusCode: res.statusCode }),
     },
   }),

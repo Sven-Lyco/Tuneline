@@ -5,81 +5,30 @@ import type {
   LobbyState,
   GameStateForClient,
   AudioMode,
-  RoomStatus,
 } from '@tuneline/shared';
-import { shuffle, generateCode } from './utils.js';
-
-const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const TOKEN_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789';
-const ROOM_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
-const MAX_PLAYERS = 10;
-const MAX_NAME_LENGTH = 30;
-const MAX_ROOMS = 500;
-const MAX_FIELD_LENGTH = 200;
-
-function isValidAudioMode(mode: unknown): mode is AudioMode {
-  return mode === 'all' || mode === 'host-only';
-}
-
-interface InternalPlayer {
-  id: string;
-  name: string;
-  isHost: boolean;
-  isConnected: boolean;
-  token: string;
-  socketId: string;
-  score: number;
-  timeline: SongFull[];
-}
-
-interface Room {
-  code: string;
-  players: Map<string, InternalPlayer>; // playerId → player
-  socketToPlayer: Map<string, string>;  // socketId → playerId
-  playerOrder: string[];                // ordered player ids
-  status: RoomStatus;
-  deck: SongFull[];
-  currentSongIndex: number;
-  currentPlayerIndex: number;
-  round: number;
-  rounds: number;
-  audioMode: AudioMode;
-  lastCorrectSong: Map<string, SongFull>; // playerId → last correctly placed song
-  paused: boolean;
-  pausedForPlayerId: string | null;
-  cleanupTimer: ReturnType<typeof setTimeout>;
-}
-
-type JoinResult =
-  | { ok: true; playerId: string; playerToken: string }
-  | { ok: false; error: string };
-
-type StartResult = { ok: true } | { ok: false; error: string };
-
-type PlaceResult =
-  | { ok: false; error: string }
-  | { ok: true; correct: boolean; song: SongFull; gameOver: boolean; lastPlayerId: string };
-
-type KickResult =
-  | { ok: true; kickedSocketId: string | null }
-  | { ok: false; error: string };
-
-function isCorrectPlacement(
-  timeline: SongFull[],
-  song: SongFull,
-  position: number,
-): boolean {
-  const left = timeline[position - 1] ?? null;
-  const right = timeline[position] ?? null;
-  return (
-    (left === null || left.year <= song.year) &&
-    (right === null || right.year >= song.year)
-  );
-}
+import { generateCode } from './utils.js';
+import {
+  ROOM_CODE_CHARS,
+  TOKEN_CHARS,
+  ROOM_TTL_MS,
+  MAX_PLAYERS,
+  MAX_NAME_LENGTH,
+  MAX_ROOMS,
+  isValidAudioMode,
+  type InternalPlayer,
+  type Room,
+  type JoinResult,
+  type SimpleResult,
+  type PlaceResult,
+  type KickResult,
+} from './types.js';
+import * as game from './game.js';
 
 export class RoomManager {
   private rooms = new Map<string, Room>();
   private socketToRoom = new Map<string, string>(); // socketId → roomCode
+
+  // ── Private helpers ──────────────────────────────────────────────────────
 
   private newCode(): string {
     let code: string;
@@ -99,12 +48,37 @@ export class RoomManager {
 
   private scheduleCleanup(room: Room): void {
     clearTimeout(room.cleanupTimer);
-    room.cleanupTimer = setTimeout(() => {
-      this.rooms.delete(room.code);
-    }, ROOM_TTL_MS);
+    room.cleanupTimer = setTimeout(() => this.rooms.delete(room.code), ROOM_TTL_MS);
   }
 
-  createRoom(socketId: string, hostName: string, rounds: number, audioMode: AudioMode): { roomCode: string; playerId: string; playerToken: string } {
+  /** Resolves socketId to the InternalPlayer within a room, or null. */
+  private getPlayer(socketId: string, room: Room): InternalPlayer | null {
+    const playerId = room.socketToPlayer.get(socketId);
+    return playerId ? (room.players.get(playerId) ?? null) : null;
+  }
+
+  private toPublicPlayers(room: Room): RoomPlayer[] {
+    return room.playerOrder
+      .map((id) => room.players.get(id))
+      .filter((p): p is InternalPlayer => p !== undefined)
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        isHost: p.isHost,
+        isConnected: p.isConnected,
+        score: p.score,
+        timeline: p.timeline,
+      }));
+  }
+
+  // ── Room lifecycle ───────────────────────────────────────────────────────
+
+  createRoom(
+    socketId: string,
+    hostName: string,
+    rounds: number,
+    audioMode: AudioMode,
+  ): { roomCode: string; playerId: string; playerToken: string } {
     if (this.rooms.size >= MAX_ROOMS) throw new Error('Maximale Raumanzahl erreicht.');
     const validMode: AudioMode = isValidAudioMode(audioMode) ? audioMode : 'all';
     const code = this.newCode();
@@ -163,7 +137,6 @@ export class RoomManager {
           player.isConnected = true;
           room.socketToPlayer.set(socketId, id);
           this.socketToRoom.set(socketId, roomCode);
-          // If game was paused waiting for this player, resume
           if (room.paused && room.pausedForPlayerId === id) {
             room.paused = false;
             room.pausedForPlayerId = null;
@@ -198,160 +171,14 @@ export class RoomManager {
     return { ok: true, playerId, playerToken: token };
   }
 
-  startGame(
-    socketId: string,
-    roomCode: string,
-    songs: SongFull[],
-    rounds: number,
-    audioMode: AudioMode,
-  ): StartResult {
-    const room = this.rooms.get(roomCode);
-    if (!room) return { ok: false, error: 'Raum nicht gefunden.' };
-
-    const playerId = room.socketToPlayer.get(socketId);
-    const player = playerId ? room.players.get(playerId) : null;
-    if (!player?.isHost) return { ok: false, error: 'Nur der Host kann das Spiel starten.' };
-
-    if (!Array.isArray(songs) || songs.length < 2) {
-      return { ok: false, error: 'Zu wenige Songs (min. 2).' };
-    }
-
-    if (!isValidAudioMode(audioMode)) {
-      return { ok: false, error: 'Ungültiger Audio-Modus.' };
-    }
-
-    // Validate song structure
-    for (const song of songs) {
-      if (
-        typeof song.id !== 'string' || song.id.length > MAX_FIELD_LENGTH ||
-        typeof song.title !== 'string' || song.title.length > MAX_FIELD_LENGTH ||
-        typeof song.artist !== 'string' || song.artist.length > MAX_FIELD_LENGTH ||
-        typeof song.year !== 'number' ||
-        song.year < 1900 ||
-        song.year > 2100
-      ) {
-        return { ok: false, error: 'Ungültige Song-Daten.' };
-      }
-    }
-
-    const playerList = room.playerOrder
-      .map((id) => room.players.get(id))
-      .filter((p): p is InternalPlayer => p !== undefined);
-
-    for (const p of playerList) {
-      p.timeline = [];
-      p.score = 0;
-    }
-
-    const shuffled = shuffle([...songs]);
-
-    // Give each player one starter song in their timeline (mirrors local game behaviour)
-    playerList.forEach((p, i) => {
-      if (shuffled[i]) p.timeline = [shuffled[i]];
-    });
-
-    room.deck = shuffled.slice(playerList.length);
-    room.currentSongIndex = 0;
-    room.currentPlayerIndex = 0;
-    room.round = 1;
-    room.rounds = Math.max(1, Math.min(rounds, 20));
-    room.audioMode = audioMode;
-    room.status = 'playing';
-
-    return { ok: true };
-  }
-
-  placeSong(socketId: string, roomCode: string, position: number): PlaceResult {
-    const room = this.rooms.get(roomCode);
-    if (!room) return { ok: false, error: 'Raum nicht gefunden.' };
-    if (room.status !== 'playing') return { ok: false, error: 'Spiel läuft nicht.' };
-
-    const playerId = room.socketToPlayer.get(socketId);
-    if (!playerId) return { ok: false, error: 'Nicht autorisiert.' };
-
-    const currentPlayerId = room.playerOrder[room.currentPlayerIndex];
-    if (playerId !== currentPlayerId) return { ok: false, error: 'Du bist nicht dran.' };
-
-    const song = room.deck[room.currentSongIndex];
-    if (!song) return { ok: false, error: 'Kein Song verfügbar.' };
-
-    const player = room.players.get(playerId)!;
-    const clampedPosition = Math.max(0, Math.min(position, player.timeline.length));
-    const correct = isCorrectPlacement(player.timeline, song, clampedPosition);
-
-    if (correct) {
-      player.score++;
-      player.timeline.splice(clampedPosition, 0, song);
-      room.lastCorrectSong.set(playerId, song);
-    }
-
-    room.currentSongIndex++;
-    room.currentPlayerIndex = (room.currentPlayerIndex + 1) % room.playerOrder.length;
-
-    if (room.currentPlayerIndex === 0) {
-      room.round++;
-    }
-
-    const gameOver =
-      room.currentSongIndex >= room.deck.length ||
-      (room.currentPlayerIndex === 0 && room.round > room.rounds);
-
-    if (gameOver) {
-      room.status = 'finished';
-    }
-
-    return { ok: true, correct, song, gameOver, lastPlayerId: playerId };
-  }
-
-  updateSettings(
-    socketId: string,
-    roomCode: string,
-    rounds: number,
-    audioMode: AudioMode,
-  ): { ok: true } | { ok: false; error: string } {
-    const room = this.rooms.get(roomCode);
-    if (!room) return { ok: false, error: 'Raum nicht gefunden.' };
-
-    const playerId = room.socketToPlayer.get(socketId);
-    const player = playerId ? room.players.get(playerId) : null;
-    if (!player?.isHost) return { ok: false, error: 'Nur der Host kann Einstellungen ändern.' };
-    if (room.status !== 'lobby') return { ok: false, error: 'Einstellungen können nur in der Lobby geändert werden.' };
-    if (!isValidAudioMode(audioMode)) return { ok: false, error: 'Ungültiger Audio-Modus.' };
-
-    room.rounds = Math.max(1, Math.min(rounds, 20));
-    room.audioMode = audioMode;
-    return { ok: true };
-  }
-
-  returnToLobby(socketId: string, roomCode: string): { ok: true } | { ok: false; error: string } {
-    const room = this.rooms.get(roomCode);
-    if (!room) return { ok: false, error: 'Raum nicht gefunden.' };
-
-    const playerId = room.socketToPlayer.get(socketId);
-    const player = playerId ? room.players.get(playerId) : null;
-    if (!player?.isHost) return { ok: false, error: 'Nur der Host kann das Spiel neu starten.' };
-
-    room.status = 'lobby';
-    room.deck = [];
-    room.currentSongIndex = 0;
-    room.currentPlayerIndex = 0;
-    room.round = 1;
-    room.lastCorrectSong = new Map();
-    for (const p of room.players.values()) {
-      p.timeline = [];
-      p.score = 0;
-    }
-    return { ok: true };
-  }
-
   kickPlayer(socketId: string, roomCode: string, targetPlayerId: string): KickResult {
     const room = this.rooms.get(roomCode);
     if (!room) return { ok: false, error: 'Raum nicht gefunden.' };
 
-    const playerId = room.socketToPlayer.get(socketId);
-    const player = playerId ? room.players.get(playerId) : null;
+    const player = this.getPlayer(socketId, room);
     if (!player?.isHost) return { ok: false, error: 'Nur der Host kann Spieler entfernen.' };
-    if (targetPlayerId === playerId) return { ok: false, error: 'Der Host kann sich nicht selbst entfernen.' };
+    if (targetPlayerId === player.id)
+      return { ok: false, error: 'Der Host kann sich nicht selbst entfernen.' };
 
     const target = room.players.get(targetPlayerId);
     if (!target) return { ok: false, error: 'Spieler nicht gefunden.' };
@@ -365,45 +192,7 @@ export class RoomManager {
     if (room.currentPlayerIndex >= room.playerOrder.length) {
       room.currentPlayerIndex = 0;
     }
-
     return { ok: true, kickedSocketId };
-  }
-
-  skipDisconnectedPlayer(socketId: string, roomCode: string): { ok: true } | { ok: false; error: string } {
-    const room = this.rooms.get(roomCode);
-    if (!room) return { ok: false, error: 'Raum nicht gefunden.' };
-    if (!room.paused || !room.pausedForPlayerId) return { ok: false, error: 'Spiel ist nicht pausiert.' };
-
-    const requesterId = room.socketToPlayer.get(socketId);
-    const requester = requesterId ? room.players.get(requesterId) : null;
-    if (!requester?.isHost) return { ok: false, error: 'Nur der Host kann den Spieler überspringen.' };
-
-    const skippedId = room.pausedForPlayerId;
-
-    // Remove from playerOrder permanently
-    room.playerOrder = room.playerOrder.filter((id) => id !== skippedId);
-
-    // Adjust currentPlayerIndex if needed
-    if (room.currentPlayerIndex >= room.playerOrder.length) {
-      room.currentPlayerIndex = 0;
-    }
-
-    // Advance round counter if we wrapped around
-    if (room.playerOrder.length > 0 && room.currentPlayerIndex === 0) {
-      room.round++;
-    }
-
-    room.paused = false;
-    room.pausedForPlayerId = null;
-
-    const gameOver =
-      room.playerOrder.length <= 1 ||
-      room.currentSongIndex >= room.deck.length ||
-      (room.currentPlayerIndex === 0 && room.round > room.rounds);
-
-    if (gameOver) room.status = 'finished';
-
-    return { ok: true };
   }
 
   handleDisconnect(socketId: string): {
@@ -439,27 +228,75 @@ export class RoomManager {
       shouldPause = true;
     }
 
-    return {
-      roomCode,
-      playerId,
-      playerName: player.name,
-      isHost: player.isHost,
-      wasPlaying,
-      shouldPause,
-    };
+    return { roomCode, playerId, playerName: player.name, isHost: player.isHost, wasPlaying, shouldPause };
+  }
+
+  // ── Game actions (auth check here, logic delegated to game.ts) ───────────
+
+  startGame(
+    socketId: string,
+    roomCode: string,
+    songs: SongFull[],
+    rounds: number,
+    audioMode: AudioMode,
+  ): SimpleResult {
+    const room = this.rooms.get(roomCode);
+    if (!room) return { ok: false, error: 'Raum nicht gefunden.' };
+    const player = this.getPlayer(socketId, room);
+    if (!player?.isHost) return { ok: false, error: 'Nur der Host kann das Spiel starten.' };
+    return game.startGame(room, songs, rounds, audioMode);
+  }
+
+  placeSong(socketId: string, roomCode: string, position: number): PlaceResult {
+    const room = this.rooms.get(roomCode);
+    if (!room) return { ok: false, error: 'Raum nicht gefunden.' };
+    const playerId = room.socketToPlayer.get(socketId);
+    if (!playerId) return { ok: false, error: 'Nicht autorisiert.' };
+    return game.placeSong(room, playerId, position);
+  }
+
+  updateSettings(
+    socketId: string,
+    roomCode: string,
+    rounds: number,
+    audioMode: AudioMode,
+  ): SimpleResult {
+    const room = this.rooms.get(roomCode);
+    if (!room) return { ok: false, error: 'Raum nicht gefunden.' };
+    const player = this.getPlayer(socketId, room);
+    if (!player?.isHost) return { ok: false, error: 'Nur der Host kann Einstellungen ändern.' };
+    if (room.status !== 'lobby')
+      return { ok: false, error: 'Einstellungen können nur in der Lobby geändert werden.' };
+    if (!isValidAudioMode(audioMode)) return { ok: false, error: 'Ungültiger Audio-Modus.' };
+    room.rounds = Math.max(1, Math.min(rounds, 20));
+    room.audioMode = audioMode;
+    return { ok: true };
+  }
+
+  returnToLobby(socketId: string, roomCode: string): SimpleResult {
+    const room = this.rooms.get(roomCode);
+    if (!room) return { ok: false, error: 'Raum nicht gefunden.' };
+    const player = this.getPlayer(socketId, room);
+    if (!player?.isHost) return { ok: false, error: 'Nur der Host kann das Spiel neu starten.' };
+    game.returnToLobby(room);
+    return { ok: true };
+  }
+
+  skipDisconnectedPlayer(socketId: string, roomCode: string): SimpleResult {
+    const room = this.rooms.get(roomCode);
+    if (!room) return { ok: false, error: 'Raum nicht gefunden.' };
+    const player = this.getPlayer(socketId, room);
+    if (!player?.isHost)
+      return { ok: false, error: 'Nur der Host kann den Spieler überspringen.' };
+    return game.skipDisconnectedPlayer(room);
   }
 
   finishGame(roomCode: string): void {
     const room = this.rooms.get(roomCode);
-    if (!room) return;
-    room.status = 'finished';
-    room.paused = false;
-    room.pausedForPlayerId = null;
+    if (room) game.finishGame(room);
   }
 
-  getLastCorrectSong(roomCode: string, playerId: string): SongFull | null {
-    return this.rooms.get(roomCode)?.lastCorrectSong.get(playerId) ?? null;
-  }
+  // ── State queries ────────────────────────────────────────────────────────
 
   getRoomCodeForSocket(socketId: string): string | null {
     return this.socketToRoom.get(socketId) ?? null;
@@ -506,17 +343,7 @@ export class RoomManager {
     return this.toPublicPlayers(room);
   }
 
-  private toPublicPlayers(room: Room): RoomPlayer[] {
-    return room.playerOrder
-      .map((id) => room.players.get(id))
-      .filter((p): p is InternalPlayer => p !== undefined)
-      .map((p) => ({
-        id: p.id,
-        name: p.name,
-        isHost: p.isHost,
-        isConnected: p.isConnected,
-        score: p.score,
-        timeline: p.timeline,
-      }));
+  getLastCorrectSong(roomCode: string, playerId: string): SongFull | null {
+    return this.rooms.get(roomCode)?.lastCorrectSong.get(playerId) ?? null;
   }
 }

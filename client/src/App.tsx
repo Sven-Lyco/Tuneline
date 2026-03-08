@@ -206,7 +206,8 @@ export default function App() {
     socket.emit('start_loading');
 
     const playerCount = lobbyState?.players.length ?? 1;
-    const songs = await loadSongsFromPlaylists(selectedPlaylists.map((p) => p.id));
+    const songsNeeded = Math.ceil(playerCount * (rounds + 1) * 1.5);
+    const songs = await loadSongsFromPlaylists(selectedPlaylists.map((p) => p.id), songsNeeded);
 
     if (songs.length < playerCount + 3) {
       setLoadingMsg('Nicht genug Songs. Bitte andere Playlisten wählen.');

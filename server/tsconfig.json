@@ -1,14 +1,15 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "CommonJS",
-    "moduleResolution": "Node",
+    "module": "Node16",
+    "moduleResolution": "Node16",
     "outDir": "dist",
     "strict": true,
     "skipLibCheck": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "esModuleInterop": true,
+    "rootDir": "..",
     "paths": {
       "@tuneline/shared": ["../shared/src/index.ts"]
     }

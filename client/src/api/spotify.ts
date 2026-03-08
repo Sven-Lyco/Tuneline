@@ -252,6 +252,7 @@ async function getPlaylistTracks(playlistId: string): Promise<Song[]> {
 
 export async function loadSongsFromPlaylists(
   playlistIds: string[],
+  target: number,
 ): Promise<Song[]> {
   const tracksByPlaylist = await Promise.all(playlistIds.map(getPlaylistTracks));
 
@@ -269,13 +270,18 @@ export async function loadSongsFromPlaylists(
 
   const shuffled = shuffle(allSongs);
 
-  // Enrich with iTunes preview URLs in parallel, then drop songs without a preview
-  const enriched = await Promise.all(
-    shuffled.map(async (song) => ({
-      ...song,
-      preview: await findPreview(song.artist, song.title),
-    }))
-  );
+  // Enrich via server proxy (/api/preview) in batches. The server handles
+  // iTunes rate limiting and caches results — no CORS issues, no delay needed.
+  const BATCH = 10;
+  const result: Song[] = [];
 
-  return enriched.filter((s) => s.preview !== null);
+  for (let i = 0; i < shuffled.length && result.length < target; i += BATCH) {
+    const batch = shuffled.slice(i, i + BATCH);
+    const enriched = await Promise.all(
+      batch.map(async (song) => ({ ...song, preview: await findPreview(song.artist, song.title) }))
+    );
+    result.push(...enriched.filter((s) => s.preview !== null));
+  }
+
+  return result;
 }

@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import type { ClientToServerEvents, ServerToClientEvents, SongFull } from '@tuneline/shared';
 import { join } from 'path';
+import pinoHttp from 'pino-http';
 import { RoomManager } from './rooms.js';
 import { previewHandler } from './preview.js';
 import { logger } from './logger.js';
@@ -20,6 +21,7 @@ const httpServer = createServer(app);
 app.set('trust proxy', 1); // Trust Coolify's reverse proxy for correct client IPs
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression());
+app.use(pinoHttp({ logger }));
 
 type IoServer = Server<ClientToServerEvents, ServerToClientEvents>;
 

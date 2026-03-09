@@ -6,10 +6,10 @@ import helmet from 'helmet';
 import compression from 'compression';
 import type { ClientToServerEvents, ServerToClientEvents, SongFull } from '@tuneline/shared';
 import { join } from 'path';
-import pinoHttp from 'pino-http';
+
 import { RoomManager } from './rooms.js';
 import { previewHandler } from './preview.js';
-import { logger } from './logger.js';
+import { httpLogger, logger } from './logger.js';
 
 const PORT = Number(process.env.PORT ?? 3001);
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN ?? 'http://[::1]:5174';
@@ -21,15 +21,7 @@ const httpServer = createServer(app);
 app.set('trust proxy', 1); // Trust Coolify's reverse proxy for correct client IPs
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression());
-app.use(
-  pinoHttp({
-    logger,
-    serializers: {
-      req: (req) => ({ method: req.method, url: req.url, ip: req.raw.ip, ua: req.raw.headers['user-agent'] }),
-      res: (res) => ({ statusCode: res.statusCode }),
-    },
-  }),
-);
+app.use(httpLogger);
 
 type IoServer = Server<ClientToServerEvents, ServerToClientEvents>;
 
@@ -47,7 +39,7 @@ app.use(
     max: 120,
     standardHeaders: true,
     legacyHeaders: false,
-  }),
+  })
 );
 
 app.get('/health', (_req, res) => {
@@ -92,13 +84,19 @@ function emitGameOver(
   roomCode: string,
   lastSong: SongFull | null,
   lastCorrect: boolean,
-  lastPlayerId: string,
+  lastPlayerId: string
 ) {
   const players = rooms.getPlayers(roomCode);
   if (!players) return;
   const winner = [...players].sort((a, b) => b.score - a.score)[0];
   const winnerLastSong = winner ? rooms.getLastCorrectSong(roomCode, winner.id) : null;
-  io.to(roomCode).emit('game_over', { players, lastSong, lastCorrect, lastPlayerId, winnerLastSong });
+  io.to(roomCode).emit('game_over', {
+    players,
+    lastSong,
+    lastCorrect,
+    lastPlayerId,
+    winnerLastSong,
+  });
 }
 
 function onDisconnect(socketId: string, io: IoServer) {
@@ -107,7 +105,10 @@ function onDisconnect(socketId: string, io: IoServer) {
   if (!info) return;
 
   io.to(info.roomCode).emit('player_disconnected', { playerId: info.playerId });
-  logger.info({ roomCode: info.roomCode, playerId: info.playerId, isHost: info.isHost }, 'player_disconnected');
+  logger.info(
+    { roomCode: info.roomCode, playerId: info.playerId, isHost: info.isHost },
+    'player_disconnected'
+  );
 
   if (!info.wasPlaying || !info.shouldPause) {
     const lobby = rooms.getLobbyState(info.roomCode);
@@ -120,7 +121,10 @@ function onDisconnect(socketId: string, io: IoServer) {
 
   if (info.isHost) {
     emitGameOver(io, info.roomCode, null, false, info.playerId);
-    logger.warn({ roomCode: info.roomCode, playerId: info.playerId }, 'host_disconnected_game_over');
+    logger.warn(
+      { roomCode: info.roomCode, playerId: info.playerId },
+      'host_disconnected_game_over'
+    );
     return;
   }
 
@@ -151,7 +155,12 @@ io.on('connection', (socket) => {
     if (isLimited('create_room')) return;
     if (typeof hostName !== 'string' || !hostName.trim()) return;
 
-    const { roomCode, playerId, playerToken } = rooms.createRoom(socket.id, hostName, rounds ?? 5, audioMode ?? 'all');
+    const { roomCode, playerId, playerToken } = rooms.createRoom(
+      socket.id,
+      hostName,
+      rounds ?? 5,
+      audioMode ?? 'all'
+    );
     socket.join(roomCode);
     socket.emit('room_created', { roomCode, playerId, playerToken });
     const lobby = rooms.getLobbyState(roomCode);
@@ -177,7 +186,11 @@ io.on('connection', (socket) => {
     const lobby = rooms.getLobbyState(code);
     if (!lobby) return;
 
-    socket.emit('room_joined', { playerId: result.playerId, playerToken: result.playerToken, room: lobby });
+    socket.emit('room_joined', {
+      playerId: result.playerId,
+      playerToken: result.playerToken,
+      room: lobby,
+    });
 
     // If reconnecting to an active game, send current game state
     if (lobby.status === 'playing') {
@@ -185,14 +198,25 @@ io.on('connection', (socket) => {
       const currentSong = rooms.getCurrentSongPreview(code);
       if (gameState && currentSong) {
         io.to(code).emit('game_resumed', { gameState, currentSong });
-        logger.info({ roomCode: code, playerId: result.playerId }, 'player_reconnected_game_resumed');
+        logger.info(
+          { roomCode: code, playerId: result.playerId },
+          'player_reconnected_game_resumed'
+        );
       }
       io.to(code).emit('player_reconnected', { playerId: result.playerId });
     } else {
       io.to(code).emit('room_updated', { room: lobby });
     }
 
-    logger.info({ roomCode: code, playerName: playerName.trim(), playerId: result.playerId, players: lobby.players.length }, 'join_room');
+    logger.info(
+      {
+        roomCode: code,
+        playerName: playerName.trim(),
+        playerId: result.playerId,
+        players: lobby.players.length,
+      },
+      'join_room'
+    );
   });
 
   socket.on('start_loading', () => {
@@ -220,7 +244,10 @@ io.on('connection', (socket) => {
     if (!gameState || !currentSong) return;
 
     io.to(roomCode).emit('game_started', { gameState, currentSong });
-    logger.info({ roomCode, songs: songs.length, rounds, audioMode, players: gameState.players.length }, 'start_game');
+    logger.info(
+      { roomCode, songs: songs.length, rounds, audioMode, players: gameState.players.length },
+      'start_game'
+    );
   });
 
   socket.on('update_settings', ({ rounds, audioMode }) => {
@@ -261,9 +288,25 @@ io.on('connection', (socket) => {
       const gameState = rooms.getGameState(roomCode);
       const nextSong = rooms.getCurrentSongPreview(roomCode);
       if (!gameState) return;
-      io.to(roomCode).emit('placement_result', { correct: result.correct, song: result.song, gameState, nextSong });
+      io.to(roomCode).emit('placement_result', {
+        correct: result.correct,
+        song: result.song,
+        gameState,
+        nextSong,
+      });
       const playerName = gameState.players.find((p) => p.id === result.lastPlayerId)?.name ?? '?';
-      logger.info({ roomCode, playerName, song: result.song.title, position, correct: result.correct, round: gameState.round, rounds: gameState.rounds }, 'place_song');
+      logger.info(
+        {
+          roomCode,
+          playerName,
+          song: result.song.title,
+          position,
+          correct: result.correct,
+          round: gameState.round,
+          rounds: gameState.rounds,
+        },
+        'place_song'
+      );
     }
   });
 

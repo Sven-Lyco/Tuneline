@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "name": "express-fundamentals",
+  "owner": "karchtho",
+  "repo": "my-claude-marketplace",
+  "path": "bundles/express-backend-bundle/skills/express-fundamentals",
+  "branch": "main",
+  "sha": "b2cb400222fce8cbf44c80e03f82087c39c724de",
+  "source": "manual"
+}

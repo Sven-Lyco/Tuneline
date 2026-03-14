@@ -1,3 +1,7 @@
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+export const REACTION_EMOJIS = ['🔥', '😂', '👏', '😱', '🥳', '❤️', '🤯'] as const;
+
 // ─── Song types ─────────────────────────────────────────────────────────────
 
 /** Song metadata without the release year — safe to send to the active player */

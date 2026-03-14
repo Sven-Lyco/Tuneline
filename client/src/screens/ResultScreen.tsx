@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import styled from '@emotion/styled';
 import type { RoomPlayer, SongFull } from '@tuneline/shared';
 import { PLAYER_COLORS, RANK_MEDALS } from '../constants';
@@ -221,9 +222,10 @@ const RestartButton = styled.button`
 
 
 export function ResultScreen({ players, isHost, lastSong, lastCorrect, lastPlayerId, winnerLastSong, onRestart }: ResultScreenProps) {
-  const ranked = [...players]
-    .map((p, i) => ({ ...p, color: PLAYER_COLORS[i] ?? '#7a7a8e' }))
-    .sort((a, b) => b.score - a.score);
+  const ranked = useMemo(
+    () => [...players].map((p, i) => ({ ...p, color: PLAYER_COLORS[i] ?? '#7a7a8e' })).sort((a, b) => b.score - a.score),
+    [players]
+  );
 
   const topScore = ranked[0]?.score ?? 0;
   const isTie = ranked.filter((p) => p.score === topScore).length > 1;

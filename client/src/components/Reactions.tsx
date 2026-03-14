@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { keyframes } from '@emotion/react';
 import styled from '@emotion/styled';
 import type { RoomPlayer } from '@tuneline/shared';
-import { PLAYER_COLORS, REACTION_EMOJIS } from '../constants';
+import { REACTION_EMOJIS } from '@tuneline/shared';
+import { PLAYER_COLORS } from '../constants';
 import { socket } from '../socket';
 
 interface Toast {
@@ -128,11 +129,10 @@ const FAB = styled.button`
 
 // ── Component ────────────────────────────────────────────────────
 
-let toastCounter = 0;
-
 export function Reactions({ players }: ReactionsProps) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const toastCounter = useRef(0);
 
   const getColor = useCallback(
     (playerId: string) => {
@@ -145,7 +145,7 @@ export function Reactions({ players }: ReactionsProps) {
   useEffect(() => {
     const handler = ({ playerId, playerName, emoji }: { playerId: string; playerName: string; emoji: string }) => {
       const color = getColor(playerId);
-      const id = toastCounter++;
+      const id = toastCounter.current++;
       setToasts((prev) => [...prev.slice(-4), { id, emoji, playerName, color }]);
       setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3000);
     };

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import styled from '@emotion/styled';
 import type { SongFull, SongMeta } from '@tuneline/shared';
 import type { Feedback } from '../../types';
@@ -239,7 +239,7 @@ export function SongCard({
   onToggleAudio,
   onVolumeChange,
 }: SongCardProps) {
-  const vinylSize = window.innerWidth <= 480 ? 80 : 120;
+  const vinylSize = useMemo(() => window.matchMedia('(max-width: 480px)').matches ? 80 : 120, []);
   const displayYear = revealed && revealedSong ? revealedSong.year : null;
 
   return (

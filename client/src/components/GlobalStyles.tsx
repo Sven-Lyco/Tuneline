@@ -84,6 +84,14 @@ export function GlobalStyles() {
             opacity: 1;
           }
         }
+        @keyframes pulse {
+          0%, 100% {
+            opacity: 1;
+          }
+          50% {
+            opacity: 0.4;
+          }
+        }
         @keyframes glow {
           0%,
           100% {

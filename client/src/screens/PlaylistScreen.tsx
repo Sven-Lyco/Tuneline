@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import styled from '@emotion/styled';
 import type { SpotifyPlaylist } from '../types';
 import { getUserPlaylists } from '../api/spotify';
@@ -206,7 +206,8 @@ export function PlaylistScreen({ selected, onToggle, onConfirm, onLogout }: Play
       .finally(() => setLoading(false));
   }, []);
 
-  const isSelected = (p: SpotifyPlaylist) => selected.some((s) => s.id === p.id);
+  const selectedIds = useMemo(() => new Set(selected.map((s) => s.id)), [selected]);
+  const isSelected = (p: SpotifyPlaylist) => selectedIds.has(p.id);
   const canConfirm = selected.length > 0;
 
   return (

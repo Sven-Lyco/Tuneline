@@ -33,8 +33,17 @@ function pickBestPreview(results: ItunesTrack[], artist: string, title: string):
   return withPreview[0].previewUrl ?? null;
 }
 
-// In-memory cache: "artist|title" → previewUrl | null
+// In-memory cache: "artist|title" → previewUrl | null (max 2000 entries, LRU-eviction)
 const cache = new Map<string, string | null>();
+const CACHE_MAX = 2000;
+
+function cacheSet(key: string, value: string | null): void {
+  if (cache.size >= CACHE_MAX) {
+    const oldest = cache.keys().next().value;
+    if (oldest !== undefined) cache.delete(oldest);
+  }
+  cache.set(key, value);
+}
 
 export async function previewHandler(req: Request, res: Response): Promise<void> {
   const artist = String(req.query.artist ?? '').trim();
@@ -62,7 +71,7 @@ export async function previewHandler(req: Request, res: Response): Promise<void>
 
     if (!response.ok) {
       logger.warn({ artist, title, status: response.status }, 'itunes_fetch_error');
-      cache.set(cacheKey, null);
+      cacheSet(cacheKey, null);
       res.json({ previewUrl: null });
       return;
     }
@@ -70,7 +79,7 @@ export async function previewHandler(req: Request, res: Response): Promise<void>
     const data = (await response.json()) as ItunesSearchResult;
     const previewUrl = pickBestPreview(data.results, artist, title);
     logger.debug({ artist, title, found: previewUrl !== null }, 'preview_fetched');
-    cache.set(cacheKey, previewUrl);
+    cacheSet(cacheKey, previewUrl);
     res.json({ previewUrl });
   } catch (err) {
     logger.error({ artist, title, err }, 'itunes_fetch_exception');

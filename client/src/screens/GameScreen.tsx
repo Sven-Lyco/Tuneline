@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import styled from '@emotion/styled';
 import type { Feedback } from '../types';
 import type { GameStateForClient, SongFull, SongMeta } from '@tuneline/shared';
@@ -107,14 +108,18 @@ export function GameScreen({
   onSkipPlayer,
 }: GameScreenProps) {
   const isMyTurn = gameState.currentPlayerId === myPlayerId;
-  const myPlayer = gameState.players.find((p) => p.id === myPlayerId);
-  const activePlayer = gameState.players.find((p) => p.id === gameState.currentPlayerId);
-  const lastPlacedPlayer = gameState.players.find((p) => p.id === lastPlacedPlayerId);
-  const otherPlayers = gameState.players.filter((p) => p.id !== myPlayerId);
-  const myTimeline = [...(myPlayer?.timeline ?? [])].sort((a, b) => a.year - b.year);
-
-  const activePlayerIndex = gameState.players.findIndex((p) => p.id === gameState.currentPlayerId);
-  const activePlayerColor = PLAYER_COLORS[activePlayerIndex] ?? '#ff2d78';
+  const { activePlayer, lastPlacedPlayer, otherPlayers, myTimeline, activePlayerColor } = useMemo(() => {
+    const myPlayer = gameState.players.find((p) => p.id === myPlayerId);
+    const activePlayerIndex = gameState.players.findIndex((p) => p.id === gameState.currentPlayerId);
+    return {
+      myPlayer,
+      activePlayer: gameState.players.find((p) => p.id === gameState.currentPlayerId),
+      lastPlacedPlayer: gameState.players.find((p) => p.id === lastPlacedPlayerId),
+      otherPlayers: gameState.players.filter((p) => p.id !== myPlayerId),
+      myTimeline: [...(myPlayer?.timeline ?? [])].sort((a, b) => a.year - b.year),
+      activePlayerColor: PLAYER_COLORS[activePlayerIndex] ?? '#ff2d78',
+    };
+  }, [gameState.players, gameState.currentPlayerId, myPlayerId, lastPlacedPlayerId]);
   const isReady = isMyTurn && slot !== null && !revealed;
 
   return (

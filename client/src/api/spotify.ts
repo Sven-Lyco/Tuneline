@@ -68,6 +68,9 @@ async function generateCodeChallenge(verifier: string): Promise<string> {
     .replace(/=/g, '');
 }
 
+// ── Token refresh lock ─────────────────────────────────────────
+let refreshPromise: Promise<string | null> | null = null;
+
 // ── Auth ───────────────────────────────────────────────────────
 
 export async function redirectToSpotify(): Promise<void> {
@@ -116,25 +119,30 @@ export async function getValidToken(): Promise<string | null> {
 
   if (Date.now() < data.expiresAt) return data.accessToken;
 
-  // Refresh expired token
-  const response = await fetch('https://accounts.spotify.com/api/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: CLIENT_ID,
-      grant_type: 'refresh_token',
-      refresh_token: data.refreshToken,
-    }),
-  });
-
-  if (!response.ok) {
-    logout();
-    return null;
+  // Deduplicate concurrent refresh calls via shared promise
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      try {
+        const response = await fetch('https://accounts.spotify.com/api/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            client_id: CLIENT_ID,
+            grant_type: 'refresh_token',
+            refresh_token: data.refreshToken,
+          }),
+        });
+        if (!response.ok) { logout(); return null; }
+        const refreshed = await response.json();
+        storeToken(refreshed);
+        return refreshed.access_token as string;
+      } finally {
+        refreshPromise = null;
+      }
+    })();
   }
 
-  const refreshed = await response.json();
-  storeToken(refreshed);
-  return refreshed.access_token as string;
+  return refreshPromise;
 }
 
 export function isAuthenticated(): boolean {
@@ -216,7 +224,7 @@ function parseTrack(item: SpotifyTracksResponse['items'][number]): Song | null {
   if (!t?.id || !t.uri || !t.name) return null;
 
   const year = t.album?.release_date ? parseInt(t.album.release_date.split('-')[0], 10) : 0;
-  if (year < 1900 || year >= 2030) return null;
+  if (year < 1900 || year > 2100) return null;
 
   return {
     id: t.id,

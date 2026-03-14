@@ -5,6 +5,7 @@ import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import compression from 'compression';
 import type { ClientToServerEvents, ServerToClientEvents, SongFull } from '@tuneline/shared';
+import { REACTION_EMOJIS } from '@tuneline/shared';
 import { join } from 'path';
 
 import { RoomManager } from './rooms.js';
@@ -378,7 +379,7 @@ io.on('connection', (socket) => {
 
   socket.on('send_reaction', ({ emoji }) => {
     if (isLimited('send_reaction')) return;
-    if (typeof emoji !== 'string') return;
+    if (!(REACTION_EMOJIS as readonly string[]).includes(emoji)) return;
     const roomCode = rooms.getRoomCodeForSocket(socket.id);
     if (!roomCode) return;
     const player = rooms.getPlayerForSocket(socket.id);

@@ -104,7 +104,7 @@ export function DisconnectOverlay({
   const { name, isHostDisconnected } = disconnectedPlayer;
 
   return (
-    <Overlay>
+    <Overlay role="dialog" aria-modal="true" aria-label="Verbindungsproblem">
       <Card>
         <Icon>📵</Icon>
         <Title>

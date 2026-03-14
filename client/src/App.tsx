@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import styled from '@emotion/styled';
 import type { SpotifyPlaylist } from './types';
 import type { AudioMode, SongFull } from '@tuneline/shared';
@@ -22,7 +22,7 @@ import { LoadingScreen } from './screens/LoadingScreen';
 import { LobbyScreen } from './screens/LobbyScreen';
 import { GameScreen } from './screens/GameScreen';
 import { ResultScreen } from './screens/ResultScreen';
-import { HelpScreen } from './screens/HelpScreen';
+const HelpScreen = lazy(() => import('./screens/HelpScreen').then((m) => ({ default: m.HelpScreen })));
 
 // ── Background ─────────────────────────────────────────────────
 
@@ -278,7 +278,11 @@ export default function App() {
         />
       )}
 
-      {screen === 'help' && <HelpScreen onBack={() => setScreen('login')} />}
+      {screen === 'help' && (
+        <Suspense fallback={null}>
+          <HelpScreen onBack={() => setScreen('login')} />
+        </Suspense>
+      )}
 
       {screen === 'join' && (
         <JoinScreen

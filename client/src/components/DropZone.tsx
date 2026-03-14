@@ -7,7 +7,7 @@ interface DropZoneProps {
   disabled: boolean;
 }
 
-const Container = styled.div`
+const Container = styled.button`
   width: 52px;
   height: 100px;
   display: flex;
@@ -15,6 +15,9 @@ const Container = styled.div`
   justify-content: center;
   flex-shrink: 0;
   position: relative;
+  background: transparent;
+  border: none;
+  padding: 0;
 
   &[data-disabled='false'] {
     cursor: pointer;
@@ -64,6 +67,9 @@ export function DropZone({ active, onClick, disabled }: DropZoneProps) {
       onClick={disabled ? undefined : onClick}
       onMouseEnter={() => !disabled && setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      disabled={disabled}
+      aria-label="Song hier platzieren"
+      type="button"
     >
       <Bar data-active={String(isActive)} />
       <Arrow data-active={String(!disabled)}>▼</Arrow>

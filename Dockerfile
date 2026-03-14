@@ -3,8 +3,6 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 
 # Accept VITE_* build-time variables (injected by Coolify or docker build --build-arg)
-ARG VITE_SPOTIFY_CLIENT_ID
-ARG VITE_REDIRECT_URI
 ARG VITE_SERVER_URL
 
 # Copy workspace manifests first for layer caching

@@ -1,3 +1,13 @@
+// ─── Spotify ─────────────────────────────────────────────────────────────────
+
+export interface SpotifyPlaylist {
+  id: string;
+  name: string;
+  coverUrl: string | null;
+  trackCount: number;
+  ownerName: string;
+}
+
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 export const REACTION_EMOJIS = ['🔥', '😂', '👏', '😱', '🥳', '❤️', '🤯'] as const;

@@ -1,9 +1,13 @@
+import { config } from 'dotenv';
+config({ path: '.env.local' });
+
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import compression from 'compression';
+import cookieParser from 'cookie-parser';
 import type { ClientToServerEvents, ServerToClientEvents, SongFull } from '@tuneline/shared';
 import { REACTION_EMOJIS } from '@tuneline/shared';
 import { join } from 'path';
@@ -11,6 +15,14 @@ import { join } from 'path';
 import { RoomManager } from './rooms.js';
 import { previewHandler } from './preview.js';
 import { httpLogger, logger } from './logger.js';
+import {
+  SESSION_COOKIE,
+  SESSION_MAX_AGE_MS,
+  createSession,
+  getSession,
+  deleteSession,
+} from './auth.js';
+import { getAuthUrl, exchangeCode, getValidToken, getUserPlaylists, loadSongs } from './spotify.js';
 
 const PORT = Number(process.env.PORT ?? 3001);
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN ?? 'http://[::1]:5174';
@@ -22,6 +34,8 @@ const httpServer = createServer(app);
 app.set('trust proxy', 1); // Trust Coolify's reverse proxy for correct client IPs
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression());
+app.use(cookieParser());
+app.use(express.json());
 app.use(httpLogger);
 
 type IoServer = Server<ClientToServerEvents, ServerToClientEvents>;
@@ -45,6 +59,108 @@ app.use(
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true });
+});
+
+// ── Auth routes ───────────────────────────────────────────────────────────────
+
+app.get('/api/auth/login', (_req, res) => {
+  const authUrl = getAuthUrl();
+  res.json({ authUrl });
+  logger.debug('auth_login_requested');
+});
+
+app.get('/api/auth/callback', async (req, res) => {
+  const code = String(req.query.code ?? '');
+  const state = String(req.query.state ?? '');
+
+  if (!code || !state) {
+    res.redirect('/?auth_error=true');
+    return;
+  }
+
+  const session = await exchangeCode(code, state);
+  if (!session) {
+    logger.warn('auth_callback_exchange_failed');
+    res.redirect('/?auth_error=true');
+    return;
+  }
+
+  const sessionId = createSession(session);
+  res.cookie(SESSION_COOKIE, sessionId, {
+    httpOnly: true,
+    secure: IS_PROD,
+    sameSite: 'strict',
+    maxAge: SESSION_MAX_AGE_MS,
+    path: '/',
+  });
+
+  logger.info('auth_callback_success');
+  res.redirect('/?authenticated=true');
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  const sessionId = req.cookies?.[SESSION_COOKIE] as string | undefined;
+  if (sessionId) deleteSession(sessionId);
+  res.clearCookie(SESSION_COOKIE, { path: '/' });
+  res.json({ ok: true });
+  logger.debug('auth_logout');
+});
+
+app.get('/api/auth/status', (req, res) => {
+  const sessionId = req.cookies?.[SESSION_COOKIE] as string | undefined;
+  const authenticated = !!sessionId && !!getSession(sessionId);
+  res.json({ authenticated });
+});
+
+// ── Spotify data routes ───────────────────────────────────────────────────────
+
+app.get('/api/playlists', async (req, res) => {
+  const sessionId = req.cookies?.[SESSION_COOKIE] as string | undefined;
+  if (!sessionId) { res.status(401).json({ error: 'Not authenticated' }); return; }
+
+  const token = await getValidToken(sessionId);
+  if (!token) {
+    deleteSession(sessionId);
+    res.clearCookie(SESSION_COOKIE, { path: '/' });
+    res.status(401).json({ error: 'Session expired' });
+    return;
+  }
+
+  const playlists = await getUserPlaylists(token);
+  logger.debug({ count: playlists.length }, 'playlists_fetched');
+  res.json(playlists);
+});
+
+app.post('/api/songs', async (req, res) => {
+  const sessionId = req.cookies?.[SESSION_COOKIE] as string | undefined;
+  if (!sessionId) { res.status(401).json({ error: 'Not authenticated' }); return; }
+
+  const token = await getValidToken(sessionId);
+  if (!token) {
+    deleteSession(sessionId);
+    res.clearCookie(SESSION_COOKIE, { path: '/' });
+    res.status(401).json({ error: 'Session expired' });
+    return;
+  }
+
+  const { playlistIds, target } = req.body as { playlistIds?: unknown; target?: unknown };
+
+  if (
+    !Array.isArray(playlistIds) ||
+    playlistIds.length === 0 ||
+    playlistIds.length > 10 ||
+    playlistIds.some((id) => typeof id !== 'string' || id.length > 64) ||
+    typeof target !== 'number' ||
+    target < 1 ||
+    target > 500
+  ) {
+    res.status(400).json({ error: 'Invalid request' });
+    return;
+  }
+
+  const songs = await loadSongs(token, playlistIds as string[], target);
+  logger.info({ playlists: playlistIds.length, songs: songs.length }, 'songs_loaded');
+  res.json(songs);
 });
 
 app.get('/api/preview', previewHandler);

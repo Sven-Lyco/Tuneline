@@ -2,11 +2,9 @@ import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import styled from '@emotion/styled';
 import type { SpotifyPlaylist } from './types';
 import { STORAGE_KEYS } from './constants';
-import type { AudioMode, SongFull } from '@tuneline/shared';
+import type { AudioMode } from '@tuneline/shared';
 import {
-  handleAuthCallback,
   isAuthenticated,
-  getValidToken,
   loadSongsFromPlaylists,
   logout,
 } from './api/spotify';
@@ -129,24 +127,26 @@ export default function App() {
   useEffect(() => {
     const init = async () => {
       const params = new URLSearchParams(window.location.search);
-      const code = params.get('code');
+      const authenticated = params.get('authenticated');
+      const authError = params.get('auth_error');
       const room = params.get('room');
 
-      if (code) {
+      if (authenticated) {
         window.history.replaceState({}, '', window.location.pathname);
-        const success = await handleAuthCallback(code);
-        if (success) setScreen('playlists');
+        setScreen('playlists');
+      } else if (authError) {
+        window.history.replaceState({}, '', window.location.pathname);
+        showError('Spotify-Login fehlgeschlagen. Bitte erneut versuchen.');
       } else if (room) {
         window.history.replaceState({}, '', window.location.pathname);
         setJoinCode(room.toUpperCase());
         setScreen('join');
-      } else if (isAuthenticated()) {
-        const token = await getValidToken();
-        if (token) setScreen('playlists');
+      } else if (await isAuthenticated()) {
+        setScreen('playlists');
       }
     };
     void init();
-  }, [setScreen]);
+  }, [setScreen, showError]);
 
   // ── Playlist selection ────────────────────────────────────────
 
@@ -161,7 +161,7 @@ export default function App() {
   const handleLogout = useCallback(() => {
     stopSong();
     socket.disconnect();
-    logout();
+    void logout();
     setSelectedPlaylists([]);
     setScreen('login');
   }, [stopSong, setScreen]);
@@ -221,16 +221,7 @@ export default function App() {
         return;
       }
 
-      const songsFull: SongFull[] = songs.map((s) => ({
-        id: s.id,
-        title: s.title,
-        artist: s.artist,
-        year: s.year,
-        cover: s.cover,
-        preview: s.preview,
-      }));
-
-      socket.emit('start_game', { songs: songsFull, rounds, audioMode });
+      socket.emit('start_game', { songs, rounds, audioMode });
     } catch {
       setLoadingMsg('Fehler beim Laden der Songs. Bitte erneut versuchen.');
       await new Promise((r) => setTimeout(r, 2500));

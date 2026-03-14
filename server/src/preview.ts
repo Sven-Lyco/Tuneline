@@ -45,6 +45,36 @@ function cacheSet(key: string, value: string | null): void {
   cache.set(key, value);
 }
 
+// ── Exported function for internal server use (e.g. server-side song loading) ─
+
+export async function findPreview(artist: string, title: string): Promise<string | null> {
+  const cacheKey = `${artist}|${title}`;
+
+  if (cache.has(cacheKey)) return cache.get(cacheKey) ?? null;
+
+  try {
+    const query = encodeURIComponent(`${artist} ${title}`);
+    const response = await fetch(
+      `https://itunes.apple.com/search?term=${query}&entity=song&limit=5`,
+      { signal: AbortSignal.timeout(6000) },
+    );
+
+    if (!response.ok) {
+      cacheSet(cacheKey, null);
+      return null;
+    }
+
+    const data = (await response.json()) as ItunesSearchResult;
+    const previewUrl = pickBestPreview(data.results, artist, title);
+    cacheSet(cacheKey, previewUrl);
+    return previewUrl;
+  } catch {
+    return null;
+  }
+}
+
+// ── HTTP handler for /api/preview ─────────────────────────────────────────────
+
 export async function previewHandler(req: Request, res: Response): Promise<void> {
   const artist = String(req.query.artist ?? '').trim();
   const title = String(req.query.title ?? '').trim();

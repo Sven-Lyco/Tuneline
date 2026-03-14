@@ -9,8 +9,8 @@ Players listen to a 30-second song preview and place it chronologically on their
 
 ## How it works
 
-1. The host logs in with their Spotify account and selects playlists
-2. Song metadata (title, artist, year, cover) is fetched from the Spotify Web API
+1. The host logs in with their Spotify account (OAuth handled server-side) and selects playlists
+2. Song metadata (title, artist, year, cover) is fetched from the Spotify Web API via the server
 3. Audio previews (30s) come from the iTunes Search API — no auth, no Premium required
 4. Players join via room code or invite link
 5. Each turn: listen to the preview, place the song in the right spot on your timeline
@@ -20,7 +20,7 @@ Players listen to a 30-second song preview and place it chronologically on their
 
 - **React 19 + TypeScript 5** with Vite
 - **Emotion** (`@emotion/styled`) for CSS-in-JS — no `.css` files
-- **Spotify Web API** (PKCE OAuth) for playlist selection and track metadata
+- **Spotify Web API** — server-side PKCE OAuth, session via httpOnly cookie
 - **iTunes Search API** for 30s audio previews
 - **Socket.io** for real-time multiplayer
 - **Express** as the backend server
@@ -32,19 +32,21 @@ Players listen to a 30-second song preview and place it chronologically on their
 Go to [developer.spotify.com](https://developer.spotify.com), create an app and add the following redirect URI:
 
 ```text
-http://[::1]:5174/callback
+http://[::1]:5174/api/auth/callback
 ```
 
 > **Note:** Spotify does not accept `localhost` — the URI must use `[::1]` exactly as shown.
 
-### 2. Configure the client
+### 2. Configure the server
 
-Create `client/.env.local`:
+Create `server/.env.local`:
 
 ```env
-VITE_SPOTIFY_CLIENT_ID=your_client_id_here
-VITE_REDIRECT_URI=http://[::1]:5174/callback
-VITE_SERVER_URL=http://[::1]:3001
+PORT=3001
+FRONTEND_ORIGIN=http://[::1]:5174
+NODE_ENV=development
+SPOTIFY_CLIENT_ID=your_client_id_here
+SPOTIFY_REDIRECT_URI=http://[::1]:5174/api/auth/callback
 ```
 
 ### 3. Install and run
@@ -72,15 +74,15 @@ npm run format       # Prettier (client)
 
 A multi-stage `Dockerfile` is included for deployment on Coolify or any container platform. The Express server serves the client build as static files in production.
 
-Required environment variables on the server:
+Required environment variables (runtime):
 
-| Variable          | Description                          |
-| ----------------- | ------------------------------------ |
-| `PORT`            | Port the server listens on           |
-| `FRONTEND_ORIGIN` | Allowed CORS origin (frontend URL)   |
-| `NODE_ENV`        | Set to `production`                  |
-
-`VITE_*` variables are build-time — set them as build args in Coolify (see `.env.example`).
+| Variable               | Description                                        |
+| ---------------------- | -------------------------------------------------- |
+| `PORT`                 | Port the server listens on                         |
+| `FRONTEND_ORIGIN`      | Allowed CORS origin (frontend URL)                 |
+| `NODE_ENV`             | Set to `production`                                |
+| `SPOTIFY_CLIENT_ID`    | Spotify Developer App client ID                    |
+| `SPOTIFY_REDIRECT_URI` | Redirect URI registered in Spotify Developer App   |
 
 ## Planned Features
 

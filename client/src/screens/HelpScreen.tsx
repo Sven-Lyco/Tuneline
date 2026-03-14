@@ -536,7 +536,7 @@ function PlayerTab() {
           <StepText>
             <StepTitle>In der Lobby warten</StepTitle>
             <StepDesc>
-              Wähle deinen Namen. Sobald alle da sind, startet der Host das Spiel.
+              Gib deinen Namen ein. Sobald alle da sind, startet der Host das Spiel.
             </StepDesc>
           </StepText>
         </StepHeader>
@@ -559,8 +559,8 @@ function PlayerTab() {
           <StepText>
             <StepTitle>Song anhören</StepTitle>
             <StepDesc>
-              Wenn du dran bist, wird ein 30-Sekunden-Preview gespielt. Titel und Jahr sind
-              verborgen — rate, aus welchem Jahr der Song stammt.
+              Wenn du dran bist, wird ein 30-Sekunden-Preview gespielt. Du siehst Titel und
+              Interpret — das Jahr ist verborgen. Rate, aus welchem Jahr der Song stammt.
             </StepDesc>
           </StepText>
         </StepHeader>
@@ -568,9 +568,9 @@ function PlayerTab() {
           <MockSongCard>
             <Vinyl spinning={true} cover={null} size={64} />
             <MockSongInfo>
-              <MockSongTitle>???</MockSongTitle>
-              <MockSongArtist>Unbekannter Interpret</MockSongArtist>
-              <MockSongYear>Jahr: verborgen</MockSongYear>
+              <MockSongTitle>Bohemian Rhapsody</MockSongTitle>
+              <MockSongArtist>Queen</MockSongArtist>
+              <MockSongYear>Jahr: ???</MockSongYear>
             </MockSongInfo>
           </MockSongCard>
           <MockPlayBadge>▶ Preview läuft</MockPlayBadge>
@@ -656,8 +656,8 @@ function HostTab() {
           <StepText>
             <StepTitle>Mit Spotify einloggen</StepTitle>
             <StepDesc>
-              Als Host brauchst du ein Spotify-Konto (Free reicht). Der Login läuft sicher über
-              Spotify — wir speichern keine Passwörter.
+              Als Host brauchst du ein Spotify-Konto. Es wird nur für die Playlist-Auswahl
+              genutzt — der Ton kommt von iTunes-Previews, kein Premium nötig.
             </StepDesc>
           </StepText>
         </StepHeader>

@@ -114,16 +114,16 @@ Tuneline/
 - Redirect URI: `http://[::1]:5174/api/auth/callback` — muss exakt so in der Developer Console stehen
 - Vite läuft auf `host: '::1', port: 5174` — kein `localhost` (Spotify akzeptiert das nicht)
 - PKCE-Flow läuft **server-seitig**: Verifier im Server-Memory, Token im Server (nie im Browser)
-- Session via httpOnly-Cookie (`tuneline_sid`), Token nie an den Client weitergegeben
+- Session via httpOnly-Cookie (`tuneline_session`), Token nie an den Client weitergegeben
 
 ## Multiplayer-Architektur
 
 - **Server ist Source of Truth** — alle Spielzustände liegen im Server-Memory (RoomManager)
 - **Room-Code**: 6 Zeichen alphanumerisch (z.B. `6ER2T5`), 2h TTL
-- **Spieler-Token**: 48-Zeichen-Token für Reconnect-Fähigkeit ohne erneuten Join
+- **Spieler-Token**: 48-Zeichen-Token für Reconnect-Fähigkeit ohne erneuten Join — gespeichert in `sessionStorage` (wird bei Tab-Schließen geleert)
 - **Anti-Cheat**: `SongMeta` (ohne Jahr) wird an aktiven Spieler gesendet; Jahr erst nach Platzierung via `placement_result`
 - **Audio-Modus**: `'all'` (jeder hört auf eigenem Gerät) oder `'host-only'` (nur Host-Gerät)
-- **Spotify-Token bleibt beim Server**: Host triggert Song-Laden via `start_loading`, Server fetcht `SongFull[]` intern und startet Spiel
+- **Spotify-Token bleibt beim Server**: Host ruft `/api/songs` auf → Server fetcht via Spotify+iTunes → Client empfängt `SongFull[]` und übergibt sie via `start_game` an den Server
 - Server validiert Song-Daten (Pflichtfelder, Jahr zwischen 1900–2100)
 - Socket-Events rate-limitiert (15 Events/Sekunde pro Socket)
 
@@ -132,16 +132,16 @@ Tuneline/
 ```text
 Client → Server: create_room, join_room, start_loading, start_game,
                   update_settings, place_song, skip_player, kick_player,
-                  return_to_lobby
+                  return_to_lobby, send_reaction
 Server → Client: room_created, room_joined, room_updated, game_loading,
                   game_started, turn_started, placement_result, game_over,
                   game_paused, game_resumed, player_disconnected,
-                  player_reconnected, player_kicked, error
+                  player_reconnected, player_kicked, error, reaction_received
 ```
 
 ## Spiellogik
 
-- **Server** (`rooms.ts`): `startGame()` verteilt Startsongs, `placeSong()` prüft Platzierung und gibt `correct`/`gameOver` zurück
+- **Server** (`game.ts`): `startGame()` verteilt Startsongs, `placeSong()` prüft Platzierung und gibt `correct`/`gameOver` zurück; `rooms.ts` orchestriert via `RoomManager`
 - **Client** (`App.tsx`): verwaltet Socket-State, leitet Events an Screens weiter — nicht verändern ohne Rückfrage
 - Gameover-Bedingung: `currentSongIndex >= deck.length || (currentPlayerIndex === 0 && round > rounds)`
 - Songs ohne iTunes-Preview werden server-seitig in `loadSongs()` herausgefiltert (garantiert Ton für jeden Song)

@@ -7,6 +7,7 @@ export const MAX_PLAYERS = 10;
 export const MAX_NAME_LENGTH = 30;
 export const MAX_ROOMS = 500;
 export const MAX_FIELD_LENGTH = 200;
+export const MAX_SONGS = 500;
 
 export function isValidAudioMode(mode: unknown): mode is AudioMode {
   return mode === 'all' || mode === 'host-only';
@@ -42,6 +43,10 @@ export interface Room {
 }
 
 export type SimpleResult = { ok: true } | { ok: false; error: string };
+
+export type CreateRoomResult =
+  | { ok: true; roomCode: string; playerId: string; playerToken: string }
+  | { ok: false; error: string };
 
 export type JoinResult =
   | { ok: true; playerId: string; playerToken: string }

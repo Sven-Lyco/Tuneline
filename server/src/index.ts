@@ -155,12 +155,14 @@ io.on('connection', (socket) => {
     if (isLimited('create_room')) return;
     if (typeof hostName !== 'string' || !hostName.trim()) return;
 
-    const { roomCode, playerId, playerToken } = rooms.createRoom(
-      socket.id,
-      hostName,
-      rounds ?? 5,
-      audioMode ?? 'all'
-    );
+    const result = rooms.createRoom(socket.id, hostName, rounds ?? 5, audioMode ?? 'all');
+    if (!result.ok) {
+      socket.emit('error', { message: result.error });
+      logger.warn({ error: result.error }, 'create_room_denied');
+      return;
+    }
+
+    const { roomCode, playerId, playerToken } = result;
     socket.join(roomCode);
     socket.emit('room_created', { roomCode, playerId, playerToken });
     const lobby = rooms.getLobbyState(roomCode);

@@ -1,6 +1,6 @@
 import type { SongFull, AudioMode } from '@tuneline/shared';
 import type { Room, InternalPlayer, SimpleResult, PlaceResult } from './types.js';
-import { isValidAudioMode, MAX_FIELD_LENGTH } from './types.js';
+import { isValidAudioMode, MAX_FIELD_LENGTH, MAX_SONGS } from './types.js';
 import { shuffle } from './utils.js';
 
 function isCorrectPlacement(timeline: SongFull[], song: SongFull, position: number): boolean {
@@ -17,6 +17,9 @@ export function startGame(
 ): SimpleResult {
   if (!Array.isArray(songs) || songs.length < 2) {
     return { ok: false, error: 'Zu wenige Songs (min. 2).' };
+  }
+  if (songs.length > MAX_SONGS) {
+    return { ok: false, error: `Zu viele Songs (max. ${MAX_SONGS}).` };
   }
   if (!isValidAudioMode(audioMode)) {
     return { ok: false, error: 'Ungültiger Audio-Modus.' };

@@ -17,6 +17,7 @@ import {
   isValidAudioMode,
   type InternalPlayer,
   type Room,
+  type CreateRoomResult,
   type JoinResult,
   type SimpleResult,
   type PlaceResult,
@@ -88,8 +89,8 @@ export class RoomManager {
     hostName: string,
     rounds: number,
     audioMode: AudioMode,
-  ): { roomCode: string; playerId: string; playerToken: string } {
-    if (this.rooms.size >= MAX_ROOMS) throw new Error('Maximale Raumanzahl erreicht.');
+  ): CreateRoomResult {
+    if (this.rooms.size >= MAX_ROOMS) return { ok: false, error: 'Server ist ausgelastet. Bitte später erneut versuchen.' };
     const validMode: AudioMode = isValidAudioMode(audioMode) ? audioMode : 'all';
     const code = this.newCode();
     const playerId = this.newPlayerId();
@@ -127,7 +128,7 @@ export class RoomManager {
     this.scheduleCleanup(room);
     this.rooms.set(code, room);
     this.socketToRoom.set(socketId, code);
-    return { roomCode: code, playerId, playerToken: token };
+    return { ok: true, roomCode: code, playerId, playerToken: token };
   }
 
   joinRoom(

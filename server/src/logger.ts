@@ -8,7 +8,7 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 export const logger = pino(
   IS_PROD
     ? {
-        level: 'debug',
+        level: 'info',
         formatters: {
           level: (label) => ({ level: label.toUpperCase() }),
         },
@@ -33,7 +33,7 @@ export const httpLogger = pinoHttp<Request, Response>({
     if (typeof headerId === 'string' && headerId.length > 0) return headerId;
     return randomUUID();
   },
-  customLogLevel: (req, res, err) => {
+  customLogLevel: (_req, res, err) => {
     if (err || res.statusCode >= 500) return 'error';
     if (res.statusCode >= 400) return 'warn';
     return 'info';

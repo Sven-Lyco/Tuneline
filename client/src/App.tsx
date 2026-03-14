@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import styled from '@emotion/styled';
 import type { SpotifyPlaylist } from './types';
+import { STORAGE_KEYS } from './constants';
 import type { AudioMode, SongFull } from '@tuneline/shared';
 import {
   handleAuthCallback,
@@ -177,7 +178,7 @@ export default function App() {
 
   const handleJoinRoom = useCallback((code: string, name: string) => {
     if (!socket.connected) socket.connect();
-    const playerToken = sessionStorage.getItem('tuneline_player_token') ?? undefined;
+    const playerToken = sessionStorage.getItem(STORAGE_KEYS.playerToken) ?? undefined;
     socket.emit('join_room', { roomCode: code, playerName: name, playerToken });
   }, []);
 
@@ -208,27 +209,33 @@ export default function App() {
     setScreen('loading');
     socket.emit('start_loading');
 
-    const playerCount = lobbyState?.players.length ?? 1;
-    const songsNeeded = Math.ceil(playerCount * (rounds + 1) * 1.5);
-    const songs = await loadSongsFromPlaylists(selectedPlaylists.map((p) => p.id), songsNeeded);
+    try {
+      const playerCount = lobbyState?.players.length ?? 1;
+      const songsNeeded = Math.ceil(playerCount * (rounds + 1) * 1.5);
+      const songs = await loadSongsFromPlaylists(selectedPlaylists.map((p) => p.id), songsNeeded);
 
-    if (songs.length < playerCount + 3) {
-      setLoadingMsg('Nicht genug Songs. Bitte andere Playlisten wählen.');
-      await new Promise((r) => setTimeout(r, 2000));
+      if (songs.length < playerCount + 3) {
+        setLoadingMsg('Nicht genug Songs. Bitte andere Playlisten wählen.');
+        await new Promise((r) => setTimeout(r, 2000));
+        setScreen('lobby');
+        return;
+      }
+
+      const songsFull: SongFull[] = songs.map((s) => ({
+        id: s.id,
+        title: s.title,
+        artist: s.artist,
+        year: s.year,
+        cover: s.cover,
+        preview: s.preview,
+      }));
+
+      socket.emit('start_game', { songs: songsFull, rounds, audioMode });
+    } catch {
+      setLoadingMsg('Fehler beim Laden der Songs. Bitte erneut versuchen.');
+      await new Promise((r) => setTimeout(r, 2500));
       setScreen('lobby');
-      return;
     }
-
-    const songsFull: SongFull[] = songs.map((s) => ({
-      id: s.id,
-      title: s.title,
-      artist: s.artist,
-      year: s.year,
-      cover: s.cover,
-      preview: s.preview,
-    }));
-
-    socket.emit('start_game', { songs: songsFull, rounds, audioMode });
   }, [lobbyState, selectedPlaylists, rounds, audioMode, setLoadingMsg, setScreen]);
 
   // ── Game actions ──────────────────────────────────────────────
@@ -270,7 +277,7 @@ export default function App() {
       {screen === 'login' && (
         <LoginScreen
           onJoinAsGuest={() => {
-            const savedCode = sessionStorage.getItem('tuneline_room_code') ?? '';
+            const savedCode = sessionStorage.getItem(STORAGE_KEYS.roomCode) ?? '';
             setJoinCode(savedCode);
             setScreen('join');
           }}

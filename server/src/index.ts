@@ -385,9 +385,19 @@ io.on('connection', (socket) => {
     const player = rooms.getPlayerForSocket(socket.id);
     if (!player) return;
     io.to(roomCode).emit('reaction_received', { playerId: player.id, playerName: player.name, emoji });
+    logger.debug({ roomCode, playerName: player.name, emoji }, 'send_reaction');
   });
 
   socket.on('disconnect', () => onDisconnect(socket.id, io));
+});
+
+process.on('unhandledRejection', (reason) => {
+  logger.error({ reason }, 'unhandled_rejection');
+});
+
+process.on('uncaughtException', (err) => {
+  logger.fatal({ err }, 'uncaught_exception');
+  process.exit(1);
 });
 
 httpServer.listen(PORT, () => {

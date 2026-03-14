@@ -54,6 +54,11 @@ export async function previewHandler(req: Request, res: Response): Promise<void>
     return;
   }
 
+  if (artist.length > 200 || title.length > 200) {
+    res.status(400).json({ error: 'Input too long' });
+    return;
+  }
+
   const cacheKey = `${artist}|${title}`;
 
   if (cache.has(cacheKey)) {

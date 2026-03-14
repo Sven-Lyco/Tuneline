@@ -35,11 +35,11 @@ function storeToken(data: {
     refreshToken: data.refresh_token ?? existing?.refreshToken ?? '',
     expiresAt: Date.now() + (data.expires_in - 60) * 1000,
   };
-  localStorage.setItem(TOKEN_KEY, JSON.stringify(tokenData));
+  sessionStorage.setItem(TOKEN_KEY, JSON.stringify(tokenData));
 }
 
 function getStoredTokenData(): TokenData | null {
-  const raw = localStorage.getItem(TOKEN_KEY);
+  const raw = sessionStorage.getItem(TOKEN_KEY);
   if (!raw) return null;
   try {
     return JSON.parse(raw) as TokenData;
@@ -150,7 +150,7 @@ export function isAuthenticated(): boolean {
 }
 
 export function logout(): void {
-  localStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(TOKEN_KEY);
 }
 
 // ── API fetch ──────────────────────────────────────────────────

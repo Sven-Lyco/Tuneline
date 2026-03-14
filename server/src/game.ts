@@ -34,7 +34,9 @@ export function startGame(
       song.artist.length > MAX_FIELD_LENGTH ||
       typeof song.year !== 'number' ||
       song.year < 1900 ||
-      song.year > 2100
+      song.year > 2100 ||
+      typeof song.preview !== 'string' ||
+      !song.preview.startsWith('https://audio-ssl.itunes.apple.com/')
     ) {
       return { ok: false, error: 'Ungültige Song-Daten.' };
     }

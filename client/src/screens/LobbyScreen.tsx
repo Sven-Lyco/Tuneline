@@ -1,19 +1,23 @@
 import { useState } from 'react';
 import styled from '@emotion/styled';
 import type { LobbyState, AudioMode } from '@tuneline/shared';
+import type { SpotifyPlaylist } from '../types';
 import { PLAYER_COLORS } from '../constants';
 import { Label } from '../components/Label';
+import { PlaylistBadge, PlaylistBadgeCover, PlaylistBadgeName } from '../components/PlaylistBadge';
 
 interface LobbyScreenProps {
   roomCode: string;
   lobbyState: LobbyState;
   myPlayerId: string;
   isHost: boolean;
+  selectedPlaylists: SpotifyPlaylist[];
   onStart: () => void;
   onKick: (playerId: string) => void;
   onLeave: () => void;
   onAudioModeChange: (mode: AudioMode) => void;
   onRoundsChange: (rounds: number) => void;
+  onChangePlaylists: () => void;
 }
 
 // ── Styles ─────────────────────────────────────────────────────
@@ -240,6 +244,31 @@ const LeaveLink = styled.button`
   }
 `;
 
+const PlaylistRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+`;
+
+
+const ChangePlaylistLink = styled.button`
+  background: transparent;
+  border: none;
+  color: #a855f7;
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.82rem;
+  cursor: pointer;
+  padding: 0;
+  white-space: nowrap;
+  flex-shrink: 0;
+
+  &:hover {
+    text-decoration: underline;
+  }
+`;
+
 const CopiedFeedback = styled.span`
   color: #06d6a0;
   font-size: 0.7rem;
@@ -252,11 +281,13 @@ export function LobbyScreen({
   lobbyState,
   myPlayerId,
   isHost,
+  selectedPlaylists,
   onStart,
   onKick,
   onLeave,
   onAudioModeChange,
   onRoundsChange,
+  onChangePlaylists,
 }: LobbyScreenProps) {
   const [copied, setCopied] = useState(false);
 
@@ -335,6 +366,21 @@ export function LobbyScreen({
                 </RoundButton>
               ))}
             </RoundsRow>
+
+            <Label>Playlisten</Label>
+            <PlaylistRow>
+              {selectedPlaylists.length === 0 ? (
+                <PlaylistBadge style={{ color: '#4a4a6a', background: 'none', border: '1px solid #2a2a3a' }}>Keine gewählt</PlaylistBadge>
+              ) : (
+                selectedPlaylists.map((p) => (
+                  <PlaylistBadge key={p.id}>
+                    {p.coverUrl && <PlaylistBadgeCover src={p.coverUrl} alt={p.name} />}
+                    <PlaylistBadgeName>{p.name}</PlaylistBadgeName>
+                  </PlaylistBadge>
+                ))
+              )}
+              <ChangePlaylistLink onClick={onChangePlaylists}>ändern →</ChangePlaylistLink>
+            </PlaylistRow>
 
             <StartButton ready={String(canStart)} disabled={!canStart} onClick={onStart}>
               Spiel starten →

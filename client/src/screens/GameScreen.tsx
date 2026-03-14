@@ -17,6 +17,7 @@ interface GameScreenProps {
   revealedSong: SongFull | null;
   feedback: Feedback;
   revealed: boolean;
+  lastPlacedPlayerId: string | null;
   playing: boolean;
   volume: number;
   slot: number | null;
@@ -48,18 +49,6 @@ const GameBody = styled.div`
   width: 100%;
 `;
 
-const FeedbackBar = styled.div<{ ok: string }>`
-  text-align: center;
-  padding: 0.75rem 1rem;
-  font-weight: 700;
-  font-size: 1.05rem;
-  flex-shrink: 0;
-  background: ${({ ok }) => (ok === 'true' ? 'rgba(6,214,160,0.08)' : 'rgba(255,68,68,0.08)')};
-  color: ${({ ok }) => (ok === 'true' ? '#06d6a0' : '#ff6b6b')};
-  border-top: ${({ ok }) => `2px solid ${ok === 'true' ? '#06d6a0' : '#ff4444'}`};
-  border-bottom: ${({ ok }) => `1px solid ${ok === 'true' ? '#06d6a044' : '#ff444433'}`};
-  animation: slideIn 0.3s ease-out;
-`;
 
 const PlaceButtonRow = styled.div`
   display: flex;
@@ -105,6 +94,7 @@ export function GameScreen({
   revealedSong,
   feedback,
   revealed,
+  lastPlacedPlayerId,
   playing,
   volume,
   slot,
@@ -118,6 +108,7 @@ export function GameScreen({
   const isMyTurn = gameState.currentPlayerId === myPlayerId;
   const myPlayer = gameState.players.find((p) => p.id === myPlayerId);
   const activePlayer = gameState.players.find((p) => p.id === gameState.currentPlayerId);
+  const lastPlacedPlayer = gameState.players.find((p) => p.id === lastPlacedPlayerId);
   const otherPlayers = gameState.players.filter((p) => p.id !== myPlayerId);
   const myTimeline = [...(myPlayer?.timeline ?? [])].sort((a, b) => a.year - b.year);
 
@@ -141,6 +132,9 @@ export function GameScreen({
           currentSong={currentSong}
           revealedSong={revealedSong}
           revealed={revealed}
+          feedback={feedback}
+          lastPlacedPlayerName={lastPlacedPlayer?.name ?? null}
+          lastPlacedIsMe={lastPlacedPlayerId === myPlayerId}
           playing={playing}
           volume={volume}
           isMyTurn={isMyTurn}
@@ -149,14 +143,6 @@ export function GameScreen({
           onToggleAudio={onToggleAudio}
           onVolumeChange={onVolumeChange}
         />
-
-        {feedback && (
-          <FeedbackBar ok={String(feedback === 'ok')}>
-            {feedback === 'ok'
-              ? '✓ Richtig platziert! +1 Punkt'
-              : `✗ Falsch! Der Song war von ${revealedSong?.year ?? '?'}.`}
-          </FeedbackBar>
-        )}
 
         <MyTimeline
           timeline={myTimeline}

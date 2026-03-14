@@ -1,6 +1,7 @@
 import React from 'react';
 import styled from '@emotion/styled';
 import type { SongFull, SongMeta } from '@tuneline/shared';
+import type { Feedback } from '../../types';
 import { Vinyl } from '../Vinyl';
 import { Wave } from '../Wave';
 
@@ -8,6 +9,9 @@ interface SongCardProps {
   currentSong: SongMeta;
   revealedSong: SongFull | null;
   revealed: boolean;
+  feedback: Feedback;
+  lastPlacedPlayerName: string | null;
+  lastPlacedIsMe: boolean;
   playing: boolean;
   volume: number;
   isMyTurn: boolean;
@@ -178,6 +182,21 @@ const VolumeSlider = styled.input`
   }
 `;
 
+const FeedbackOverlay = styled.div<{ ok: string }>`
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 0.65rem 1rem;
+  text-align: center;
+  font-weight: 700;
+  font-size: 1rem;
+  background: ${({ ok }) => (ok === 'true' ? 'rgba(6,214,160,0.12)' : 'rgba(255,68,68,0.12)')};
+  color: ${({ ok }) => (ok === 'true' ? '#06d6a0' : '#ff6b6b')};
+  border-top: 1px solid ${({ ok }) => (ok === 'true' ? '#06d6a044' : '#ff444433')};
+  animation: slideIn 0.3s ease-out;
+`;
+
 const PlacementHint = styled.div`
   font-size: 0.88rem;
   color: #7a7a8e;
@@ -197,6 +216,9 @@ export function SongCard({
   currentSong,
   revealedSong,
   revealed,
+  feedback,
+  lastPlacedPlayerName,
+  lastPlacedIsMe,
   playing,
   volume,
   isMyTurn,
@@ -241,11 +263,21 @@ export function SongCard({
           </SongInfo>
         </CardBody>
         <Wave active={playing} />
-        {!revealed && isMyTurn && (
-          <PlacementHint>Wähle die richtige Position in deiner Timeline ↓</PlacementHint>
+        {isMyTurn ? (
+          <PlacementHint style={{ visibility: revealed ? 'hidden' : 'visible' }}>
+            Wähle die richtige Position in deiner Timeline ↓
+          </PlacementHint>
+        ) : (
+          <WaitingLabel style={{ visibility: revealed ? 'hidden' : 'visible' }}>
+            Warten auf {activePlayerName}…
+          </WaitingLabel>
         )}
-        {!revealed && !isMyTurn && (
-          <WaitingLabel>Warten auf {activePlayerName}…</WaitingLabel>
+        {feedback && (
+          <FeedbackOverlay ok={String(feedback === 'ok')}>
+            {feedback === 'ok'
+              ? `✓ Richtig! +1 Punkt für ${lastPlacedIsMe ? 'dich' : (lastPlacedPlayerName ?? activePlayerName)}`
+              : `✗ Falsch! Der Song war von ${revealedSong?.year ?? '?'}.`}
+          </FeedbackOverlay>
         )}
       </Card>
     </SongArea>

@@ -92,6 +92,7 @@ export default function App() {
   const [hostName, setHostName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [playlistReturnTarget, setPlaylistReturnTarget] = useState<'menu' | 'lobby'>('menu');
 
   const showError = useCallback((msg: string) => {
     setErrorMsg(msg);
@@ -114,6 +115,7 @@ export default function App() {
     revealedSong,
     feedback,
     revealed,
+    lastPlacedPlayerId,
     slot, setSlot,
     disconnectedPlayer,
     result,
@@ -286,7 +288,7 @@ export default function App() {
         <PlaylistScreen
           selected={selectedPlaylists}
           onToggle={togglePlaylist}
-          onConfirm={() => setScreen('menu')}
+          onConfirm={() => setScreen(playlistReturnTarget)}
           onLogout={handleLogout}
         />
       )}
@@ -301,7 +303,7 @@ export default function App() {
           audioMode={audioMode}
           setAudioMode={setAudioMode}
           onCreateRoom={handleCreateRoom}
-          onChangePlaylists={() => setScreen('playlists')}
+          onChangePlaylists={() => { setPlaylistReturnTarget('menu'); setScreen('playlists'); }}
         />
       )}
 
@@ -313,11 +315,13 @@ export default function App() {
           lobbyState={lobbyState}
           myPlayerId={myPlayerId}
           isHost={isHost}
+          selectedPlaylists={selectedPlaylists}
           onStart={() => void handleStartGame()}
           onKick={handleKick}
           onLeave={handleLeave}
           onAudioModeChange={handleAudioModeChange}
           onRoundsChange={handleRoundsChange}
+          onChangePlaylists={() => { setPlaylistReturnTarget('lobby'); setScreen('playlists'); }}
         />
       )}
 
@@ -331,6 +335,7 @@ export default function App() {
           revealedSong={revealedSong}
           feedback={feedback}
           revealed={revealed}
+          lastPlacedPlayerId={lastPlacedPlayerId}
           playing={playing}
           volume={volume}
           slot={slot}

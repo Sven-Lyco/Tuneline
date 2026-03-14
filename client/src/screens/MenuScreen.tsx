@@ -2,6 +2,7 @@ import styled from '@emotion/styled';
 import type { SpotifyPlaylist } from '../types';
 import type { AudioMode } from '@tuneline/shared';
 import { Label } from '../components/Label';
+import { PlaylistBadge, PlaylistBadgeCover, PlaylistBadgeName } from '../components/PlaylistBadge';
 
 interface MenuScreenProps {
   playlists: SpotifyPlaylist[];
@@ -67,32 +68,6 @@ const PlaylistRow = styled.div`
   flex-wrap: wrap;
 `;
 
-const PlaylistBadge = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.3rem 0.7rem;
-  background: rgba(29, 185, 84, 0.08);
-  border: 1px solid rgba(29, 185, 84, 0.3);
-  border-radius: 20px;
-  font-size: 0.75rem;
-  color: #1db954;
-  max-width: 160px;
-`;
-
-const BadgeCover = styled.img`
-  width: 18px;
-  height: 18px;
-  border-radius: 3px;
-  object-fit: cover;
-  flex-shrink: 0;
-`;
-
-const BadgeName = styled.span`
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-`;
 
 const ChangeLink = styled.button`
   background: transparent;
@@ -218,8 +193,8 @@ export function MenuScreen({
         <PlaylistRow>
           {playlists.map((p) => (
             <PlaylistBadge key={p.id}>
-              {p.coverUrl && <BadgeCover src={p.coverUrl} alt={p.name} />}
-              <BadgeName>{p.name}</BadgeName>
+              {p.coverUrl && <PlaylistBadgeCover src={p.coverUrl} alt={p.name} />}
+              <PlaylistBadgeName>{p.name}</PlaylistBadgeName>
             </PlaylistBadge>
           ))}
           <ChangeLink onClick={onChangePlaylists}>ändern</ChangeLink>

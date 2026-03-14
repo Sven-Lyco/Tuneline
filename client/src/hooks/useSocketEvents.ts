@@ -42,6 +42,7 @@ export interface SocketState {
   revealedSong: SongFull | null;
   feedback: Feedback;
   revealed: boolean;
+  lastPlacedPlayerId: string | null;
   slot: number | null;
   setSlot: Dispatch<SetStateAction<number | null>>;
   disconnectedPlayer: { id: string; name: string; isHostDisconnected: boolean } | null;
@@ -67,6 +68,7 @@ export function useSocketEvents({
   const [revealedSong, setRevealedSong] = useState<SongFull | null>(null);
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [revealed, setRevealed] = useState(false);
+  const [lastPlacedPlayerId, setLastPlacedPlayerId] = useState<string | null>(null);
   const [slot, setSlot] = useState<number | null>(null);
   const [disconnectedPlayer, setDisconnectedPlayer] = useState<{
     id: string;
@@ -75,9 +77,11 @@ export function useSocketEvents({
   } | null>(null);
   const [result, setResult] = useState<GameResult | null>(null);
 
-  // Ref so socket callbacks always see the current isHost value without re-registering
+  // Refs so socket callbacks always see current values without re-registering
   const isHostRef = useRef(isHost);
   isHostRef.current = isHost;
+  const gameStateRef = useRef(gameState);
+  gameStateRef.current = gameState;
 
   const resetRoom = useCallback(() => {
     setRoomCode('');
@@ -141,6 +145,7 @@ export function useSocketEvents({
     });
 
     socket.on('placement_result', ({ correct, song, gameState: gs, nextSong }) => {
+      setLastPlacedPlayerId(gameStateRef.current?.currentPlayerId ?? null);
       setRevealedSong(song);
       setFeedback(correct ? 'ok' : 'no');
       setRevealed(true);
@@ -151,6 +156,7 @@ export function useSocketEvents({
         setFeedback(null);
         setRevealed(false);
         setRevealedSong(null);
+        setLastPlacedPlayerId(null);
         setSlot(null);
         if (nextSong) {
           setCurrentSong(nextSong);
@@ -158,7 +164,7 @@ export function useSocketEvents({
             startSong(nextSong.preview);
           }
         }
-      }, 2200);
+      }, 3000);
     });
 
     socket.on('game_over', ({ players, lastSong, lastCorrect, lastPlayerId, winnerLastSong }) => {
@@ -242,6 +248,7 @@ export function useSocketEvents({
     revealedSong,
     feedback,
     revealed,
+    lastPlacedPlayerId,
     slot,
     setSlot,
     disconnectedPlayer,

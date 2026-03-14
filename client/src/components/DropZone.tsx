@@ -33,7 +33,7 @@ const Bar = styled.div`
 
   &[data-active='true'] {
     width: 5px;
-    height: 75px;
+    height: 60px;
     background: #ff2d78;
     box-shadow: 0 0 12px rgba(255, 45, 120, 0.4);
   }
@@ -66,7 +66,7 @@ export function DropZone({ active, onClick, disabled }: DropZoneProps) {
       onMouseLeave={() => setHovered(false)}
     >
       <Bar data-active={String(isActive)} />
-      <Arrow data-active={String(isActive)}>▼</Arrow>
+      <Arrow data-active={String(!disabled)}>▼</Arrow>
     </Container>
   );
 }

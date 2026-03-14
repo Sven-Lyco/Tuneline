@@ -32,8 +32,6 @@ const TimelineLabel = styled.div`
 const TimelineArea = styled.div`
   overflow-x: auto;
   overflow-y: hidden;
-  display: flex;
-  align-items: center;
   min-height: 150px;
   padding: 0.5rem 0;
 
@@ -53,7 +51,8 @@ const TimelineArea = styled.div`
 const TimelineInner = styled.div`
   display: flex;
   align-items: center;
-  padding: 0.5rem 2rem;
+  width: fit-content;
+  margin: 0 auto;
 `;
 
 const SongTile = styled.div<{ highlight: string }>`

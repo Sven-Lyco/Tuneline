@@ -1,6 +1,7 @@
 import styled from '@emotion/styled';
 import type { RoomPlayer } from '@tuneline/shared';
 import { PLAYER_COLORS } from '../../constants';
+import { RoomCodeCopy } from '../RoomCodeCopy';
 
 interface GameHeaderProps {
   roomCode: string;
@@ -42,25 +43,6 @@ const RoundBadge = styled.div`
   text-transform: uppercase;
 `;
 
-const RoomCodeBadge = styled.button`
-  background: transparent;
-  border: 1px solid #2a2a3a;
-  border-radius: 8px;
-  padding: 0.25rem 0.6rem;
-  font-family: 'Space Mono', monospace;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 2px;
-  color: #4a4a6a;
-  cursor: pointer;
-  transition: border-color 0.2s, color 0.2s;
-  white-space: nowrap;
-
-  &:hover {
-    border-color: #4a4a6a;
-    color: #7a7a8e;
-  }
-`;
 
 const PlayerBadges = styled.div`
   display: flex;
@@ -105,12 +87,7 @@ export function GameHeader({ roomCode, players, currentPlayerId, round, rounds, 
     <Header>
       <HeaderTitle>TUNELINE</HeaderTitle>
       <RoundBadge>RUNDE {round}/{rounds}</RoundBadge>
-      <RoomCodeBadge
-        onClick={() => { void navigator.clipboard.writeText(roomCode); }}
-        title="Raum-Code kopieren"
-      >
-        {roomCode}
-      </RoomCodeBadge>
+      <RoomCodeCopy roomCode={roomCode} variant="badge" />
       <PlayerBadges>
         {players.map((p, i) => {
           const isActive = p.id === currentPlayerId;

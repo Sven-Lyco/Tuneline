@@ -1,9 +1,9 @@
-import { useState } from 'react';
 import styled from '@emotion/styled';
 import type { LobbyState, AudioMode } from '@tuneline/shared';
 import type { SpotifyPlaylist } from '../types';
 import { PLAYER_COLORS } from '../constants';
 import { Label } from '../components/Label';
+import { RoomCodeCopy } from '../components/RoomCodeCopy';
 import { PlaylistBadge, PlaylistBadgeCover, PlaylistBadgeName } from '../components/PlaylistBadge';
 
 interface LobbyScreenProps {
@@ -64,37 +64,6 @@ const Card = styled.div`
   max-width: 480px;
 `;
 
-const RoomCodeBlock = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  background: #08080d;
-  border: 1.5px solid #2a2a3a;
-  border-radius: 14px;
-  padding: 1rem 1.25rem;
-  margin-bottom: 1.5rem;
-  cursor: pointer;
-
-  &:hover {
-    border-color: #4a4a6a;
-  }
-`;
-
-const CodeText = styled.div`
-  font-family: 'Space Mono', monospace;
-  font-size: 2rem;
-  font-weight: 700;
-  letter-spacing: 6px;
-  color: #a855f7;
-  flex: 1;
-`;
-
-const CopyIcon = styled.div`
-  font-size: 1.1rem;
-  color: #4a4a6a;
-  flex-shrink: 0;
-  line-height: 1;
-`;
 
 const PlayerList = styled.div`
   display: flex;
@@ -269,11 +238,6 @@ const ChangePlaylistLink = styled.button`
   }
 `;
 
-const CopiedFeedback = styled.span`
-  color: #06d6a0;
-  font-size: 0.7rem;
-`;
-
 // ── Component ──────────────────────────────────────────────────
 
 export function LobbyScreen({
@@ -289,15 +253,6 @@ export function LobbyScreen({
   onRoundsChange,
   onChangePlaylists,
 }: LobbyScreenProps) {
-  const [copied, setCopied] = useState(false);
-
-  const copyCode = () => {
-    const url = `${window.location.origin}/?room=${roomCode}`;
-    void navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
-
   const canStart = isHost && lobbyState.players.length >= 2;
 
   return (
@@ -307,14 +262,7 @@ export function LobbyScreen({
 
       <Card>
         <Label>Raum-Code</Label>
-        <RoomCodeBlock onClick={copyCode}>
-          <CodeText>{roomCode}</CodeText>
-          {copied ? (
-            <CopiedFeedback>✓</CopiedFeedback>
-          ) : (
-            <CopyIcon>⎘</CopyIcon>
-          )}
-        </RoomCodeBlock>
+        <RoomCodeCopy roomCode={roomCode} />
 
         <Label>Spieler ({lobbyState.players.length})</Label>
         <PlayerList>

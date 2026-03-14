@@ -74,7 +74,6 @@ const Input = styled.input`
   font-size: 1.1rem;
   font-weight: 700;
   letter-spacing: 3px;
-  text-transform: uppercase;
   outline: none;
   box-sizing: border-box;
 
@@ -103,7 +102,8 @@ const JoinButton = styled.button<{ ready: string }>`
   padding: 0.85rem;
   border-radius: 14px;
   border: none;
-  background: ${({ ready }) => (ready === 'true' ? 'linear-gradient(135deg, #a855f7, #06d6a0)' : '#1e1e2e')};
+  background: ${({ ready }) =>
+    ready === 'true' ? 'linear-gradient(135deg, #a855f7, #06d6a0)' : '#1e1e2e'};
   color: ${({ ready }) => (ready === 'true' ? '#fff' : '#444')};
   font-family: 'Outfit', sans-serif;
   font-size: 1rem;

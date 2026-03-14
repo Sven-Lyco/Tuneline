@@ -3,6 +3,7 @@ import { redirectToSpotify } from '../api/spotify';
 
 interface LoginScreenProps {
   onJoinAsGuest: () => void;
+  onHelp: () => void;
 }
 
 const Screen = styled.div`
@@ -106,6 +107,30 @@ const DividerText = styled.span`
   letter-spacing: 2px;
 `;
 
+const HelpButton = styled.button`
+  position: absolute;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  background: transparent;
+  border: 1.5px solid #2a2a3a;
+  border-radius: 50%;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #4a4a6a;
+  font-size: 1rem;
+  font-weight: 700;
+  transition: all 0.2s;
+
+  &:hover {
+    border-color: #ff2d78;
+    color: #ff2d78;
+  }
+`;
+
 const GuestButton = styled.button`
   width: 100%;
   padding: 0.8rem 1.5rem;
@@ -132,7 +157,7 @@ const SpotifyIcon = () => (
   </svg>
 );
 
-export function LoginScreen({ onJoinAsGuest }: LoginScreenProps) {
+export function LoginScreen({ onJoinAsGuest, onHelp }: LoginScreenProps) {
   return (
     <Screen>
       <Title>TUNELINE</Title>
@@ -155,6 +180,7 @@ export function LoginScreen({ onJoinAsGuest }: LoginScreenProps) {
           Raum beitreten (Gast)
         </GuestButton>
       </Card>
+      <HelpButton onClick={onHelp} title="Spielanleitung">?</HelpButton>
     </Screen>
   );
 }

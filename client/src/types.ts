@@ -24,7 +24,8 @@ export type Screen =
   | 'loading'
   | 'lobby'
   | 'game'
-  | 'result';
+  | 'result'
+  | 'help';
 
 export type Feedback = 'ok' | 'no' | null;
 

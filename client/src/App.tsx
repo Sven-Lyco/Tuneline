@@ -22,6 +22,7 @@ import { LoadingScreen } from './screens/LoadingScreen';
 import { LobbyScreen } from './screens/LobbyScreen';
 import { GameScreen } from './screens/GameScreen';
 import { ResultScreen } from './screens/ResultScreen';
+import { HelpScreen } from './screens/HelpScreen';
 
 // ── Background ─────────────────────────────────────────────────
 
@@ -273,8 +274,11 @@ export default function App() {
             setJoinCode(savedCode);
             setScreen('join');
           }}
+          onHelp={() => setScreen('help')}
         />
       )}
+
+      {screen === 'help' && <HelpScreen onBack={() => setScreen('login')} />}
 
       {screen === 'join' && (
         <JoinScreen

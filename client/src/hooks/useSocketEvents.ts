@@ -9,8 +9,7 @@ import type {
 } from '@tuneline/shared';
 import type { Feedback, GameResult, Screen } from '../types';
 import { socket } from '../socket';
-
-const PLAYER_TOKEN_KEY = 'tuneline_player_token';
+import { STORAGE_KEYS } from '../constants';
 
 function shouldPlay(audioMode: AudioMode, isHost: boolean): boolean {
   return audioMode === 'all' || isHost;
@@ -98,8 +97,8 @@ export function useSocketEvents({
       setRoomCode(rc);
       setMyPlayerId(playerId);
       setIsHost(true);
-      sessionStorage.setItem(PLAYER_TOKEN_KEY, playerToken);
-      sessionStorage.setItem('tuneline_room_code', rc);
+      sessionStorage.setItem(STORAGE_KEYS.playerToken, playerToken);
+      sessionStorage.setItem(STORAGE_KEYS.roomCode, rc);
     });
 
     socket.on('room_joined', ({ playerId, playerToken, room }) => {
@@ -109,8 +108,8 @@ export function useSocketEvents({
       setRoomCode(room.roomCode);
       setAudioMode(room.audioMode);
       setRounds(room.rounds);
-      sessionStorage.setItem(PLAYER_TOKEN_KEY, playerToken);
-      sessionStorage.setItem('tuneline_room_code', room.roomCode);
+      sessionStorage.setItem(STORAGE_KEYS.playerToken, playerToken);
+      sessionStorage.setItem(STORAGE_KEYS.roomCode, room.roomCode);
       if (room.status !== 'playing') {
         setScreen('lobby');
       }

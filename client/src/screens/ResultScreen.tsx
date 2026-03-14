@@ -1,6 +1,6 @@
 import styled from '@emotion/styled';
 import type { RoomPlayer, SongFull } from '@tuneline/shared';
-import { PLAYER_COLORS } from '../constants';
+import { PLAYER_COLORS, RANK_MEDALS } from '../constants';
 import { Confetti } from '../components/Confetti';
 
 interface ResultScreenProps {
@@ -219,7 +219,6 @@ const RestartButton = styled.button`
   }
 `;
 
-const RANK_MEDALS = ['🥇', '🥈', '🥉'];
 
 export function ResultScreen({ players, isHost, lastSong, lastCorrect, lastPlayerId, winnerLastSong, onRestart }: ResultScreenProps) {
   const ranked = [...players]

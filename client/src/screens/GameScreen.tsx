@@ -7,6 +7,7 @@ import { SongCard } from '../components/game/SongCard';
 import { MyTimeline } from '../components/game/MyTimeline';
 import { OtherPlayers } from '../components/game/OtherPlayers';
 import { DisconnectOverlay } from '../components/game/DisconnectOverlay';
+import { Reactions } from '../components/Reactions';
 
 interface GameScreenProps {
   myPlayerId: string;
@@ -172,6 +173,8 @@ export function GameScreen({
           </PlaceButton>
         </PlaceButtonRow>
       </GameBody>
+
+      <Reactions players={gameState.players} />
 
       {disconnectedPlayer && (
         <DisconnectOverlay

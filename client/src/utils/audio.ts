@@ -1,13 +1,13 @@
-const VOLUME_KEY = 'tuneline_volume';
+import { STORAGE_KEYS } from '../constants';
 let gAudio: HTMLAudioElement | null = null;
 
 export function getVolume(): number {
-  const stored = localStorage.getItem(VOLUME_KEY);
+  const stored = localStorage.getItem(STORAGE_KEYS.volume);
   return stored !== null ? parseFloat(stored) : 0.8;
 }
 
 export function setVolume(v: number): void {
-  localStorage.setItem(VOLUME_KEY, String(v));
+  localStorage.setItem(STORAGE_KEYS.volume, String(v));
   if (gAudio) gAudio.volume = v;
 }
 

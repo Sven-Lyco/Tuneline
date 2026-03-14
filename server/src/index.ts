@@ -374,6 +374,16 @@ io.on('connection', (socket) => {
     logger.info({ roomCode, playerId }, 'kick_player');
   });
 
+  socket.on('send_reaction', ({ emoji }) => {
+    if (isLimited('send_reaction')) return;
+    if (typeof emoji !== 'string') return;
+    const roomCode = rooms.getRoomCodeForSocket(socket.id);
+    if (!roomCode) return;
+    const player = rooms.getPlayerForSocket(socket.id);
+    if (!player) return;
+    io.to(roomCode).emit('reaction_received', { playerId: player.id, playerName: player.name, emoji });
+  });
+
   socket.on('disconnect', () => onDisconnect(socket.id, io));
 });
 

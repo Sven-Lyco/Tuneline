@@ -66,6 +66,7 @@ export interface ClientToServerEvents {
   kick_player: (data: { playerId: string }) => void;
   skip_player: () => void;
   return_to_lobby: () => void;
+  send_reaction: (data: { emoji: string }) => void;
 }
 
 export interface ServerToClientEvents {
@@ -116,4 +117,5 @@ export interface ServerToClientEvents {
   player_kicked: (data: { playerId: string }) => void;
   game_loading: () => void;
   error: (data: { message: string }) => void;
+  reaction_received: (data: { playerId: string; playerName: string; emoji: string }) => void;
 }

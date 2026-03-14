@@ -71,6 +71,16 @@ export class RoomManager {
       }));
   }
 
+  getPlayerForSocket(socketId: string): { id: string; name: string } | null {
+    const roomCode = this.socketToRoom.get(socketId);
+    if (!roomCode) return null;
+    const room = this.rooms.get(roomCode);
+    if (!room) return null;
+    const player = this.getPlayer(socketId, room);
+    if (!player) return null;
+    return { id: player.id, name: player.name };
+  }
+
   // ── Room lifecycle ───────────────────────────────────────────────────────
 
   createRoom(

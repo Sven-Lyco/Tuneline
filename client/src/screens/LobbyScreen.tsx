@@ -292,7 +292,8 @@ export function LobbyScreen({
   const [copied, setCopied] = useState(false);
 
   const copyCode = () => {
-    void navigator.clipboard.writeText(roomCode);
+    const url = `${window.location.origin}/?room=${roomCode}`;
+    void navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };

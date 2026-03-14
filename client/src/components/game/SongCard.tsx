@@ -94,6 +94,12 @@ const SongTitle = styled.div`
   text-overflow: ellipsis;
   white-space: nowrap;
   margin-bottom: 0.2rem;
+  transition: filter 0.3s;
+
+  &[data-blurred='true'] {
+    filter: blur(10px);
+    user-select: none;
+  }
 
   @media (max-width: 480px) {
     font-size: 1.2rem;
@@ -104,6 +110,12 @@ const SongArtist = styled.div`
   font-size: 1.05rem;
   color: #7a7a8e;
   margin-bottom: 0.6rem;
+  transition: filter 0.3s;
+
+  &[data-blurred='true'] {
+    filter: blur(8px);
+    user-select: none;
+  }
 
   @media (max-width: 480px) {
     font-size: 0.9rem;
@@ -240,8 +252,8 @@ export function SongCard({
         <CardBody>
           <Vinyl spinning={playing} cover={currentSong.cover} size={vinylSize} />
           <SongInfo>
-            <SongTitle>{currentSong.title}</SongTitle>
-            <SongArtist>{currentSong.artist}</SongArtist>
+            <SongTitle data-blurred={String(isMyTurn && !revealed)}>{currentSong.title}</SongTitle>
+            <SongArtist data-blurred={String(isMyTurn && !revealed)}>{currentSong.artist}</SongArtist>
             {displayYear !== null && <RevealedYear>{displayYear}</RevealedYear>}
             {!revealed && (
               <AudioControls>

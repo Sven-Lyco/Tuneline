@@ -16,7 +16,7 @@
     "prettier:check": "npx prettier --check client/src/**/*.{ts,tsx}",
     "prettier:write": "npx prettier --write client/src/**/*.{ts,tsx}",
     "format": "npm run format -w @tuneline/client",
-    "prepare": "husky"
+    "prepare": "husky || true"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

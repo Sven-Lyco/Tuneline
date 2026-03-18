@@ -1,7 +1,11 @@
 {
   "name": "tuneline",
   "private": true,
-  "workspaces": ["client", "server", "shared"],
+  "workspaces": [
+    "client",
+    "server",
+    "shared"
+  ],
   "scripts": {
     "dev": "concurrently -n client,server -c cyan,yellow \"npm run dev -w @tuneline/client\" \"npm run dev -w @tuneline/server\"",
     "dev:client": "npm run dev -w @tuneline/client",
@@ -12,6 +16,7 @@
     "format": "npm run format -w @tuneline/client"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "concurrently": "^9.1.2",
+    "flatted": "^3.4.0"
   }
 }

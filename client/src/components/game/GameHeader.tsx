@@ -44,19 +44,26 @@ const RoundBadge = styled.div`
   text-transform: uppercase;
 `;
 
-
 const PlayerBadges = styled.div`
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
 `;
 
-
-export function GameHeader({ roomCode, players, currentPlayerId, round, rounds, myPlayerId }: GameHeaderProps) {
+export function GameHeader({
+  roomCode,
+  players,
+  currentPlayerId,
+  round,
+  rounds,
+  myPlayerId,
+}: GameHeaderProps) {
   return (
     <Header>
       <HeaderTitle>TUNELINE</HeaderTitle>
-      <RoundBadge>RUNDE {round}/{rounds}</RoundBadge>
+      <RoundBadge>
+        RUNDE {round}/{rounds}
+      </RoundBadge>
       <RoomCodeCopy roomCode={roomCode} variant="badge" />
       <PlayerBadges>
         {players.map((p, i) => {

@@ -3,11 +3,7 @@ import styled from '@emotion/styled';
 import type { SpotifyPlaylist } from './types';
 import { STORAGE_KEYS } from './constants';
 import type { AudioMode } from '@tuneline/shared';
-import {
-  isAuthenticated,
-  loadSongsFromPlaylists,
-  logout,
-} from './api/spotify';
+import { isAuthenticated, loadSongsFromPlaylists, logout } from './api/spotify';
 import { stopAudio } from './utils/audio';
 import { socket } from './socket';
 import { useGameAudio } from './hooks/useGameAudio';
@@ -21,7 +17,9 @@ import { LoadingScreen } from './screens/LoadingScreen';
 import { LobbyScreen } from './screens/LobbyScreen';
 import { GameScreen } from './screens/GameScreen';
 import { ResultScreen } from './screens/ResultScreen';
-const HelpScreen = lazy(() => import('./screens/HelpScreen').then((m) => ({ default: m.HelpScreen })));
+const HelpScreen = lazy(() =>
+  import('./screens/HelpScreen').then((m) => ({ default: m.HelpScreen }))
+);
 
 // ── Background ─────────────────────────────────────────────────
 
@@ -102,21 +100,27 @@ export default function App() {
   const { playing, volume, startSong, stopSong, toggle, changeVolume } = useGameAudio();
 
   const {
-    screen, setScreen,
-    loadingMsg, setLoadingMsg,
+    screen,
+    setScreen,
+    loadingMsg,
+    setLoadingMsg,
     roomCode,
     myPlayerId,
     isHost,
-    lobbyState, setLobbyState,
-    audioMode, setAudioMode,
-    rounds, setRounds,
+    lobbyState,
+    setLobbyState,
+    audioMode,
+    setAudioMode,
+    rounds,
+    setRounds,
     gameState,
     currentSong,
     revealedSong,
     feedback,
     revealed,
     lastPlacedPlayerId,
-    slot, setSlot,
+    slot,
+    setSlot,
     disconnectedPlayer,
     result,
     resetRoom,
@@ -212,7 +216,10 @@ export default function App() {
     try {
       const playerCount = lobbyState?.players.length ?? 1;
       const songsNeeded = Math.ceil(playerCount * (rounds + 1) * 1.5);
-      const songs = await loadSongsFromPlaylists(selectedPlaylists.map((p) => p.id), songsNeeded);
+      const songs = await loadSongsFromPlaylists(
+        selectedPlaylists.map((p) => p.id),
+        songsNeeded
+      );
 
       if (songs.length < playerCount + 3) {
         setLoadingMsg('Nicht genug Songs. Bitte andere Playlisten wählen.');
@@ -309,7 +316,10 @@ export default function App() {
           audioMode={audioMode}
           setAudioMode={setAudioMode}
           onCreateRoom={handleCreateRoom}
-          onChangePlaylists={() => { setPlaylistReturnTarget('menu'); setScreen('playlists'); }}
+          onChangePlaylists={() => {
+            setPlaylistReturnTarget('menu');
+            setScreen('playlists');
+          }}
         />
       )}
 
@@ -327,7 +337,10 @@ export default function App() {
           onLeave={handleLeave}
           onAudioModeChange={handleAudioModeChange}
           onRoundsChange={handleRoundsChange}
-          onChangePlaylists={() => { setPlaylistReturnTarget('lobby'); setScreen('playlists'); }}
+          onChangePlaylists={() => {
+            setPlaylistReturnTarget('lobby');
+            setScreen('playlists');
+          }}
         />
       )}
 

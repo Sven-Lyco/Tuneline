@@ -78,9 +78,13 @@ export function useSocketEvents({
 
   // Refs so socket callbacks always see current values without re-registering
   const isHostRef = useRef(isHost);
-  isHostRef.current = isHost;
   const gameStateRef = useRef(gameState);
-  gameStateRef.current = gameState;
+  useEffect(() => {
+    isHostRef.current = isHost;
+  });
+  useEffect(() => {
+    gameStateRef.current = gameState;
+  });
 
   const resetRoom = useCallback(() => {
     setRoomCode('');
@@ -168,7 +172,13 @@ export function useSocketEvents({
 
     socket.on('game_over', ({ players, lastSong, lastCorrect, lastPlayerId, winnerLastSong }) => {
       stopSong();
-      setResult({ players, lastSong, lastCorrect, lastPlayerId, winnerLastSong: winnerLastSong ?? null });
+      setResult({
+        players,
+        lastSong,
+        lastCorrect,
+        lastPlayerId,
+        winnerLastSong: winnerLastSong ?? null,
+      });
       setScreen('result');
     });
 
@@ -179,15 +189,18 @@ export function useSocketEvents({
       showError('Du wurdest aus dem Raum entfernt.');
     });
 
-    socket.on('game_paused', ({ disconnectedPlayerId, disconnectedPlayerName, isHostDisconnected, gameState: gs }) => {
-      setGameState(gs);
-      stopSong();
-      setDisconnectedPlayer({
-        id: disconnectedPlayerId,
-        name: disconnectedPlayerName,
-        isHostDisconnected,
-      });
-    });
+    socket.on(
+      'game_paused',
+      ({ disconnectedPlayerId, disconnectedPlayerName, isHostDisconnected, gameState: gs }) => {
+        setGameState(gs);
+        stopSong();
+        setDisconnectedPlayer({
+          id: disconnectedPlayerId,
+          name: disconnectedPlayerName,
+          isHostDisconnected,
+        });
+      }
+    );
 
     socket.on('game_resumed', ({ gameState: gs, currentSong: cs }) => {
       setDisconnectedPlayer(null);

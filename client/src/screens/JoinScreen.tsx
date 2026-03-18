@@ -57,7 +57,6 @@ const NameInput = styled(Input)`
   font-weight: 500;
 `;
 
-
 // ── Component ──────────────────────────────────────────────────
 
 export function JoinScreen({ initialCode = '', onJoin, onBack }: JoinScreenProps) {
@@ -97,12 +96,19 @@ export function JoinScreen({ initialCode = '', onJoin, onBack }: JoinScreenProps
             onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
           />
         </div>
-        <PrimaryButton ready={isReady} variant="purple-teal" onClick={handleSubmit} style={{ marginTop: '0.5rem' }}>
+        <PrimaryButton
+          ready={isReady}
+          variant="purple-teal"
+          onClick={handleSubmit}
+          style={{ marginTop: '0.5rem' }}
+        >
           Beitreten →
         </PrimaryButton>
       </Card>
 
-      <LinkButton style={{ marginTop: '1rem' }} onClick={onBack}>← Zurück</LinkButton>
+      <LinkButton style={{ marginTop: '1rem' }} onClick={onBack}>
+        ← Zurück
+      </LinkButton>
     </CenteredScreen>
   );
 }

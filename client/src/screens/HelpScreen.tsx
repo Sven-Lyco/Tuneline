@@ -189,7 +189,6 @@ const MockCodeChar = styled.div<{ filled: string }>`
   color: ${({ filled }) => (filled === 'true' ? '#ff2d78' : '#2a2a3a')};
 `;
 
-
 // Song card mockup (simplified)
 const MockSongCard = styled.div`
   display: flex;
@@ -480,11 +479,25 @@ function PlayerTab() {
           >
             — Deine Timeline —
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', overflowX: 'auto', padding: '0.5rem 0', gap: 0 }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              overflowX: 'auto',
+              padding: '0.5rem 0',
+              gap: 0,
+            }}
+          >
             <DropZone active={false} onClick={() => {}} disabled={false} />
             <SongTile year={1979} title="Highway to Hell" artist="AC/DC" variant="timeline" />
             <DropZone active={true} onClick={() => {}} disabled={false} />
-            <SongTile year={'???' as unknown as number} title="Neuer Song" artist="Zum Platzieren" variant="timeline" highlight={true} />
+            <SongTile
+              year={'???' as unknown as number}
+              title="Neuer Song"
+              artist="Zum Platzieren"
+              variant="timeline"
+              highlight={true}
+            />
             <DropZone active={false} onClick={() => {}} disabled={false} />
             <SongTile year={1994} title="Creep" artist="Radiohead" variant="timeline" />
             <DropZone active={false} onClick={() => {}} disabled={false} />
@@ -599,8 +612,12 @@ function HostTab() {
             <MockSettingRow>
               <MockSettingLabel>Audio</MockSettingLabel>
               <div style={{ display: 'flex', gap: '4px' }}>
-                <PillButton active={true} color="purple">Alle</PillButton>
-                <PillButton active={false} color="purple">Nur Host</PillButton>
+                <PillButton active={true} color="purple">
+                  Alle
+                </PillButton>
+                <PillButton active={false} color="purple">
+                  Nur Host
+                </PillButton>
               </div>
             </MockSettingRow>
           </MockSettings>

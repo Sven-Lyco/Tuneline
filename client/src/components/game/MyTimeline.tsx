@@ -44,7 +44,6 @@ const TimelineInner = styled.div`
   margin: 0 auto;
 `;
 
-
 export function MyTimeline({
   timeline,
   slot,

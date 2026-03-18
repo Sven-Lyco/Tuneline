@@ -58,7 +58,6 @@ const Actions = styled.div`
   gap: 0.6rem;
 `;
 
-
 const WaitButton = styled.button`
   padding: 0.75rem;
   border-radius: 12px;
@@ -99,7 +98,10 @@ export function DisconnectOverlay({
 
         {isHost && !isHostDisconnected && (
           <Actions>
-            <PrimaryButton onClick={onSkipPlayer} style={{ padding: '0.75rem', fontSize: '0.95rem' }}>
+            <PrimaryButton
+              onClick={onSkipPlayer}
+              style={{ padding: '0.75rem', fontSize: '0.95rem' }}
+            >
               Ohne {name} weiterspielen
             </PrimaryButton>
             <WaitButton disabled>Warten auf Reconnect…</WaitButton>

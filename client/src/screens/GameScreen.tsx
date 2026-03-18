@@ -52,7 +52,6 @@ const GameBody = styled.div`
   width: 100%;
 `;
 
-
 const PlaceButtonRow = styled.div`
   display: flex;
   justify-content: center;
@@ -109,18 +108,21 @@ export function GameScreen({
   onSkipPlayer,
 }: GameScreenProps) {
   const isMyTurn = gameState.currentPlayerId === myPlayerId;
-  const { activePlayer, lastPlacedPlayer, otherPlayers, myTimeline, activePlayerColor } = useMemo(() => {
-    const myPlayer = gameState.players.find((p) => p.id === myPlayerId);
-    const activePlayerIndex = gameState.players.findIndex((p) => p.id === gameState.currentPlayerId);
-    return {
-      myPlayer,
-      activePlayer: gameState.players.find((p) => p.id === gameState.currentPlayerId),
-      lastPlacedPlayer: gameState.players.find((p) => p.id === lastPlacedPlayerId),
-      otherPlayers: gameState.players.filter((p) => p.id !== myPlayerId),
-      myTimeline: sortByYear(myPlayer?.timeline ?? []),
-      activePlayerColor: getPlayerColor(activePlayerIndex),
-    };
-  }, [gameState.players, gameState.currentPlayerId, myPlayerId, lastPlacedPlayerId]);
+  const { activePlayer, lastPlacedPlayer, otherPlayers, myTimeline, activePlayerColor } =
+    useMemo(() => {
+      const myPlayer = gameState.players.find((p) => p.id === myPlayerId);
+      const activePlayerIndex = gameState.players.findIndex(
+        (p) => p.id === gameState.currentPlayerId
+      );
+      return {
+        myPlayer,
+        activePlayer: gameState.players.find((p) => p.id === gameState.currentPlayerId),
+        lastPlacedPlayer: gameState.players.find((p) => p.id === lastPlacedPlayerId),
+        otherPlayers: gameState.players.filter((p) => p.id !== myPlayerId),
+        myTimeline: sortByYear(myPlayer?.timeline ?? []),
+        activePlayerColor: getPlayerColor(activePlayerIndex),
+      };
+    }, [gameState.players, gameState.currentPlayerId, myPlayerId, lastPlacedPlayerId]);
   const isReady = isMyTurn && slot !== null && !revealed;
 
   return (

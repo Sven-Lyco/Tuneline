@@ -116,16 +116,17 @@ const TimelineScroll = styled.div`
   overflow-x: auto;
   padding-bottom: 0.2rem;
   scrollbar-width: none;
-  &::-webkit-scrollbar { display: none; }
+  &::-webkit-scrollbar {
+    display: none;
+  }
 `;
-
 
 const MissedCard = styled.div`
   flex-shrink: 0;
   width: 64px;
   border-radius: 8px;
   border: 1.5px dashed #ff4444;
-  background: rgba(255,68,68,0.06);
+  background: rgba(255, 68, 68, 0.06);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -162,10 +163,20 @@ const RestartButton = styled.button`
   }
 `;
 
-
-export function ResultScreen({ players, isHost, lastSong, lastCorrect, lastPlayerId, winnerLastSong, onRestart }: ResultScreenProps) {
+export function ResultScreen({
+  players,
+  isHost,
+  lastSong,
+  lastCorrect,
+  lastPlayerId,
+  winnerLastSong,
+  onRestart,
+}: ResultScreenProps) {
   const ranked = useMemo(
-    () => [...players].map((p, i) => ({ ...p, color: getPlayerColor(i) })).sort((a, b) => b.score - a.score),
+    () =>
+      [...players]
+        .map((p, i) => ({ ...p, color: getPlayerColor(i) }))
+        .sort((a, b) => b.score - a.score),
     [players]
   );
 
@@ -183,7 +194,14 @@ export function ResultScreen({ players, isHost, lastSong, lastCorrect, lastPlaye
   return (
     <CenteredScreen style={{ padding: '2rem' }}>
       {!isTie && <Confetti />}
-      <Card style={{ maxWidth: '420px', padding: '2.5rem', textAlign: 'center', animation: 'slideIn 0.5s ease-out' }}>
+      <Card
+        style={{
+          maxWidth: '420px',
+          padding: '2.5rem',
+          textAlign: 'center',
+          animation: 'slideIn 0.5s ease-out',
+        }}
+      >
         <GameOverLabel>Spiel beendet</GameOverLabel>
         <Crown>{isTie ? '🤝' : '👑'}</Crown>
         {isTie ? (

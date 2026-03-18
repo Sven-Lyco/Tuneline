@@ -23,8 +23,14 @@ const ButtonEl = styled.button`
     color: #06d6a0;
   }
   &:hover {
-    &[data-color='purple'] { border-color: #a855f7; color: #a855f7; }
-    &[data-color='teal'] { border-color: #06d6a0; color: #06d6a0; }
+    &[data-color='purple'] {
+      border-color: #a855f7;
+      color: #a855f7;
+    }
+    &[data-color='teal'] {
+      border-color: #06d6a0;
+      color: #06d6a0;
+    }
   }
 `;
 

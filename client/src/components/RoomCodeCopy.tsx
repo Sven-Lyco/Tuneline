@@ -64,7 +64,9 @@ const Badge = styled.button`
   letter-spacing: 2px;
   color: #4a4a6a;
   cursor: pointer;
-  transition: border-color 0.2s, color 0.2s;
+  transition:
+    border-color 0.2s,
+    color 0.2s;
   white-space: nowrap;
   position: relative;
 
@@ -83,9 +85,10 @@ const Badge = styled.button`
 
 const Tooltip = styled.span<{ below?: boolean }>`
   position: absolute;
-  ${({ below }) => below
-    ? 'top: calc(100% + 8px); transform: translateX(-50%) translateY(-4px);'
-    : 'bottom: calc(100% + 8px); transform: translateX(-50%) translateY(4px);'}
+  ${({ below }) =>
+    below
+      ? 'top: calc(100% + 8px); transform: translateX(-50%) translateY(-4px);'
+      : 'bottom: calc(100% + 8px); transform: translateX(-50%) translateY(4px);'}
   left: 50%;
   background: #1e1e2e;
   border: 1px solid #2a2a3a;
@@ -97,7 +100,9 @@ const Tooltip = styled.span<{ below?: boolean }>`
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.15s, transform 0.15s;
+  transition:
+    opacity 0.15s,
+    transform 0.15s;
   z-index: 100;
 `;
 
@@ -111,7 +116,9 @@ export function RoomCodeCopy({ roomCode, variant = 'block' }: RoomCodeCopyProps)
     return (
       <Badge onClick={copyCode}>
         {copied ? '✓ Kopiert' : roomCode}
-        <Tooltip data-tooltip below>{tooltipText}</Tooltip>
+        <Tooltip data-tooltip below>
+          {tooltipText}
+        </Tooltip>
       </Badge>
     );
   }

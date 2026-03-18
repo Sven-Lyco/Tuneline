@@ -91,11 +91,7 @@ export function OtherPlayers({ players, allPlayers, currentPlayerId }: OtherPlay
         const color = getPlayerColor(globalIdx);
         const sortedTl = sortByYear(p.timeline);
         return (
-          <PlayerPanel
-            key={p.id}
-            isActive={String(p.id === currentPlayerId)}
-            borderColor={color}
-          >
+          <PlayerPanel key={p.id} isActive={String(p.id === currentPlayerId)} borderColor={color}>
             <PlayerHeader>
               <Dot bg={color} />
               <PlayerName>{p.name}</PlayerName>

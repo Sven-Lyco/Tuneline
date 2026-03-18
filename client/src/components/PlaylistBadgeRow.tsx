@@ -54,7 +54,9 @@ export function PlaylistBadgeRow({
   return (
     <Row style={style}>
       {playlists.length === 0 ? (
-        <PlaylistBadge style={{ color: '#4a4a6a', background: 'none', border: '1px solid #2a2a3a' }}>
+        <PlaylistBadge
+          style={{ color: '#4a4a6a', background: 'none', border: '1px solid #2a2a3a' }}
+        >
           Keine gewählt
         </PlaylistBadge>
       ) : (

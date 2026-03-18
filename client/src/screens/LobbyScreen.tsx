@@ -90,16 +90,12 @@ const WaitingDots = styled.span`
   animation: pulse 1.5s ease-in-out infinite;
 `;
 
-
-
 const WaitingMsg = styled.div`
   text-align: center;
   color: #7a7a8e;
   font-size: 0.95rem;
   padding: 1rem 0;
 `;
-
-
 
 // ── Component ──────────────────────────────────────────────────
 
@@ -143,9 +139,7 @@ export function LobbyScreen({
               )}
             </PlayerRow>
           ))}
-          {lobbyState.players.length < 2 && (
-            <WaitingDots>Warten auf weitere Spieler…</WaitingDots>
-          )}
+          {lobbyState.players.length < 2 && <WaitingDots>Warten auf weitere Spieler…</WaitingDots>}
         </PlayerList>
 
         {isHost && (
@@ -170,12 +164,12 @@ export function LobbyScreen({
           </>
         )}
 
-        {!isHost && (
-          <WaitingMsg>Warten darauf, dass der Host das Spiel startet…</WaitingMsg>
-        )}
+        {!isHost && <WaitingMsg>Warten darauf, dass der Host das Spiel startet…</WaitingMsg>}
       </Card>
 
-      <LinkButton variant="muted" style={{ marginTop: '1.25rem' }} onClick={onLeave}>← Raum verlassen</LinkButton>
+      <LinkButton variant="muted" style={{ marginTop: '1.25rem' }} onClick={onLeave}>
+        ← Raum verlassen
+      </LinkButton>
     </CenteredScreen>
   );
 }

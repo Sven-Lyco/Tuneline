@@ -33,7 +33,9 @@ const SpotifyButton = styled.button`
   font-weight: 700;
   cursor: pointer;
   letter-spacing: 0.5px;
-  transition: background 0.2s, transform 0.15s;
+  transition:
+    background 0.2s,
+    transform 0.15s;
   margin-top: 0.5rem;
 
   &:hover {
@@ -120,10 +122,17 @@ export function LoginScreen({ onJoinAsGuest, onHelp }: LoginScreenProps) {
       <AppTitle />
       <AppSubtitle style={{ marginBottom: '3rem' }}>Musik · Timeline · Challenge</AppSubtitle>
 
-      <Card style={{ maxWidth: '380px', padding: '2.5rem 2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
-        <Tagline>
-          Verbinde dein Spotify-Konto und erstelle einen Raum für deine Freunde.
-        </Tagline>
+      <Card
+        style={{
+          maxWidth: '380px',
+          padding: '2.5rem 2rem',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '1rem',
+        }}
+      >
+        <Tagline>Verbinde dein Spotify-Konto und erstelle einen Raum für deine Freunde.</Tagline>
         <SpotifyButton onClick={() => void redirectToSpotify()}>
           <SpotifyIcon />
           Mit Spotify einloggen
@@ -133,11 +142,11 @@ export function LoginScreen({ onJoinAsGuest, onHelp }: LoginScreenProps) {
           <DividerText>oder</DividerText>
         </Divider>
 
-        <GuestButton onClick={onJoinAsGuest}>
-          Raum beitreten (Gast)
-        </GuestButton>
+        <GuestButton onClick={onJoinAsGuest}>Raum beitreten (Gast)</GuestButton>
       </Card>
-      <HelpButton onClick={onHelp} title="Spielanleitung">?</HelpButton>
+      <HelpButton onClick={onHelp} title="Spielanleitung">
+        ?
+      </HelpButton>
     </CenteredScreen>
   );
 }

@@ -39,17 +39,6 @@ interface PrimaryButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'pink' | 'purple-teal';
 }
 
-export function PrimaryButton({
-  ready = true,
-  variant = 'pink',
-  ...rest
-}: PrimaryButtonProps) {
-  return (
-    <ButtonEl
-      data-ready={String(ready)}
-      data-variant={variant}
-      disabled={!ready}
-      {...rest}
-    />
-  );
+export function PrimaryButton({ ready = true, variant = 'pink', ...rest }: PrimaryButtonProps) {
+  return <ButtonEl data-ready={String(ready)} data-variant={variant} disabled={!ready} {...rest} />;
 }

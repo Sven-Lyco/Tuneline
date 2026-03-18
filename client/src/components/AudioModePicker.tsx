@@ -21,7 +21,11 @@ export function AudioModePicker({ value, onChange, style }: AudioModePickerProps
       <PillButton active={value === 'all'} color="purple" onClick={() => onChange('all')}>
         🔊 Alle hören
       </PillButton>
-      <PillButton active={value === 'host-only'} color="purple" onClick={() => onChange('host-only')}>
+      <PillButton
+        active={value === 'host-only'}
+        color="purple"
+        onClick={() => onChange('host-only')}
+      >
         📺 Nur Host
       </PillButton>
     </Row>

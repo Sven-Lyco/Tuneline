@@ -118,7 +118,9 @@ const FAB = styled.button`
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: border-color 0.2s, transform 0.15s;
+  transition:
+    border-color 0.2s,
+    transform 0.15s;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 
   &:hover {
@@ -143,7 +145,15 @@ export function Reactions({ players }: ReactionsProps) {
   );
 
   useEffect(() => {
-    const handler = ({ playerId, playerName, emoji }: { playerId: string; playerName: string; emoji: string }) => {
+    const handler = ({
+      playerId,
+      playerName,
+      emoji,
+    }: {
+      playerId: string;
+      playerName: string;
+      emoji: string;
+    }) => {
       const color = getColor(playerId);
       const id = toastCounter.current++;
       setToasts((prev) => [...prev.slice(-4), { id, emoji, playerName, color }]);
@@ -151,7 +161,9 @@ export function Reactions({ players }: ReactionsProps) {
     };
 
     socket.on('reaction_received', handler);
-    return () => { socket.off('reaction_received', handler); };
+    return () => {
+      socket.off('reaction_received', handler);
+    };
   }, [getColor]);
 
   const sendReaction = (emoji: string) => {

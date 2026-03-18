@@ -52,7 +52,13 @@ interface PlayerChipProps {
   isMe?: boolean;
 }
 
-export function PlayerChip({ name, color, score, isActive = false, isMe = false }: PlayerChipProps) {
+export function PlayerChip({
+  name,
+  color,
+  score,
+  isActive = false,
+  isMe = false,
+}: PlayerChipProps) {
   return (
     <Chip
       data-active={String(isActive)}
@@ -60,7 +66,8 @@ export function PlayerChip({ name, color, score, isActive = false, isMe = false 
     >
       <Dot style={{ background: color }} />
       <Name data-active={String(isActive)}>
-        {name}{isMe ? ' (du)' : ''}
+        {name}
+        {isMe ? ' (du)' : ''}
       </Name>
       {score !== undefined && <Score>{score}</Score>}
     </Chip>

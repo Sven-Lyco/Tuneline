@@ -24,7 +24,6 @@ interface MenuScreenProps {
 
 // ── Styles ─────────────────────────────────────────────────────
 
-
 const NameInput = styled.input`
   width: 100%;
   padding: 0.55rem 0.7rem;
@@ -42,9 +41,6 @@ const NameInput = styled.input`
     border-color: #3a3a5a;
   }
 `;
-
-
-
 
 // ── Component ──────────────────────────────────────────────────
 

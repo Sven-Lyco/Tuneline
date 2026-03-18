@@ -1,4 +1,5 @@
 import styled from '@emotion/styled';
+import { AppTitle } from '../components/AppTitle';
 
 interface LoadingScreenProps {
   message: string;
@@ -12,16 +13,6 @@ const Screen = styled.div`
   min-height: 100vh;
   position: relative;
   z-index: 1;
-`;
-
-const Title = styled.div`
-  font-family: 'Space Mono', monospace;
-  font-size: 2rem;
-  font-weight: 700;
-  background: linear-gradient(135deg, #ff2d78, #a855f7, #06d6a0);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  margin-bottom: 1.5rem;
 `;
 
 const Spinner = styled.div`
@@ -49,7 +40,7 @@ const Hint = styled.div`
 export function LoadingScreen({ message }: LoadingScreenProps) {
   return (
     <Screen>
-      <Title>TUNELINE</Title>
+      <AppTitle size="sm" animate={false} style={{ marginBottom: '1.5rem' }} />
       <Spinner />
       <Message>{message}</Message>
       <Hint>Das kann ein paar Sekunden dauern...</Hint>

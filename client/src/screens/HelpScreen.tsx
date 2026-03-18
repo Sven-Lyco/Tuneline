@@ -3,6 +3,10 @@ import styled from '@emotion/styled';
 import { Vinyl } from '../components/Vinyl';
 import { DropZone } from '../components/DropZone';
 import { PLAYER_COLORS } from '../constants';
+import { PlayerChip } from '../components/PlayerChip';
+import { SongTile } from '../components/SongTile';
+import { RoomCodeCopy } from '../components/RoomCodeCopy';
+import { PillButton } from '../components/PillButton';
 
 interface HelpScreenProps {
   onBack: () => void;
@@ -185,36 +189,6 @@ const MockCodeChar = styled.div<{ filled: string }>`
   color: ${({ filled }) => (filled === 'true' ? '#ff2d78' : '#2a2a3a')};
 `;
 
-// Player chips mockup
-const MockChips = styled.div`
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: center;
-`;
-
-const MockChip = styled.div<{ color: string }>`
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 20px;
-  background: ${({ color }) => `${color}15`};
-  border: 1.5px solid ${({ color }) => `${color}60`};
-`;
-
-const MockChipDot = styled.div<{ color: string }>`
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: ${({ color }) => color};
-`;
-
-const MockChipName = styled.div`
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: #e8e8f0;
-`;
 
 // Song card mockup (simplified)
 const MockSongCard = styled.div`
@@ -258,59 +232,6 @@ const MockPlayBadge = styled.div`
   font-size: 0.75rem;
   color: #ff2d78;
   font-weight: 600;
-`;
-
-// Timeline mockup
-const MockTimeline = styled.div`
-  display: flex;
-  align-items: center;
-  overflow-x: auto;
-  padding: 0.5rem 0;
-  gap: 0;
-
-  &::-webkit-scrollbar {
-    height: 4px;
-  }
-  &::-webkit-scrollbar-track {
-    background: #12121a;
-  }
-  &::-webkit-scrollbar-thumb {
-    background: #2a2a3a;
-    border-radius: 2px;
-  }
-`;
-
-const MockSongTile = styled.div<{ unknown?: string }>`
-  background: ${({ unknown }) => (unknown === 'true' ? '#1a1014' : '#1a1a26')};
-  border: 2px solid ${({ unknown }) => (unknown === 'true' ? '#ff2d7860' : '#2a2a3a')};
-  border-radius: 12px;
-  padding: 0.65rem 0.85rem;
-  text-align: center;
-  min-width: 110px;
-  flex-shrink: 0;
-`;
-
-const MockTileYear = styled.div<{ unknown?: string }>`
-  font-family: 'Outfit', sans-serif;
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: ${({ unknown }) => (unknown === 'true' ? '#ff2d78' : '#ff2d78')};
-  margin-bottom: 3px;
-`;
-
-const MockTileTitle = styled.div`
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #e8e8f0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100px;
-`;
-
-const MockTileArtist = styled.div`
-  font-size: 0.65rem;
-  color: #7a7a8e;
 `;
 
 // Feedback mockup
@@ -442,45 +363,6 @@ const MockSettingLabel = styled.div`
   color: #7a7a8e;
 `;
 
-const MockPillGroup = styled.div`
-  display: flex;
-  gap: 4px;
-`;
-
-const MockPill = styled.div<{ active: string }>`
-  padding: 4px 10px;
-  border-radius: 20px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  background: ${({ active }) => (active === 'true' ? '#ff2d7820' : 'transparent')};
-  border: 1px solid ${({ active }) => (active === 'true' ? '#ff2d78' : '#2a2a3a')};
-  color: ${({ active }) => (active === 'true' ? '#ff2d78' : '#4a4a6a')};
-`;
-
-// Room code display mockup
-const MockRoomCode = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-`;
-
-const MockRoomCodeLabel = styled.div`
-  font-size: 0.72rem;
-  color: #4a4a6a;
-  letter-spacing: 3px;
-  text-transform: uppercase;
-`;
-
-const MockRoomCodeValue = styled.div`
-  font-family: 'Space Mono', monospace;
-  font-size: 2rem;
-  font-weight: 700;
-  color: #ff2d78;
-  letter-spacing: 6px;
-  text-shadow: 0 0 20px rgba(255, 45, 120, 0.4);
-`;
-
 // Start button mockup
 const MockStartBtn = styled.div`
   padding: 0.75rem 2rem;
@@ -541,14 +423,11 @@ function PlayerTab() {
           </StepText>
         </StepHeader>
         <MockupBox>
-          <MockChips>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
             {DUMMY_PLAYERS.map((p) => (
-              <MockChip key={p.name} color={p.color}>
-                <MockChipDot color={p.color} />
-                <MockChipName>{p.name}</MockChipName>
-              </MockChip>
+              <PlayerChip key={p.name} name={p.name} color={p.color} isActive={true} />
             ))}
-          </MockChips>
+          </div>
         </MockupBox>
       </StepCard>
 
@@ -559,8 +438,8 @@ function PlayerTab() {
           <StepText>
             <StepTitle>Song anhören</StepTitle>
             <StepDesc>
-              Wenn du dran bist, wird ein 30-Sekunden-Preview gespielt. Du siehst Titel und
-              Interpret — das Jahr ist verborgen. Rate, aus welchem Jahr der Song stammt.
+              Wenn du dran bist, wird ein 30-Sekunden-Preview gespielt. Titel, Interpret und das
+              Jahr sind verborgen. Rate, aus welchem Jahr der Song stammt.
             </StepDesc>
           </StepText>
         </StepHeader>
@@ -584,34 +463,32 @@ function PlayerTab() {
           <StepText>
             <StepTitle>Song in die Timeline einordnen</StepTitle>
             <StepDesc>
-              Tippe auf einen der Slots (|) in deiner Timeline, um den Song dort zu platzieren.
-              Du musst ihn chronologisch richtig einordnen.
+              Tippe auf einen der Slots (|) in deiner Timeline, um den Song dort zu platzieren. Du
+              musst ihn chronologisch richtig einordnen.
             </StepDesc>
           </StepText>
         </StepHeader>
         <MockupBox style={{ flexDirection: 'column', alignItems: 'stretch', gap: '0.75rem' }}>
-          <div style={{ fontSize: '0.72rem', color: '#4a4a6a', letterSpacing: '2px', textAlign: 'center', textTransform: 'uppercase' }}>— Deine Timeline —</div>
-          <MockTimeline>
+          <div
+            style={{
+              fontSize: '0.72rem',
+              color: '#4a4a6a',
+              letterSpacing: '2px',
+              textAlign: 'center',
+              textTransform: 'uppercase',
+            }}
+          >
+            — Deine Timeline —
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', overflowX: 'auto', padding: '0.5rem 0', gap: 0 }}>
             <DropZone active={false} onClick={() => {}} disabled={false} />
-            <MockSongTile>
-              <MockTileYear>1979</MockTileYear>
-              <MockTileTitle>Highway to Hell</MockTileTitle>
-              <MockTileArtist>AC/DC</MockTileArtist>
-            </MockSongTile>
+            <SongTile year={1979} title="Highway to Hell" artist="AC/DC" variant="timeline" />
             <DropZone active={true} onClick={() => {}} disabled={false} />
-            <MockSongTile unknown="true">
-              <MockTileYear style={{ color: '#ff2d78' }}>???</MockTileYear>
-              <MockTileTitle>Neuer Song</MockTileTitle>
-              <MockTileArtist>Zum Platzieren</MockTileArtist>
-            </MockSongTile>
+            <SongTile year={'???' as unknown as number} title="Neuer Song" artist="Zum Platzieren" variant="timeline" highlight={true} />
             <DropZone active={false} onClick={() => {}} disabled={false} />
-            <MockSongTile>
-              <MockTileYear>1994</MockTileYear>
-              <MockTileTitle>Creep</MockTileTitle>
-              <MockTileArtist>Radiohead</MockTileArtist>
-            </MockSongTile>
+            <SongTile year={1994} title="Creep" artist="Radiohead" variant="timeline" />
             <DropZone active={false} onClick={() => {}} disabled={false} />
-          </MockTimeline>
+          </div>
         </MockupBox>
       </StepCard>
 
@@ -656,8 +533,8 @@ function HostTab() {
           <StepText>
             <StepTitle>Mit Spotify einloggen</StepTitle>
             <StepDesc>
-              Als Host brauchst du ein Spotify-Konto. Es wird nur für die Playlist-Auswahl
-              genutzt — der Ton kommt von iTunes-Previews, kein Premium nötig.
+              Als Host brauchst du ein Spotify-Konto. Es wird nur für die Playlist-Auswahl genutzt —
+              der Ton kommt von iTunes-Previews, kein Premium nötig.
             </StepDesc>
           </StepText>
         </StepHeader>
@@ -678,7 +555,8 @@ function HostTab() {
           <StepText>
             <StepTitle>Playlist auswählen</StepTitle>
             <StepDesc>
-              Wähle eine oder mehrere deiner Spotify-Playlisten. Je mehr Songs, desto mehr Abwechslung. Playlists mit mindestens 20 Songs empfohlen.
+              Wähle eine oder mehrere deiner Spotify-Playlisten. Je mehr Songs, desto mehr
+              Abwechslung. Playlists mit mindestens 20 Songs empfohlen.
             </StepDesc>
           </StepText>
         </StepHeader>
@@ -701,7 +579,8 @@ function HostTab() {
           <StepText>
             <StepTitle>Spieleinstellungen wählen</StepTitle>
             <StepDesc>
-              Lege die Rundenanzahl fest und wähle den Audio-Modus: Jeder hört auf seinem Gerät, oder nur der Host spielt den Sound ab.
+              Lege die Rundenanzahl fest und wähle den Audio-Modus: Jeder hört auf seinem Gerät,
+              oder nur der Host spielt den Sound ab.
             </StepDesc>
           </StepText>
         </StepHeader>
@@ -709,20 +588,20 @@ function HostTab() {
           <MockSettings>
             <MockSettingRow>
               <MockSettingLabel>Runden</MockSettingLabel>
-              <MockPillGroup>
+              <div style={{ display: 'flex', gap: '4px' }}>
                 {[3, 5, 7, 10].map((r) => (
-                  <MockPill key={r} active={r === 5 ? 'true' : 'false'}>
+                  <PillButton key={r} active={r === 5} color="teal">
                     {r}
-                  </MockPill>
+                  </PillButton>
                 ))}
-              </MockPillGroup>
+              </div>
             </MockSettingRow>
             <MockSettingRow>
               <MockSettingLabel>Audio</MockSettingLabel>
-              <MockPillGroup>
-                <MockPill active="true">Alle</MockPill>
-                <MockPill active="false">Nur Host</MockPill>
-              </MockPillGroup>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <PillButton active={true} color="purple">Alle</PillButton>
+                <PillButton active={false} color="purple">Nur Host</PillButton>
+              </div>
             </MockSettingRow>
           </MockSettings>
         </MockupBox>
@@ -735,15 +614,13 @@ function HostTab() {
           <StepText>
             <StepTitle>Code mit Freunden teilen</StepTitle>
             <StepDesc>
-              Nach dem Erstellen des Raums bekommst du einen 6-stelligen Code. Teile ihn mit deinen Mitspielern — sie brauchen kein Spotify.
+              Nach dem Erstellen des Raums bekommst du einen 6-stelligen Code. Teile ihn mit deinen
+              Mitspielern — sie brauchen kein Spotify.
             </StepDesc>
           </StepText>
         </StepHeader>
         <MockupBox>
-          <MockRoomCode>
-            <MockRoomCodeLabel>Raum-Code</MockRoomCodeLabel>
-            <MockRoomCodeValue>6ER2T5</MockRoomCodeValue>
-          </MockRoomCode>
+          <RoomCodeCopy roomCode="6ER2T5" />
         </MockupBox>
       </StepCard>
 
@@ -754,19 +631,17 @@ function HostTab() {
           <StepText>
             <StepTitle>Spiel starten</StepTitle>
             <StepDesc>
-              Sobald alle Spieler in der Lobby sind, kannst du das Spiel starten. Du kannst auch einzelne Spieler kicken oder Einstellungen noch anpassen.
+              Sobald alle Spieler in der Lobby sind, kannst du das Spiel starten. Du kannst auch
+              einzelne Spieler kicken oder Einstellungen noch anpassen.
             </StepDesc>
           </StepText>
         </StepHeader>
         <MockupBox style={{ flexDirection: 'column', gap: '0.75rem' }}>
-          <MockChips>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
             {DUMMY_PLAYERS.map((p) => (
-              <MockChip key={p.name} color={p.color}>
-                <MockChipDot color={p.color} />
-                <MockChipName>{p.name}</MockChipName>
-              </MockChip>
+              <PlayerChip key={p.name} name={p.name} color={p.color} isActive={true} />
             ))}
-          </MockChips>
+          </div>
           <MockStartBtn>Spiel starten →</MockStartBtn>
         </MockupBox>
       </StepCard>

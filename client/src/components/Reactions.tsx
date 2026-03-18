@@ -3,7 +3,7 @@ import { keyframes } from '@emotion/react';
 import styled from '@emotion/styled';
 import type { RoomPlayer } from '@tuneline/shared';
 import { REACTION_EMOJIS } from '@tuneline/shared';
-import { PLAYER_COLORS } from '../constants';
+import { getPlayerColor } from '../constants';
 import { socket } from '../socket';
 
 interface Toast {
@@ -137,7 +137,7 @@ export function Reactions({ players }: ReactionsProps) {
   const getColor = useCallback(
     (playerId: string) => {
       const idx = players.findIndex((p) => p.id === playerId);
-      return PLAYER_COLORS[idx] ?? '#a855f7';
+      return getPlayerColor(idx);
     },
     [players]
   );

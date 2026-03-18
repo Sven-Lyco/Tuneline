@@ -1,8 +1,11 @@
 import { useMemo } from 'react';
 import styled from '@emotion/styled';
 import type { RoomPlayer, SongFull } from '@tuneline/shared';
-import { PLAYER_COLORS, RANK_MEDALS } from '../constants';
+import { getPlayerColor, RANK_MEDALS } from '../constants';
 import { Confetti } from '../components/Confetti';
+import { CenteredScreen } from '../components/CenteredScreen';
+import { Card } from '../components/Card';
+import { SongTile } from '../components/SongTile';
 
 interface ResultScreenProps {
   players: RoomPlayer[];
@@ -13,28 +16,6 @@ interface ResultScreenProps {
   winnerLastSong: SongFull | null;
   onRestart: () => void;
 }
-
-const Screen = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  padding: 2rem;
-  position: relative;
-  z-index: 1;
-`;
-
-const Card = styled.div`
-  background: #12121a;
-  border: 1px solid #2a2a3a;
-  border-radius: 20px;
-  padding: 2.5rem;
-  text-align: center;
-  max-width: 420px;
-  width: 100%;
-  animation: slideIn 0.5s ease-out;
-`;
 
 const GameOverLabel = styled.div`
   font-family: 'Space Mono', monospace;
@@ -138,45 +119,6 @@ const TimelineScroll = styled.div`
   &::-webkit-scrollbar { display: none; }
 `;
 
-const SongTile = styled.div<{ highlight: boolean }>`
-  flex-shrink: 0;
-  background: #1a1a26;
-  border: 2px solid ${({ highlight }) => highlight ? '#ff2d78' : '#2a2a3a'};
-  border-radius: 14px;
-  padding: 0.8rem 1rem;
-  text-align: center;
-  min-width: 130px;
-  box-shadow: ${({ highlight }) => highlight ? '0 0 18px rgba(255,45,120,0.35)' : 'none'};
-  animation: ${({ highlight }) => highlight ? 'pop 0.4s ease-out' : 'none'};
-`;
-
-const TileYear = styled.div`
-  font-family: 'Space Mono', monospace;
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: #ff2d78;
-  margin-bottom: 4px;
-`;
-
-const TileTitle = styled.div`
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: #e8e8f0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 118px;
-`;
-
-const TileArtist = styled.div`
-  font-size: 0.65rem;
-  color: #7a7a8e;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 118px;
-  margin-top: 2px;
-`;
 
 const MissedCard = styled.div`
   flex-shrink: 0;
@@ -223,7 +165,7 @@ const RestartButton = styled.button`
 
 export function ResultScreen({ players, isHost, lastSong, lastCorrect, lastPlayerId, winnerLastSong, onRestart }: ResultScreenProps) {
   const ranked = useMemo(
-    () => [...players].map((p, i) => ({ ...p, color: PLAYER_COLORS[i] ?? '#7a7a8e' })).sort((a, b) => b.score - a.score),
+    () => [...players].map((p, i) => ({ ...p, color: getPlayerColor(i) })).sort((a, b) => b.score - a.score),
     [players]
   );
 
@@ -232,16 +174,16 @@ export function ResultScreen({ players, isHost, lastSong, lastCorrect, lastPlaye
 
   const winner = isTie ? null : ranked[0];
   const winnerOriginalIndex = winner ? players.findIndex((p) => p.id === winner.id) : -1;
-  const winnerColor = winnerOriginalIndex >= 0 ? (PLAYER_COLORS[winnerOriginalIndex] ?? '#7a7a8e') : '#7a7a8e';
+  const winnerColor = getPlayerColor(winnerOriginalIndex);
   const winnerIsLastPlayer = winner?.id === lastPlayerId;
   const highlightSong = winner
     ? (winnerLastSong ?? (winnerIsLastPlayer && lastCorrect ? lastSong : null))
     : null;
 
   return (
-    <Screen>
+    <CenteredScreen style={{ padding: '2rem' }}>
       {!isTie && <Confetti />}
-      <Card>
+      <Card style={{ maxWidth: '420px', padding: '2.5rem', textAlign: 'center', animation: 'slideIn 0.5s ease-out' }}>
         <GameOverLabel>Spiel beendet</GameOverLabel>
         <Crown>{isTie ? '🤝' : '👑'}</Crown>
         {isTie ? (
@@ -273,11 +215,14 @@ export function ResultScreen({ players, isHost, lastSong, lastCorrect, lastPlaye
               <TimelineLabel color={winnerColor}>{winner.name}</TimelineLabel>
               <TimelineScroll>
                 {winner.timeline.map((song) => (
-                  <SongTile key={song.id} highlight={song.id === highlightSong?.id}>
-                    <TileYear>{song.year}</TileYear>
-                    <TileTitle>{song.title}</TileTitle>
-                    <TileArtist>{song.artist}</TileArtist>
-                  </SongTile>
+                  <SongTile
+                    key={song.id}
+                    year={song.year}
+                    title={song.title}
+                    artist={song.artist}
+                    highlight={song.id === highlightSong?.id}
+                    variant="result"
+                  />
                 ))}
                 {winnerIsLastPlayer && !lastCorrect && lastSong && !winnerLastSong && (
                   <MissedCard>
@@ -292,6 +237,6 @@ export function ResultScreen({ players, isHost, lastSong, lastCorrect, lastPlaye
 
         {isHost && <RestartButton onClick={onRestart}>↻ Nochmal spielen</RestartButton>}
       </Card>
-    </Screen>
+    </CenteredScreen>
   );
 }

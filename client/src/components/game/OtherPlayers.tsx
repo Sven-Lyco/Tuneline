@@ -1,6 +1,7 @@
 import styled from '@emotion/styled';
 import type { RoomPlayer } from '@tuneline/shared';
-import { PLAYER_COLORS } from '../../constants';
+import { getPlayerColor } from '../../constants';
+import { sortByYear } from '../../utils/shuffle';
 
 interface OtherPlayersProps {
   players: RoomPlayer[];
@@ -87,8 +88,8 @@ export function OtherPlayers({ players, allPlayers, currentPlayerId }: OtherPlay
     <OthersSection>
       {players.map((p) => {
         const globalIdx = allPlayers.findIndex((gp) => gp.id === p.id);
-        const color = PLAYER_COLORS[globalIdx] ?? '#7a7a8e';
-        const sortedTl = [...p.timeline].sort((a, b) => a.year - b.year);
+        const color = getPlayerColor(globalIdx);
+        const sortedTl = sortByYear(p.timeline);
         return (
           <PlayerPanel
             key={p.id}

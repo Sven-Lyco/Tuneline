@@ -13,10 +13,13 @@
     "build": "npm run build -w @tuneline/client && npm run build -w @tuneline/server",
     "typecheck": "npm run typecheck -w @tuneline/client && npm run typecheck -w @tuneline/server",
     "lint": "npm run lint -w @tuneline/client",
-    "format": "npm run format -w @tuneline/client"
+    "format": "npm run format -w @tuneline/client",
+    "prepare": "husky"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
-    "flatted": "^3.4.0"
+    "flatted": "^3.4.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0"
   }
 }

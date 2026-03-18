@@ -239,7 +239,7 @@ export function SongCard({
   onToggleAudio,
   onVolumeChange,
 }: SongCardProps) {
-  const vinylSize = useMemo(() => window.matchMedia('(max-width: 480px)').matches ? 80 : 120, []);
+  const vinylSize = useMemo(() => (window.matchMedia('(max-width: 480px)').matches ? 80 : 120), []);
   const displayYear = revealed && revealedSong ? revealedSong.year : null;
 
   return (
@@ -253,13 +253,13 @@ export function SongCard({
           <Vinyl spinning={playing} cover={currentSong.cover} size={vinylSize} />
           <SongInfo>
             <SongTitle data-blurred={String(isMyTurn && !revealed)}>{currentSong.title}</SongTitle>
-            <SongArtist data-blurred={String(isMyTurn && !revealed)}>{currentSong.artist}</SongArtist>
+            <SongArtist data-blurred={String(isMyTurn && !revealed)}>
+              {currentSong.artist}
+            </SongArtist>
             {displayYear !== null && <RevealedYear>{displayYear}</RevealedYear>}
             {!revealed && (
               <AudioControls>
-                <AudioButton onClick={onToggleAudio}>
-                  {playing ? '⏸ Pause' : '▶ Play'}
-                </AudioButton>
+                <AudioButton onClick={onToggleAudio}>{playing ? '⏸ Pause' : '▶ Play'}</AudioButton>
                 <VolumeIcon>{volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊'}</VolumeIcon>
                 <VolumeSlider
                   type="range"

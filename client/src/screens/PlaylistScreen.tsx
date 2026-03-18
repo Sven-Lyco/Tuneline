@@ -78,16 +78,16 @@ const PlaylistCard = styled.button<{ selected: string }>`
   flex-direction: column;
   align-items: flex-start;
   background: ${({ selected }) => (selected === 'true' ? 'rgba(29,185,84,0.07)' : '#12121a')};
-  border: 1.5px solid
-    ${({ selected }) => (selected === 'true' ? '#1db954' : '#2a2a3a')};
+  border: 1.5px solid ${({ selected }) => (selected === 'true' ? '#1db954' : '#2a2a3a')};
   border-radius: 14px;
   padding: 0;
   overflow: hidden;
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.2s, background 0.2s;
-  box-shadow: ${({ selected }) =>
-    selected === 'true' ? '0 0 18px rgba(29,185,84,0.2)' : 'none'};
+  transition:
+    border-color 0.2s,
+    background 0.2s;
+  box-shadow: ${({ selected }) => (selected === 'true' ? '0 0 18px rgba(29,185,84,0.2)' : 'none')};
 
   &:hover {
     border-color: ${({ selected }) => (selected === 'true' ? '#1db954' : '#4a4a6a')};
@@ -173,8 +173,7 @@ const ConfirmButton = styled.button<{ ready: string }>`
   padding: 0.8rem 2rem;
   border-radius: 14px;
   border: none;
-  background: ${({ ready }) =>
-    ready === 'true' ? '#1db954' : '#1e1e2e'};
+  background: ${({ ready }) => (ready === 'true' ? '#1db954' : '#1e1e2e')};
   color: ${({ ready }) => (ready === 'true' ? '#000' : '#444')};
   font-family: 'Outfit', sans-serif;
   font-size: 0.95rem;
@@ -220,17 +219,11 @@ export function PlaylistScreen({ selected, onToggle, onConfirm, onLogout }: Play
       <Hint>Wähle eine oder mehrere Playlisten aus:</Hint>
 
       {loading && <StatusText>Playlisten werden geladen...</StatusText>}
-      {!loading && playlists.length === 0 && (
-        <StatusText>Keine Playlisten gefunden.</StatusText>
-      )}
+      {!loading && playlists.length === 0 && <StatusText>Keine Playlisten gefunden.</StatusText>}
 
       <Grid>
         {playlists.map((p) => (
-          <PlaylistCard
-            key={p.id}
-            selected={String(isSelected(p))}
-            onClick={() => onToggle(p)}
-          >
+          <PlaylistCard key={p.id} selected={String(isSelected(p))} onClick={() => onToggle(p)}>
             <CoverWrapper>
               {p.coverUrl ? (
                 <CoverImg
@@ -259,11 +252,7 @@ export function PlaylistScreen({ selected, onToggle, onConfirm, onLogout }: Play
             ? 'Keine Playlist gewählt'
             : `${selected.length} Playlist${selected.length > 1 ? 'en' : ''} gewählt`}
         </SelectedCount>
-        <ConfirmButton
-          ready={String(canConfirm)}
-          disabled={!canConfirm}
-          onClick={onConfirm}
-        >
+        <ConfirmButton ready={String(canConfirm)} disabled={!canConfirm} onClick={onConfirm}>
           Weiter →
         </ConfirmButton>
       </Footer>

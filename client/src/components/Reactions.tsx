@@ -3,7 +3,7 @@ import { keyframes } from '@emotion/react';
 import styled from '@emotion/styled';
 import type { RoomPlayer } from '@tuneline/shared';
 import { REACTION_EMOJIS } from '@tuneline/shared';
-import { PLAYER_COLORS } from '../constants';
+import { getPlayerColor } from '../constants';
 import { socket } from '../socket';
 
 interface Toast {
@@ -118,7 +118,9 @@ const FAB = styled.button`
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: border-color 0.2s, transform 0.15s;
+  transition:
+    border-color 0.2s,
+    transform 0.15s;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 
   &:hover {
@@ -137,13 +139,21 @@ export function Reactions({ players }: ReactionsProps) {
   const getColor = useCallback(
     (playerId: string) => {
       const idx = players.findIndex((p) => p.id === playerId);
-      return PLAYER_COLORS[idx] ?? '#a855f7';
+      return getPlayerColor(idx);
     },
     [players]
   );
 
   useEffect(() => {
-    const handler = ({ playerId, playerName, emoji }: { playerId: string; playerName: string; emoji: string }) => {
+    const handler = ({
+      playerId,
+      playerName,
+      emoji,
+    }: {
+      playerId: string;
+      playerName: string;
+      emoji: string;
+    }) => {
       const color = getColor(playerId);
       const id = toastCounter.current++;
       setToasts((prev) => [...prev.slice(-4), { id, emoji, playerName, color }]);
@@ -151,7 +161,9 @@ export function Reactions({ players }: ReactionsProps) {
     };
 
     socket.on('reaction_received', handler);
-    return () => { socket.off('reaction_received', handler); };
+    return () => {
+      socket.off('reaction_received', handler);
+    };
   }, [getColor]);
 
   const sendReaction = (emoji: string) => {

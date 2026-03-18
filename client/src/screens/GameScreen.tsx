@@ -2,7 +2,8 @@ import { useMemo } from 'react';
 import styled from '@emotion/styled';
 import type { Feedback } from '../types';
 import type { GameStateForClient, SongFull, SongMeta } from '@tuneline/shared';
-import { PLAYER_COLORS } from '../constants';
+import { getPlayerColor } from '../constants';
+import { sortByYear } from '../utils/shuffle';
 import { GameHeader } from '../components/game/GameHeader';
 import { SongCard } from '../components/game/SongCard';
 import { MyTimeline } from '../components/game/MyTimeline';
@@ -50,7 +51,6 @@ const GameBody = styled.div`
   padding: 2rem 0 1.5rem;
   width: 100%;
 `;
-
 
 const PlaceButtonRow = styled.div`
   display: flex;
@@ -108,18 +108,21 @@ export function GameScreen({
   onSkipPlayer,
 }: GameScreenProps) {
   const isMyTurn = gameState.currentPlayerId === myPlayerId;
-  const { activePlayer, lastPlacedPlayer, otherPlayers, myTimeline, activePlayerColor } = useMemo(() => {
-    const myPlayer = gameState.players.find((p) => p.id === myPlayerId);
-    const activePlayerIndex = gameState.players.findIndex((p) => p.id === gameState.currentPlayerId);
-    return {
-      myPlayer,
-      activePlayer: gameState.players.find((p) => p.id === gameState.currentPlayerId),
-      lastPlacedPlayer: gameState.players.find((p) => p.id === lastPlacedPlayerId),
-      otherPlayers: gameState.players.filter((p) => p.id !== myPlayerId),
-      myTimeline: [...(myPlayer?.timeline ?? [])].sort((a, b) => a.year - b.year),
-      activePlayerColor: PLAYER_COLORS[activePlayerIndex] ?? '#ff2d78',
-    };
-  }, [gameState.players, gameState.currentPlayerId, myPlayerId, lastPlacedPlayerId]);
+  const { activePlayer, lastPlacedPlayer, otherPlayers, myTimeline, activePlayerColor } =
+    useMemo(() => {
+      const myPlayer = gameState.players.find((p) => p.id === myPlayerId);
+      const activePlayerIndex = gameState.players.findIndex(
+        (p) => p.id === gameState.currentPlayerId
+      );
+      return {
+        myPlayer,
+        activePlayer: gameState.players.find((p) => p.id === gameState.currentPlayerId),
+        lastPlacedPlayer: gameState.players.find((p) => p.id === lastPlacedPlayerId),
+        otherPlayers: gameState.players.filter((p) => p.id !== myPlayerId),
+        myTimeline: sortByYear(myPlayer?.timeline ?? []),
+        activePlayerColor: getPlayerColor(activePlayerIndex),
+      };
+    }, [gameState.players, gameState.currentPlayerId, myPlayerId, lastPlacedPlayerId]);
   const isReady = isMyTurn && slot !== null && !revealed;
 
   return (

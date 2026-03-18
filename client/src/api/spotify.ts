@@ -32,7 +32,7 @@ export async function getUserPlaylists(): Promise<SpotifyPlaylist[]> {
 
 export async function loadSongsFromPlaylists(
   playlistIds: string[],
-  target: number,
+  target: number
 ): Promise<SongFull[]> {
   try {
     const res = await fetch('/api/songs', {

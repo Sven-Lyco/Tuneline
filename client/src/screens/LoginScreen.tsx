@@ -1,56 +1,13 @@
 import styled from '@emotion/styled';
 import { redirectToSpotify } from '../api/spotify';
+import { AppTitle, AppSubtitle } from '../components/AppTitle';
+import { CenteredScreen } from '../components/CenteredScreen';
+import { Card } from '../components/Card';
 
 interface LoginScreenProps {
   onJoinAsGuest: () => void;
   onHelp: () => void;
 }
-
-const Screen = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  padding: 1.5rem;
-  position: relative;
-  z-index: 1;
-`;
-
-const Title = styled.div`
-  font-family: 'Space Mono', monospace;
-  font-size: clamp(2.5rem, 8vw, 5rem);
-  font-weight: 700;
-  letter-spacing: -3px;
-  background: linear-gradient(135deg, #ff2d78, #a855f7, #06d6a0);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: float 4s ease-in-out infinite;
-  margin-bottom: 4px;
-`;
-
-const Subtitle = styled.div`
-  font-size: 0.8rem;
-  color: #7a7a8e;
-  letter-spacing: 4px;
-  text-transform: uppercase;
-  font-weight: 300;
-  margin-bottom: 3rem;
-`;
-
-const Card = styled.div`
-  background: #12121a;
-  border: 1px solid #2a2a3a;
-  border-radius: 20px;
-  padding: 2.5rem 2rem;
-  width: 100%;
-  max-width: 380px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-`;
 
 const Tagline = styled.p`
   font-size: 0.9rem;
@@ -76,7 +33,9 @@ const SpotifyButton = styled.button`
   font-weight: 700;
   cursor: pointer;
   letter-spacing: 0.5px;
-  transition: background 0.2s, transform 0.15s;
+  transition:
+    background 0.2s,
+    transform 0.15s;
   margin-top: 0.5rem;
 
   &:hover {
@@ -159,14 +118,21 @@ const SpotifyIcon = () => (
 
 export function LoginScreen({ onJoinAsGuest, onHelp }: LoginScreenProps) {
   return (
-    <Screen>
-      <Title>TUNELINE</Title>
-      <Subtitle>Musik · Timeline · Challenge</Subtitle>
+    <CenteredScreen>
+      <AppTitle />
+      <AppSubtitle style={{ marginBottom: '3rem' }}>Musik · Timeline · Challenge</AppSubtitle>
 
-      <Card>
-        <Tagline>
-          Verbinde dein Spotify-Konto und erstelle einen Raum für deine Freunde.
-        </Tagline>
+      <Card
+        style={{
+          maxWidth: '380px',
+          padding: '2.5rem 2rem',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '1rem',
+        }}
+      >
+        <Tagline>Verbinde dein Spotify-Konto und erstelle einen Raum für deine Freunde.</Tagline>
         <SpotifyButton onClick={() => void redirectToSpotify()}>
           <SpotifyIcon />
           Mit Spotify einloggen
@@ -176,11 +142,11 @@ export function LoginScreen({ onJoinAsGuest, onHelp }: LoginScreenProps) {
           <DividerText>oder</DividerText>
         </Divider>
 
-        <GuestButton onClick={onJoinAsGuest}>
-          Raum beitreten (Gast)
-        </GuestButton>
+        <GuestButton onClick={onJoinAsGuest}>Raum beitreten (Gast)</GuestButton>
       </Card>
-      <HelpButton onClick={onHelp} title="Spielanleitung">?</HelpButton>
-    </Screen>
+      <HelpButton onClick={onHelp} title="Spielanleitung">
+        ?
+      </HelpButton>
+    </CenteredScreen>
   );
 }

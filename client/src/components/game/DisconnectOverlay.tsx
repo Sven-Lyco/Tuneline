@@ -1,4 +1,6 @@
 import styled from '@emotion/styled';
+import { Card } from '../Card';
+import { PrimaryButton } from '../PrimaryButton';
 
 interface DisconnectOverlayProps {
   disconnectedPlayer: { id: string; name: string; isHostDisconnected: boolean };
@@ -16,17 +18,6 @@ const Overlay = styled.div`
   justify-content: center;
   z-index: 50;
   animation: slideIn 0.3s ease-out;
-`;
-
-const Card = styled.div`
-  background: #12121a;
-  border: 1px solid #2a2a3a;
-  border-radius: 20px;
-  padding: 2rem;
-  width: 100%;
-  max-width: 420px;
-  margin: 1.5rem;
-  text-align: center;
 `;
 
 const Icon = styled.div`
@@ -67,23 +58,6 @@ const Actions = styled.div`
   gap: 0.6rem;
 `;
 
-const SkipButton = styled.button`
-  padding: 0.75rem;
-  border-radius: 12px;
-  border: none;
-  background: linear-gradient(135deg, #ff2d78, #a855f7);
-  color: #fff;
-  font-family: 'Outfit', sans-serif;
-  font-size: 0.95rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: opacity 0.2s;
-
-  &:hover {
-    opacity: 0.9;
-  }
-`;
-
 const WaitButton = styled.button`
   padding: 0.75rem;
   border-radius: 12px;
@@ -105,7 +79,7 @@ export function DisconnectOverlay({
 
   return (
     <Overlay role="dialog" aria-modal="true" aria-label="Verbindungsproblem">
-      <Card>
+      <Card style={{ maxWidth: '420px', margin: '1.5rem', textAlign: 'center' }}>
         <Icon>📵</Icon>
         <Title>
           {isHostDisconnected
@@ -124,9 +98,12 @@ export function DisconnectOverlay({
 
         {isHost && !isHostDisconnected && (
           <Actions>
-            <SkipButton onClick={onSkipPlayer}>
+            <PrimaryButton
+              onClick={onSkipPlayer}
+              style={{ padding: '0.75rem', fontSize: '0.95rem' }}
+            >
               Ohne {name} weiterspielen
-            </SkipButton>
+            </PrimaryButton>
             <WaitButton disabled>Warten auf Reconnect…</WaitButton>
           </Actions>
         )}

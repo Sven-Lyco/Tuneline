@@ -1,0 +1,65 @@
+name: OSV-Scanner (Full Repo)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  osv-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install OSV-Scanner
+        run: |
+          echo "📥 Installing OSV-Scanner..."
+          curl -sSfL https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_amd64 \
+            -o /usr/local/bin/osv-scanner
+          chmod +x /usr/local/bin/osv-scanner
+
+      - name: Scan entire repository with OSV-Scanner
+        id: osv
+        run: |
+          echo "🚀 Scanning complete repo (rekursiv) mit OSV-Scanner..."
+          set +e
+          set -o pipefail
+
+          osv-scanner -r . 2>&1 | tee osv-scan.log
+          EXIT_CODE=${PIPESTATUS[0]}
+
+          echo "OSV_EXIT_CODE=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Auswertung & Build ggf. fehlschlagen lassen
+        run: |
+          EXIT_CODE=${{ steps.osv.outputs.OSV_EXIT_CODE }}
+
+          echo "--------------------------------------------------"
+          echo "✅ OSV-Scanner Exit-Code: $EXIT_CODE"
+          echo "--------------------------------------------------"
+          echo "Log-Auszug (letzte 50 Zeilen):"
+          echo "--------------------------------------------------"
+          tail -n 50 osv-scan.log || echo "Keine Log-Datei gefunden."
+
+          if [ "$EXIT_CODE" -eq 1 ]; then
+            echo "::error::OSV-Scanner hat Schwachstellen gefunden!"
+            exit 1
+          elif [ "$EXIT_CODE" -ne 0 ]; then
+            echo "::error::OSV-Scanner Fehler (Exit-Code $EXIT_CODE)."
+          else
+            echo "🎉 OSV Scan: Keine bekannten Schwachstellen gefunden."
+          fi
+
+      - name: Vollständiges OSV-Log als Artefakt hochladen
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: osv-scan-log
+          path: osv-scan.log

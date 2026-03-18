@@ -1,3 +1,7 @@
+export function getPlayerColor(index: number): string {
+  return PLAYER_COLORS[index] ?? '#7a7a8e';
+}
+
 export const PLAYER_COLORS = [
   '#ff2d78',
   '#06d6a0',

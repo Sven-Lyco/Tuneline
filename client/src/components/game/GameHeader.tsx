@@ -1,7 +1,8 @@
 import styled from '@emotion/styled';
 import type { RoomPlayer } from '@tuneline/shared';
-import { PLAYER_COLORS } from '../../constants';
+import { getPlayerColor } from '../../constants';
 import { RoomCodeCopy } from '../RoomCodeCopy';
+import { PlayerChip } from '../PlayerChip';
 
 interface GameHeaderProps {
   roomCode: string;
@@ -43,50 +44,26 @@ const RoundBadge = styled.div`
   text-transform: uppercase;
 `;
 
-
 const PlayerBadges = styled.div`
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
 `;
 
-const PlayerChip = styled.div<{ active: string; borderColor: string }>`
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.35rem 0.9rem;
-  border-radius: 20px;
-  border: 1px solid ${({ active, borderColor }) => (active === 'true' ? borderColor : '#2a2a3a')};
-  background: ${({ active }) => (active === 'true' ? 'rgba(255,45,120,0.07)' : '#1a1a26')};
-  box-shadow: ${({ active }) => (active === 'true' ? '0 0 12px rgba(255,45,120,0.15)' : 'none')};
-  font-size: 0.8rem;
-  transition: all 0.3s;
-`;
-
-const PlayerDot = styled.div<{ bg: string }>`
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: ${({ bg }) => bg};
-`;
-
-const PlayerName = styled.span<{ active: string }>`
-  color: ${({ active }) => (active === 'true' ? '#e8e8f0' : '#7a7a8e')};
-  font-weight: ${({ active }) => (active === 'true' ? '600' : '400')};
-`;
-
-const PlayerScore = styled.span`
-  font-family: 'Space Mono', monospace;
-  font-weight: 700;
-  font-size: 0.85rem;
-  color: #06d6a0;
-`;
-
-export function GameHeader({ roomCode, players, currentPlayerId, round, rounds, myPlayerId }: GameHeaderProps) {
+export function GameHeader({
+  roomCode,
+  players,
+  currentPlayerId,
+  round,
+  rounds,
+  myPlayerId,
+}: GameHeaderProps) {
   return (
     <Header>
       <HeaderTitle>TUNELINE</HeaderTitle>
-      <RoundBadge>RUNDE {round}/{rounds}</RoundBadge>
+      <RoundBadge>
+        RUNDE {round}/{rounds}
+      </RoundBadge>
       <RoomCodeCopy roomCode={roomCode} variant="badge" />
       <PlayerBadges>
         {players.map((p, i) => {
@@ -94,15 +71,12 @@ export function GameHeader({ roomCode, players, currentPlayerId, round, rounds, 
           return (
             <PlayerChip
               key={p.id}
-              active={String(isActive)}
-              borderColor={PLAYER_COLORS[i] ?? '#ff2d78'}
-            >
-              <PlayerDot bg={PLAYER_COLORS[i] ?? '#7a7a8e'} />
-              <PlayerName active={String(isActive)}>
-                {p.name}{p.id === myPlayerId ? ' (du)' : ''}
-              </PlayerName>
-              <PlayerScore>{p.score}</PlayerScore>
-            </PlayerChip>
+              name={p.name}
+              color={getPlayerColor(i)}
+              score={p.score}
+              isActive={isActive}
+              isMe={p.id === myPlayerId}
+            />
           );
         })}
       </PlayerBadges>

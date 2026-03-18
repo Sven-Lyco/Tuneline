@@ -1,5 +1,10 @@
 import { useState } from 'react';
 import styled from '@emotion/styled';
+import { AppTitle, AppSubtitle } from '../components/AppTitle';
+import { CenteredScreen } from '../components/CenteredScreen';
+import { Card } from '../components/Card';
+import { PrimaryButton } from '../components/PrimaryButton';
+import { LinkButton } from '../components/LinkButton';
 
 interface JoinScreenProps {
   initialCode?: string;
@@ -8,51 +13,6 @@ interface JoinScreenProps {
 }
 
 // ── Styles ─────────────────────────────────────────────────────
-
-const Screen = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  padding: 1.5rem;
-  position: relative;
-  z-index: 1;
-`;
-
-const Title = styled.div`
-  font-family: 'Space Mono', monospace;
-  font-size: clamp(2rem, 8vw, 4rem);
-  font-weight: 700;
-  letter-spacing: -3px;
-  background: linear-gradient(135deg, #ff2d78, #a855f7, #06d6a0);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: float 4s ease-in-out infinite;
-  margin-bottom: 4px;
-`;
-
-const Subtitle = styled.div`
-  font-size: 0.8rem;
-  color: #7a7a8e;
-  letter-spacing: 4px;
-  text-transform: uppercase;
-  font-weight: 300;
-  margin-bottom: 2.5rem;
-`;
-
-const Card = styled.div`
-  background: #12121a;
-  border: 1px solid #2a2a3a;
-  border-radius: 20px;
-  padding: 2rem;
-  width: 100%;
-  max-width: 400px;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-`;
 
 const CardTitle = styled.div`
   font-family: 'Space Mono', monospace;
@@ -97,41 +57,6 @@ const NameInput = styled(Input)`
   font-weight: 500;
 `;
 
-const JoinButton = styled.button<{ ready: string }>`
-  width: 100%;
-  padding: 0.85rem;
-  border-radius: 14px;
-  border: none;
-  background: ${({ ready }) =>
-    ready === 'true' ? 'linear-gradient(135deg, #a855f7, #06d6a0)' : '#1e1e2e'};
-  color: ${({ ready }) => (ready === 'true' ? '#fff' : '#444')};
-  font-family: 'Outfit', sans-serif;
-  font-size: 1rem;
-  font-weight: 700;
-  cursor: ${({ ready }) => (ready === 'true' ? 'pointer' : 'not-allowed')};
-  transition: opacity 0.2s;
-  margin-top: 0.5rem;
-
-  &:hover:not(:disabled) {
-    opacity: 0.9;
-  }
-`;
-
-const BackLink = styled.button`
-  background: transparent;
-  border: none;
-  color: #7a7a8e;
-  font-family: 'Outfit', sans-serif;
-  font-size: 0.8rem;
-  cursor: pointer;
-  margin-top: 1rem;
-  text-decoration: underline;
-
-  &:hover {
-    color: #9a9aae;
-  }
-`;
-
 // ── Component ──────────────────────────────────────────────────
 
 export function JoinScreen({ initialCode = '', onJoin, onBack }: JoinScreenProps) {
@@ -146,11 +71,11 @@ export function JoinScreen({ initialCode = '', onJoin, onBack }: JoinScreenProps
   };
 
   return (
-    <Screen>
-      <Title>TUNELINE</Title>
-      <Subtitle>Musik · Timeline · Challenge</Subtitle>
+    <CenteredScreen>
+      <AppTitle size="md" />
+      <AppSubtitle>Musik · Timeline · Challenge</AppSubtitle>
 
-      <Card>
+      <Card style={{ maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         <div>
           <CardTitle>Raum-Code</CardTitle>
           <Input
@@ -171,12 +96,19 @@ export function JoinScreen({ initialCode = '', onJoin, onBack }: JoinScreenProps
             onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
           />
         </div>
-        <JoinButton ready={String(isReady)} disabled={!isReady} onClick={handleSubmit}>
+        <PrimaryButton
+          ready={isReady}
+          variant="purple-teal"
+          onClick={handleSubmit}
+          style={{ marginTop: '0.5rem' }}
+        >
           Beitreten →
-        </JoinButton>
+        </PrimaryButton>
       </Card>
 
-      <BackLink onClick={onBack}>← Zurück</BackLink>
-    </Screen>
+      <LinkButton style={{ marginTop: '1rem' }} onClick={onBack}>
+        ← Zurück
+      </LinkButton>
+    </CenteredScreen>
   );
 }

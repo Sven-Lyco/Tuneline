@@ -1,5 +1,6 @@
 import { Component, type ReactNode } from 'react';
 import styled from '@emotion/styled';
+import { Card } from './Card';
 
 interface Props {
   children: ReactNode;
@@ -19,16 +20,6 @@ const Screen = styled.div`
   align-items: center;
   justify-content: center;
   padding: 2rem;
-`;
-
-const Card = styled.div`
-  background: #12121a;
-  border: 1px solid #2a2a3a;
-  border-radius: 20px;
-  padding: 2.5rem;
-  max-width: 420px;
-  width: 100%;
-  text-align: center;
 `;
 
 const Icon = styled.div`
@@ -78,7 +69,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
     return (
       <Screen>
-        <Card>
+        <Card style={{ maxWidth: '420px', padding: '2.5rem', textAlign: 'center' }}>
           <Icon>💥</Icon>
           <Title>Unerwarteter Fehler</Title>
           <Sub>Etwas ist schiefgelaufen. Bitte die Seite neu laden.</Sub>

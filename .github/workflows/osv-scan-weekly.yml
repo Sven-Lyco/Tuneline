@@ -77,6 +77,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Check Telegram secrets
+        run: |
+          if [ -z "${{ secrets.TELEGRAM_BOT_TOKEN }}" ] || [ -z "${{ secrets.TELEGRAM_CHAT_ID }}" ]; then
+            echo "::error::TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID secret is not set."
+            exit 1
+          fi
+
       - name: Send Telegram notification
         run: |
           EXIT_CODE=${{ needs.osv-scan.outputs.osv_exit_code }}

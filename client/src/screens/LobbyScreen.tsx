@@ -12,6 +12,7 @@ import { PrimaryButton } from '../components/PrimaryButton';
 import { LinkButton } from '../components/LinkButton';
 import { AudioModePicker } from '../components/AudioModePicker';
 import { RoundsPicker } from '../components/RoundsPicker';
+import { Reactions } from '../components/Reactions';
 
 interface LobbyScreenProps {
   roomCode: string;
@@ -170,6 +171,7 @@ export function LobbyScreen({
       <LinkButton variant="muted" style={{ marginTop: '1.25rem' }} onClick={onLeave}>
         ← Raum verlassen
       </LinkButton>
+      <Reactions players={lobbyState.players} />
     </CenteredScreen>
   );
 }

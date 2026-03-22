@@ -6,6 +6,7 @@ import { Confetti } from '../components/Confetti';
 import { CenteredScreen } from '../components/CenteredScreen';
 import { Card } from '../components/Card';
 import { SongTile } from '../components/SongTile';
+import { Reactions } from '../components/Reactions';
 
 const LastTipBanner = styled.div`
   display: flex;
@@ -320,6 +321,7 @@ export function ResultScreen({
 
         {isHost && <RestartButton onClick={onRestart}>↻ Nochmal spielen</RestartButton>}
       </Card>
+      <Reactions players={players} />
     </CenteredScreen>
   );
 }

@@ -115,9 +115,9 @@ const FAB = styled.button`
   background: #12121a;
   font-size: 1.4rem;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
+  padding: 0;
   transition:
     border-color 0.2s,
     transform 0.15s;
@@ -191,7 +191,9 @@ export function Reactions({ players }: ReactionsProps) {
           </Picker>
         )}
         <FAB onClick={() => setPickerOpen((v) => !v)} title="Reaction senden">
-          {pickerOpen ? '✕' : '😄'}
+          <span style={{ display: 'block', lineHeight: 1, userSelect: 'none' }}>
+            {pickerOpen ? '✕' : '😄'}
+          </span>
         </FAB>
       </Controls>
     </Container>

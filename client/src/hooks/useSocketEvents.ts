@@ -172,14 +172,31 @@ export function useSocketEvents({
 
     socket.on('game_over', ({ players, lastSong, lastCorrect, lastPlayerId, winnerLastSong }) => {
       stopSong();
-      setResult({
+      const resultData = {
         players,
         lastSong,
         lastCorrect,
         lastPlayerId,
         winnerLastSong: winnerLastSong ?? null,
-      });
-      setScreen('result');
+      };
+      if (lastSong) {
+        setLastPlacedPlayerId(lastPlayerId);
+        setRevealedSong(lastSong);
+        setFeedback(lastCorrect ? 'ok' : 'no');
+        setRevealed(true);
+        setTimeout(() => {
+          setFeedback(null);
+          setRevealed(false);
+          setRevealedSong(null);
+          setLastPlacedPlayerId(null);
+          setSlot(null);
+          setResult(resultData);
+          setScreen('result');
+        }, 3000);
+      } else {
+        setResult(resultData);
+        setScreen('result');
+      }
     });
 
     socket.on('player_kicked', () => {

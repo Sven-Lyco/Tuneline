@@ -7,6 +7,51 @@ import { CenteredScreen } from '../components/CenteredScreen';
 import { Card } from '../components/Card';
 import { SongTile } from '../components/SongTile';
 
+const LastTipBanner = styled.div`
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  border: 1.5px solid #ff4444;
+  background: rgba(255, 68, 68, 0.07);
+  margin-bottom: 1.3rem;
+  text-align: left;
+  animation: slideIn 0.4s ease-out;
+
+  &[data-correct='true'] {
+    border-color: #06d6a0;
+    background: rgba(6, 214, 160, 0.07);
+  }
+`;
+
+const LastTipIcon = styled.div`
+  font-size: 1.1rem;
+  color: #ff4444;
+  flex-shrink: 0;
+  font-weight: 700;
+  margin-top: 1px;
+
+  &[data-correct='true'] {
+    color: #06d6a0;
+  }
+`;
+
+const LastTipText = styled.div`
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: #c8c8d8;
+
+  strong {
+    color: #e8e8f0;
+  }
+`;
+
+const LastTipSongName = styled.span`
+  font-weight: 700;
+  color: #e8e8f0;
+`;
+
 interface ResultScreenProps {
   players: RoomPlayer[];
   isHost: boolean;
@@ -61,6 +106,7 @@ const RankRow = styled.div`
   padding: 0.5rem 0.7rem;
   border-radius: 10px;
   background: #1a1a26;
+  animation: slideIn 0.4s ease-out both;
 `;
 
 const RankPosition = styled.span`
@@ -184,12 +230,12 @@ export function ResultScreen({
   const isTie = ranked.filter((p) => p.score === topScore).length > 1;
 
   const winner = isTie ? null : ranked[0];
-  const winnerOriginalIndex = winner ? players.findIndex((p) => p.id === winner.id) : -1;
-  const winnerColor = getPlayerColor(winnerOriginalIndex);
   const winnerIsLastPlayer = winner?.id === lastPlayerId;
   const highlightSong = winner
     ? (winnerLastSong ?? (winnerIsLastPlayer && lastCorrect ? lastSong : null))
     : null;
+
+  const lastPlayer = players.find((p) => p.id === lastPlayerId);
 
   return (
     <CenteredScreen style={{ padding: '2rem' }}>
@@ -203,6 +249,18 @@ export function ResultScreen({
         }}
       >
         <GameOverLabel>Spiel beendet</GameOverLabel>
+
+        {lastSong && lastPlayer && (
+          <LastTipBanner data-correct={String(lastCorrect)}>
+            <LastTipIcon data-correct={String(lastCorrect)}>{lastCorrect ? '✓' : '✕'}</LastTipIcon>
+            <LastTipText>
+              <strong>{lastPlayer.name}</strong> hat{' '}
+              <LastTipSongName>{lastSong.title}</LastTipSongName> ({lastSong.year}){' '}
+              {lastCorrect ? 'richtig platziert!' : 'falsch platziert.'}
+            </LastTipText>
+          </LastTipBanner>
+        )}
+
         <Crown>{isTie ? '🤝' : '👑'}</Crown>
         {isTie ? (
           <>
@@ -218,7 +276,7 @@ export function ResultScreen({
 
         <Rankings>
           {ranked.map((r, i) => (
-            <RankRow key={r.id}>
+            <RankRow key={r.id} style={{ animationDelay: `${i * 0.12}s` }}>
               <RankPosition>{RANK_MEDALS[i] ?? `#${i + 1}`}</RankPosition>
               <RankDot bg={r.color} />
               <RankName>{r.name}</RankName>
@@ -227,31 +285,38 @@ export function ResultScreen({
           ))}
         </Rankings>
 
-        {!isTie && winner && (
-          <TimelinesSection>
-            <TimelinePlayer>
-              <TimelineLabel color={winnerColor}>{winner.name}</TimelineLabel>
-              <TimelineScroll>
-                {winner.timeline.map((song) => (
-                  <SongTile
-                    key={song.id}
-                    year={song.year}
-                    title={song.title}
-                    artist={song.artist}
-                    highlight={song.id === highlightSong?.id}
-                    variant="result"
-                  />
-                ))}
-                {winnerIsLastPlayer && !lastCorrect && lastSong && !winnerLastSong && (
-                  <MissedCard>
-                    <MissedX>✕</MissedX>
-                    <MissedYear>{lastSong.year}</MissedYear>
-                  </MissedCard>
-                )}
-              </TimelineScroll>
-            </TimelinePlayer>
-          </TimelinesSection>
-        )}
+        <TimelinesSection>
+          {ranked.map((r) => {
+            const originalIndex = players.findIndex((p) => p.id === r.id);
+            const color = getPlayerColor(originalIndex);
+            const isWinner = !isTie && r.id === winner?.id;
+            const isLastPlayer = r.id === lastPlayerId;
+            const showMissed = isLastPlayer && !lastCorrect && lastSong;
+            return (
+              <TimelinePlayer key={r.id}>
+                <TimelineLabel color={color}>{r.name}</TimelineLabel>
+                <TimelineScroll>
+                  {r.timeline.map((song) => (
+                    <SongTile
+                      key={song.id}
+                      year={song.year}
+                      title={song.title}
+                      artist={song.artist}
+                      highlight={isWinner && song.id === highlightSong?.id}
+                      variant="result"
+                    />
+                  ))}
+                  {showMissed && (
+                    <MissedCard>
+                      <MissedX>✕</MissedX>
+                      <MissedYear>{lastSong.year}</MissedYear>
+                    </MissedCard>
+                  )}
+                </TimelineScroll>
+              </TimelinePlayer>
+            );
+          })}
+        </TimelinesSection>
 
         {isHost && <RestartButton onClick={onRestart}>↻ Nochmal spielen</RestartButton>}
       </Card>

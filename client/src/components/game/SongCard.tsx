@@ -35,7 +35,7 @@ const SongArea = styled.div`
 
 const CurrentPlayerLabel = styled.div<{ color: string }>`
   font-family: 'Outfit', sans-serif;
-  font-size: 0.85rem;
+  font-size: 1.2rem;
   font-weight: 700;
   letter-spacing: 1.5px;
   text-transform: uppercase;
@@ -98,6 +98,7 @@ const SongTitle = styled.div`
 
   &[data-blurred='true'] {
     filter: blur(10px);
+    transition: none;
     user-select: none;
   }
 
@@ -114,6 +115,7 @@ const SongArtist = styled.div`
 
   &[data-blurred='true'] {
     filter: blur(8px);
+    transition: none;
     user-select: none;
   }
 

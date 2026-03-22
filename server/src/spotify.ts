@@ -184,9 +184,14 @@ interface SpotifyTracksResponse {
 }
 
 const YEAR_PATTERN = /[\s–-]+[\[(]?(?:remaster(?:ed)?|live|single version|anniversary|deluxe)?[\s]?\d{4}[\s]?(?:remaster(?:ed)?|version|edit|mix|anniversary)?[\])]?$/i;
+const REMASTER_PATTERN = /\bremaster(?:ed|ing)?\b/i;
 
 function sanitizeTitle(raw: string): string {
   return raw.replace(YEAR_PATTERN, '').trim();
+}
+
+function isRemastered(rawTitle: string): boolean {
+  return REMASTER_PATTERN.test(rawTitle);
 }
 
 interface TrackData {
@@ -200,6 +205,7 @@ interface TrackData {
 function parseTrack(item: SpotifyTracksResponse['items'][number]): TrackData | null {
   const t = item.track;
   if (!t?.id || !t.name) return null;
+  if (isRemastered(t.name)) return null;
 
   const year = t.album?.release_date ? parseInt(t.album.release_date.split('-')[0], 10) : 0;
   if (year < 1900 || year > 2100) return null;

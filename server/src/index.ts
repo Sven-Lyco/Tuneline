@@ -1,5 +1,7 @@
 import { config } from 'dotenv';
-config({ path: '.env.local' });
+if (process.env.NODE_ENV !== 'production') {
+  config({ path: '.env.local' });
+}
 
 import express from 'express';
 import { createServer } from 'http';

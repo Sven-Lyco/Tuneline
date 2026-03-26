@@ -18,6 +18,9 @@
     "format": "npm run format -w @tuneline/client",
     "prepare": "husky || true"
   },
+  "overrides": {
+    "picomatch": "^4.0.4"
+  },
   "devDependencies": {
     "concurrently": "^9.1.2",
     "flatted": "^3.4.0",

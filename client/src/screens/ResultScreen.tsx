@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import styled from '@emotion/styled';
 import type { RoomPlayer, SongFull } from '@tuneline/shared';
 import { getPlayerColor, RANK_MEDALS } from '../constants';
+import { useDragScroll } from '../hooks/useDragScroll';
 import { Confetti } from '../components/Confetti';
 import { CenteredScreen } from '../components/CenteredScreen';
 import { Card } from '../components/Card';
@@ -157,12 +158,14 @@ const TimelineLabel = styled.div<{ color: string }>`
   margin-bottom: 0.35rem;
 `;
 
-const TimelineScroll = styled.div`
+const TimelineScroll = styled.div<{ dragging: string }>`
   display: flex;
   gap: 0.35rem;
   overflow-x: auto;
   padding-bottom: 0.2rem;
   scrollbar-width: none;
+  cursor: ${({ dragging }) => (dragging === 'true' ? 'grabbing' : 'grab')};
+  user-select: none;
   &::-webkit-scrollbar {
     display: none;
   }
@@ -192,6 +195,47 @@ const MissedYear = styled.div`
   font-size: 0.6rem;
   color: #ff4444;
 `;
+
+function PlayerTimelineRow({
+  player,
+  color,
+  isWinner,
+  highlightSong,
+  showMissed,
+  missedSong,
+}: {
+  player: RoomPlayer;
+  color: string;
+  isWinner: boolean;
+  highlightSong: SongFull | null;
+  showMissed: boolean;
+  missedSong: SongFull | null;
+}) {
+  const { ref, dragProps, isDragging } = useDragScroll();
+  return (
+    <TimelinePlayer>
+      <TimelineLabel color={color}>{player.name}</TimelineLabel>
+      <TimelineScroll ref={ref} dragging={String(isDragging)} {...dragProps}>
+        {player.timeline.map((song) => (
+          <SongTile
+            key={song.id}
+            year={song.year}
+            title={song.title}
+            artist={song.artist}
+            highlight={isWinner && song.id === highlightSong?.id}
+            variant="result"
+          />
+        ))}
+        {showMissed && missedSong && (
+          <MissedCard>
+            <MissedX>✕</MissedX>
+            <MissedYear>{missedSong.year}</MissedYear>
+          </MissedCard>
+        )}
+      </TimelineScroll>
+    </TimelinePlayer>
+  );
+}
 
 const RestartButton = styled.button`
   padding: 0.7rem 1.8rem;
@@ -294,27 +338,15 @@ export function ResultScreen({
             const isLastPlayer = r.id === lastPlayerId;
             const showMissed = isLastPlayer && !lastCorrect && lastSong;
             return (
-              <TimelinePlayer key={r.id}>
-                <TimelineLabel color={color}>{r.name}</TimelineLabel>
-                <TimelineScroll>
-                  {r.timeline.map((song) => (
-                    <SongTile
-                      key={song.id}
-                      year={song.year}
-                      title={song.title}
-                      artist={song.artist}
-                      highlight={isWinner && song.id === highlightSong?.id}
-                      variant="result"
-                    />
-                  ))}
-                  {showMissed && (
-                    <MissedCard>
-                      <MissedX>✕</MissedX>
-                      <MissedYear>{lastSong.year}</MissedYear>
-                    </MissedCard>
-                  )}
-                </TimelineScroll>
-              </TimelinePlayer>
+              <PlayerTimelineRow
+                key={r.id}
+                player={r}
+                color={color}
+                isWinner={isWinner}
+                highlightSong={highlightSong}
+                showMissed={!!showMissed}
+                missedSong={showMissed ? lastSong : null}
+              />
             );
           })}
         </TimelinesSection>

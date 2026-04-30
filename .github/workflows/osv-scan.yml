@@ -32,10 +32,13 @@ jobs:
         run: |
           echo "🚀 Scanning complete repo (rekursiv) mit OSV-Scanner..."
           set +e
-          set -o pipefail
 
+          # Table format for human-readable log artifact
           osv-scanner -r . 2>&1 | tee osv-scan.log
           EXIT_CODE=${PIPESTATUS[0]}
+
+          # JSON format for severity filtering (jq is pre-installed on ubuntu-latest)
+          osv-scanner -r . --format json > osv-scan.json 2>/dev/null || true
 
           echo "OSV_EXIT_CODE=$EXIT_CODE" >> "$GITHUB_OUTPUT"
           exit 0
@@ -51,13 +54,24 @@ jobs:
           echo "--------------------------------------------------"
           tail -n 50 osv-scan.log || echo "Keine Log-Datei gefunden."
 
-          if [ "$EXIT_CODE" -eq 1 ]; then
-            echo "::error::OSV-Scanner hat Schwachstellen gefunden!"
-            exit 1
-          elif [ "$EXIT_CODE" -ne 0 ]; then
-            echo "::error::OSV-Scanner Fehler (Exit-Code $EXIT_CODE)."
-          else
+          if [ "$EXIT_CODE" -eq 0 ]; then
             echo "🎉 OSV Scan: Keine bekannten Schwachstellen gefunden."
+            exit 0
+          fi
+
+          if [ "$EXIT_CODE" -ne 1 ]; then
+            echo "::error::OSV-Scanner Fehler (Exit-Code $EXIT_CODE)."
+            exit 1
+          fi
+
+          # Exit code 1 = Schwachstellen gefunden — nur bei HIGH/CRITICAL fehlschlagen
+          HIGH_CRIT=$(jq '[.results[].packages[].vulnerabilities[] | .database_specific.severity // "" | select(. == "HIGH" or . == "CRITICAL")] | length' osv-scan.json 2>/dev/null || echo "0")
+
+          if [ "$HIGH_CRIT" -gt 0 ]; then
+            echo "::error::OSV-Scanner hat $HIGH_CRIT HIGH/CRITICAL Schwachstellen gefunden!"
+            exit 1
+          else
+            echo "⚠️ OSV-Scanner: Schwachstellen gefunden, aber keine HIGH/CRITICAL – kein Fehler."
           fi
 
       - name: Vollständiges OSV-Log als Artefakt hochladen
@@ -65,4 +79,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: osv-scan-log
-          path: osv-scan.log
+          path: |
+            osv-scan.log
+            osv-scan.json

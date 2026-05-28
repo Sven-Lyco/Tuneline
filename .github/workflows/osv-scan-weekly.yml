@@ -105,14 +105,14 @@ jobs:
 
       - name: Send Telegram notification
         run: |
-          EXIT_CODE=${{ needs.osv-scan.outputs.osv_exit_code }}
+          JOB_RESULT="${{ needs.osv-scan.result }}"
 
-          if [ -z "$EXIT_CODE" ]; then
-            STATUS="⚠️ OSV-Scan-Exit-Code unbekannt (Workflow evtl. vorzeitig abgebrochen)."
-          elif [ "$EXIT_CODE" -ne 0 ]; then
-            STATUS="🚨 OSV-Weekly-Scan FEHLGESCHLAGEN (Exit-Code: $EXIT_CODE)."
+          if [ "$JOB_RESULT" = "failure" ]; then
+            STATUS="🚨 OSV-Weekly-Scan FEHLGESCHLAGEN (HIGH/CRITICAL gefunden)."
+          elif [ "$JOB_RESULT" = "success" ]; then
+            STATUS="✅ OSV-Weekly-Scan OK – keine HIGH/CRITICAL Schwachstellen."
           else
-            STATUS="✅ OSV-Weekly-Scan OK – keine bekannten Schwachstellen gefunden."
+            STATUS="⚠️ OSV-Weekly-Scan: unbekannter Status ($JOB_RESULT)."
           fi
 
           MESSAGE="$STATUS%0ARepo: $GITHUB_REPOSITORY%0ACommit: $GITHUB_SHA%0ARun: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

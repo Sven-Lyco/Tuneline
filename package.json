@@ -25,12 +25,7 @@
     "lint-staged": "^16.4.0"
   },
   "overrides": {
-    "@typescript-eslint/typescript-estree": {
-      "minimatch": {
-        "brace-expansion": "5.0.7"
-      }
-    },
-    "brace-expansion": "^1.1.16",
+    "minimatch": "^10.2.6",
     "shell-quote": "^1.9.0",
     "esbuild": "0.28.1",
     "body-parser": "1.20.6",

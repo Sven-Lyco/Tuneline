@@ -1,15 +1,7 @@
 export type { SpotifyPlaylist } from '@tuneline/shared';
 
 export type Screen =
-  | 'login'
-  | 'join'
-  | 'playlists'
-  | 'menu'
-  | 'loading'
-  | 'lobby'
-  | 'game'
-  | 'result'
-  | 'help';
+  'login' | 'join' | 'playlists' | 'menu' | 'loading' | 'lobby' | 'game' | 'result' | 'help';
 
 export type Feedback = 'ok' | 'no' | null;
 

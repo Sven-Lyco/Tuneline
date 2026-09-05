@@ -171,7 +171,7 @@ app.get('/api/preview', previewHandler);
 if (IS_PROD) {
   const clientDist = join(__dirname, '../../client/dist');
   app.use(express.static(clientDist));
-  app.get('*', (_req, res) => {
+  app.get('/{*splat}', (_req, res) => {
     res.sendFile(join(clientDist, 'index.html'));
   });
 }

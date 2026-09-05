@@ -51,12 +51,16 @@ SPOTIFY_REDIRECT_URI=http://[::1]:5174/api/auth/callback
 
 ### 3. Install and run
 
+Requires Node.js 22+.
+
 ```bash
 npm install
 npm run dev
 ```
 
 This starts both the Vite dev server (`http://[::1]:5174`) and the Express/Socket.io server (`http://[::1]:3001`) in parallel.
+
+Alternatively, `docker-compose up` runs the same two processes in containers with file watching for local development (see `docker-compose.yml`). Use the `Dockerfile` directly for a production-style build.
 
 ## Scripts
 
@@ -88,3 +92,7 @@ Required environment variables (runtime):
 
 - Team mode, time limit per turn
 - Sound effects for correct/incorrect placements
+
+## License
+
+[MIT](LICENSE)

@@ -51,6 +51,11 @@ const GameBody = styled.div`
   gap: 1.5rem;
   padding: 2rem 0 1.5rem;
   width: 100%;
+
+  /* Room below the place button for the floating reactions button */
+  @media (max-width: 480px) {
+    padding: 1.25rem 0 5rem;
+  }
 `;
 
 const PlaceButtonRow = styled.div`
@@ -58,6 +63,10 @@ const PlaceButtonRow = styled.div`
   justify-content: center;
   padding: 0 2rem;
   flex-shrink: 0;
+
+  @media (max-width: 480px) {
+    padding: 0 1rem;
+  }
 `;
 
 const PlaceButton = styled.button<{ ready: string }>`

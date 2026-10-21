@@ -9,4 +9,8 @@ export const CenteredScreen = styled.div`
   padding: 1.5rem;
   position: relative;
   z-index: 1;
+
+  @media (max-width: 400px) {
+    padding: 1.5rem 1rem;
+  }
 `;

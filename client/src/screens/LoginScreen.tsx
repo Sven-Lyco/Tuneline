@@ -37,10 +37,16 @@ const SpotifyButton = styled.button`
     background 0.2s,
     transform 0.15s;
   margin-top: 0.5rem;
+  white-space: nowrap;
 
   &:hover {
     background: #1ed760;
     transform: translateY(-1px);
+  }
+
+  @media (max-width: 360px) {
+    padding: 0.9rem 1rem;
+    letter-spacing: 0;
   }
 `;
 
@@ -123,9 +129,9 @@ export function LoginScreen({ onJoinAsGuest, onHelp }: LoginScreenProps) {
       <AppSubtitle style={{ marginBottom: '3rem' }}>Musik · Timeline · Challenge</AppSubtitle>
 
       <Card
+        data-roomy="true"
         style={{
           maxWidth: '380px',
-          padding: '2.5rem 2rem',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',

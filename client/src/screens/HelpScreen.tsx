@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import styled from '@emotion/styled';
 import { Vinyl } from '../components/Vinyl';
 import { DropZone } from '../components/DropZone';
@@ -172,6 +172,10 @@ const MockupBox = styled.div`
 const MockCode = styled.div`
   display: flex;
   gap: 6px;
+
+  @media (max-width: 360px) {
+    gap: 4px;
+  }
 `;
 
 const MockCodeChar = styled.div<{ filled: string }>`
@@ -187,6 +191,12 @@ const MockCodeChar = styled.div<{ filled: string }>`
   font-size: 1.1rem;
   font-weight: 700;
   color: ${({ filled }) => (filled === 'true' ? '#ff2d78' : '#2a2a3a')};
+
+  @media (max-width: 360px) {
+    width: 30px;
+    height: 40px;
+    font-size: 0.95rem;
+  }
 `;
 
 // Song card mockup (simplified)
@@ -385,6 +395,13 @@ const DUMMY_PLAYERS = [
 ];
 
 function PlayerTab() {
+  // The new song sits in the middle of the demo timeline; on phones it would start out of view.
+  const demoTimelineRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = demoTimelineRef.current;
+    if (el) el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
+  }, []);
+
   return (
     <Steps>
       {/* Step 1 */}
@@ -468,7 +485,16 @@ function PlayerTab() {
             </StepDesc>
           </StepText>
         </StepHeader>
-        <MockupBox style={{ flexDirection: 'column', alignItems: 'stretch', gap: '0.75rem' }}>
+        {/* nowrap: a wrapping column sizes its line to the widest child, so the scrollable
+            timeline row would be as wide as its content and get clipped instead of scrolling */}
+        <MockupBox
+          style={{
+            flexDirection: 'column',
+            flexWrap: 'nowrap',
+            alignItems: 'stretch',
+            gap: '0.75rem',
+          }}
+        >
           <div
             style={{
               fontSize: '0.72rem',
@@ -481,9 +507,11 @@ function PlayerTab() {
             — Deine Timeline —
           </div>
           <div
+            ref={demoTimelineRef}
             style={{
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'safe center',
               overflowX: 'auto',
               padding: '0.5rem 0',
               gap: 0,

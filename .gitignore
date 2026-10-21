@@ -29,5 +29,7 @@ coverage
 *.sln
 *.sw?
 
-# Claude Code
-.claude/
+# Claude Code — project skills and shared settings are versioned, local settings are not
+.claude/*
+!.claude/skills/
+!.claude/settings.json

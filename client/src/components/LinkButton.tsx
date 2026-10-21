@@ -9,6 +9,14 @@ const ButtonEl = styled.button`
   font-size: 0.8rem;
   cursor: pointer;
   text-decoration: underline;
+  position: relative;
+
+  /* A finger-sized hit area around the small text, without changing the layout */
+  &::after {
+    content: '';
+    position: absolute;
+    inset: -0.6rem -0.5rem;
+  }
 
   &:hover {
     color: #9a9aae;

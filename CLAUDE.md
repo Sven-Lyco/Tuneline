@@ -107,6 +107,12 @@ Tuneline/
                             LobbyState, AudioMode, RoomStatus, ClientToServerEvents, ServerToClientEvents
     package.json            @tuneline/shared
 
+  docs/
+    architecture.md         Mermaid-Diagramme: Datenfluss, Raum-Zustände, Zug, Sitzplatz, Pause
+
+  .claude/skills/
+    tuneline-browser-test/  Projekt-Skill: Ende-zu-Ende-Tests in Chrome (Testsongs, Bots, Handy-Breite)
+
   Dockerfile                Multi-stage: baut client + server, served von Express
   docker-compose.yml        Lokales Dev mit Docker (optional)
   server/.env.example       Alle Server-Env-Variablen dokumentiert
@@ -121,9 +127,13 @@ Tuneline/
 - Vite läuft auf `host: '::1', port: 5174` — kein `localhost` (Spotify akzeptiert das nicht)
 - PKCE-Flow läuft **server-seitig**: Verifier im Server-Memory, Token im Server (nie im Browser)
 - Session via httpOnly-Cookie (`tuneline_session`), Token nie an den Client weitergegeben
+- **Development Mode (Stand 2026):** App-Besitzer braucht Premium, max. 5 Spotify-Nutzer (Hosts) über die User-Management-Allowlist im Dashboard; Gäste loggen sich nie bei Spotify ein
+- Client-IDs ab 11.02.2026 bekommen Songs nur aus eigenen/kollaborativen Playlists über `/playlists/{id}/items` (max. 50 pro Seite); `server/src/spotify.ts` nutzt noch `/tracks` — läuft nur mit älteren Client-IDs, solange Spotify die Umstellung für Bestands-Apps aufschiebt. Spotify-eigene Playlists sind für Dev-Mode-Apps gesperrt
+- iTunes Search API: offiziell ca. 20 Anfragen/Minute pro IP (gilt für die Server-IP)
 
 ## Multiplayer-Architektur
 
+- **Diagramme** der Abläufe (Raum-Zustände, Zug, Sitzplatz, Pause-Regel): `docs/architecture.md` — bei Änderungen an dieser Logik mitpflegen
 - **Server ist Source of Truth** — alle Spielzustände liegen im Server-Memory (RoomManager)
 - **Room-Code**: 6 Zeichen alphanumerisch (z.B. `6ER2T5`), 2h TTL
 - **Spieler-Token**: 48-Zeichen-Token für Reconnect-Fähigkeit ohne erneuten Join (`client/src/utils/roomStorage.ts`)
@@ -192,6 +202,7 @@ Server → Client: room_created, room_joined, rejoin_failed, session_replaced, r
 - **Client** (`client/vite.config.js`, Block `test`): jsdom + Testing Library; `src/test/setup.ts` mockt `src/socket.ts` global durch `src/test/fakeSocket.ts` (`serverEmit()` simuliert Server-Events, `emittedPayloads()` prüft Emits)
 - **Coverage-Schwelle 80 %** (Statements, Branches, Functions, Lines) je Workspace — `npm run coverage` bricht darunter ab
 - **Pre-Commit-Hook** führt nach lint-staged `npm test` aus (~13 s); **CI** führt `npm run coverage` aus
+- **Browser-Tests** (Mehrspieler-Szenarien, Reload, Handy-Breite) laufen über den Projekt-Skill `tuneline-browser-test` — ohne Spotify-Login, mit iTunes-Testsongs und Bot-Spielern
 
 ## Scripts
 

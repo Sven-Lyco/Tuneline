@@ -102,6 +102,12 @@ const WinnerName = styled.div`
   background-clip: text;
   -webkit-text-fill-color: transparent;
   margin-bottom: 0.2rem;
+
+  /* "Unentschieden!" and long names must fit a phone-width card */
+  @media (max-width: 400px) {
+    font-size: 1.45rem;
+    overflow-wrap: anywhere;
+  }
 `;
 
 const WinnerScore = styled.div`
@@ -314,12 +320,12 @@ export function ResultScreen({
   const lastPlayer = players.find((p) => p.id === lastPlayerId);
 
   return (
-    <CenteredScreen style={{ padding: '2rem' }}>
+    <CenteredScreen>
       {!isTie && <Confetti />}
       <Card
+        data-roomy="true"
         style={{
           maxWidth: '420px',
-          padding: '2.5rem',
           textAlign: 'center',
           animation: 'slideIn 0.5s ease-out',
         }}

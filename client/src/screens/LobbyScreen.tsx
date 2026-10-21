@@ -80,6 +80,14 @@ const KickButton = styled.button`
   padding: 0.2rem 0.4rem;
   border-radius: 6px;
   opacity: 0.6;
+  position: relative;
+
+  /* Kicking someone by mis-tapping is annoying: give the small × a finger-sized hit area */
+  &::after {
+    content: '';
+    position: absolute;
+    inset: -0.5rem;
+  }
 
   &:hover {
     opacity: 1;

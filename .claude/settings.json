@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run typecheck)",
+      "Bash(npm run lint)",
+      "Bash(npx prettier --check \"client/src/**/*.{ts,tsx}\")",
+      "Bash(npm test)",
+      "Bash(npm test --silent)",
+      "Bash(npm run coverage)",
+      "Bash(npm run coverage --silent)",
+      "Bash(gh run watch *)",
+      "Bash(docker info *)",
+      "mcp__claude-in-chrome__find",
+      "mcp__claude-in-chrome__read_console_messages",
+      "mcp__claude-in-chrome__read_page"
+    ]
+  }
+}

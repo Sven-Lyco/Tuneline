@@ -43,6 +43,11 @@ const Container = styled.div`
   align-items: flex-end;
   gap: 0.4rem;
   pointer-events: none;
+
+  @media (max-width: 480px) {
+    bottom: 1rem;
+    right: 1rem;
+  }
 `;
 
 const ToastItem = styled.div<{ color: string }>`

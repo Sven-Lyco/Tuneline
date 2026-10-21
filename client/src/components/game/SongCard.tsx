@@ -132,8 +132,16 @@ const RevealedYear = styled.div`
 const AudioControls = styled.div`
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.6rem;
   margin-top: 0.5rem;
+`;
+
+/** Icon and slider wrap together below the play button when the card is narrow. */
+const VolumeGroup = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
 `;
 
 const AudioButton = styled.button`
@@ -147,6 +155,8 @@ const AudioButton = styled.button`
   font-weight: 500;
   cursor: pointer;
   transition: background 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
 
   &:hover {
     background: rgba(255, 45, 120, 0.18);
@@ -284,16 +294,18 @@ export function SongCard({
             {!revealed && hasAudio && (
               <AudioControls>
                 <AudioButton onClick={onToggleAudio}>{playing ? '⏸ Pause' : '▶ Play'}</AudioButton>
-                <VolumeIcon>{volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊'}</VolumeIcon>
-                <VolumeSlider
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={volume}
-                  style={{ '--val': `${volume * 100}%` } as React.CSSProperties}
-                  onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
-                />
+                <VolumeGroup>
+                  <VolumeIcon>{volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊'}</VolumeIcon>
+                  <VolumeSlider
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={volume}
+                    style={{ '--val': `${volume * 100}%` } as React.CSSProperties}
+                    onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
+                  />
+                </VolumeGroup>
               </AudioControls>
             )}
           </SongInfo>

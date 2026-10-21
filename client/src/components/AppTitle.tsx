@@ -34,6 +34,12 @@ export const AppSubtitle = styled.div`
   text-transform: uppercase;
   font-weight: 300;
   margin-bottom: 2.5rem;
+  text-align: center;
+
+  @media (max-width: 360px) {
+    font-size: 0.7rem;
+    letter-spacing: 2px;
+  }
 `;
 
 interface AppTitleProps {

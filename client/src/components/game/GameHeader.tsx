@@ -23,6 +23,10 @@ const Header = styled.div`
   flex-shrink: 0;
   flex-wrap: wrap;
   gap: 0.6rem;
+
+  @media (max-width: 480px) {
+    padding: 0.75rem 1rem;
+  }
 `;
 
 const HeaderTitle = styled.div`
@@ -48,6 +52,22 @@ const PlayerBadges = styled.div`
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
+
+  /* On phones wrapped chips push the timeline off screen: one swipeable row instead */
+  @media (max-width: 480px) {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    width: 100%;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+
+    & > * {
+      flex-shrink: 0;
+    }
+  }
 `;
 
 export function GameHeader({

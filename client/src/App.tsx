@@ -87,6 +87,8 @@ const ErrorToast = styled.div`
   font-size: 0.85rem;
   z-index: 100;
   animation: slideIn 0.3s ease-out;
+  /* With left: 50% the shrink-to-fit width would stop at half the screen on phones */
+  width: max-content;
   max-width: 90vw;
   text-align: center;
 `;

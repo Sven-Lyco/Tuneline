@@ -28,6 +28,11 @@ const Block = styled.div`
     opacity: 1;
     transform: translateX(-50%) translateY(0);
   }
+
+  @media (max-width: 400px) {
+    gap: 0.75rem;
+    padding: 0.9rem 1rem;
+  }
 `;
 
 const BlockCode = styled.div`
@@ -37,6 +42,13 @@ const BlockCode = styled.div`
   letter-spacing: 6px;
   color: #a855f7;
   flex: 1;
+  min-width: 0;
+
+  /* Keeps the copy icon inside the box on narrow phones */
+  @media (max-width: 400px) {
+    font-size: 1.6rem;
+    letter-spacing: 4px;
+  }
 `;
 
 const BlockIcon = styled.div`

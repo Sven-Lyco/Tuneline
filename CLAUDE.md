@@ -130,6 +130,7 @@ Tuneline/
 - **Development Mode (Stand 2026):** App-Besitzer braucht Premium, max. 5 Spotify-Nutzer (Hosts) über die User-Management-Allowlist im Dashboard; Gäste loggen sich nie bei Spotify ein
 - Client-IDs ab 11.02.2026 bekommen Songs nur aus eigenen/kollaborativen Playlists über `/playlists/{id}/items` (max. 50 pro Seite); `server/src/spotify.ts` nutzt noch `/tracks` — läuft nur mit älteren Client-IDs, solange Spotify die Umstellung für Bestands-Apps aufschiebt. Spotify-eigene Playlists sind für Dev-Mode-Apps gesperrt
 - iTunes Search API: offiziell ca. 20 Anfragen/Minute pro IP (gilt für die Server-IP)
+- Hintergrund mit Quellen (Quota, Playlist-Zugriff, Developer Policy, iTunes-Bedingungen, Stand Oktober 2026): `docs/research/spotify-itunes-api-regeln.md`, Rohnotizen in `docs/research/notes/`
 
 ## Multiplayer-Architektur
 

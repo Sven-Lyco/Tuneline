@@ -1,12 +1,33 @@
 import type { SongFull, AudioMode } from '@tuneline/shared';
-import type { Room, InternalPlayer, SimpleResult, PlaceResult } from './types.js';
-import { isValidAudioMode, MAX_FIELD_LENGTH, MAX_SONGS } from './types.js';
+import type { Room, InternalPlayer, SimpleResult, PlaceResult, SkipResult } from './types.js';
+import { clampRounds, isValidAudioMode, MAX_FIELD_LENGTH, MAX_SONGS } from './types.js';
 import { shuffle } from './utils.js';
 
 function isCorrectPlacement(timeline: SongFull[], song: SongFull, position: number): boolean {
   const left = timeline[position - 1] ?? null;
   const right = timeline[position] ?? null;
   return (left === null || left.year <= song.year) && (right === null || right.year >= song.year);
+}
+
+function removeFromOrder(room: Room, playerId: string): void {
+  const idx = room.playerOrder.indexOf(playerId);
+  if (idx === -1) return;
+  room.playerOrder.splice(idx, 1);
+  if (idx < room.currentPlayerIndex) {
+    room.currentPlayerIndex--;
+  } else if (room.currentPlayerIndex >= room.playerOrder.length) {
+    room.currentPlayerIndex = 0;
+    room.round++;
+  }
+}
+
+/** Pauses for the first offline player still in the turn order, or unpauses. */
+export function refreshPause(room: Room): void {
+  const offlineId =
+    room.status === 'playing'
+      ? room.playerOrder.find((id) => room.players.get(id)?.isConnected === false)
+      : undefined;
+  room.pausedForPlayerId = offlineId ?? null;
 }
 
 export function startGame(
@@ -26,6 +47,8 @@ export function startGame(
   }
   for (const song of songs) {
     if (
+      !song ||
+      typeof song !== 'object' ||
       typeof song.id !== 'string' ||
       song.id.length > MAX_FIELD_LENGTH ||
       typeof song.title !== 'string' ||
@@ -42,11 +65,13 @@ export function startGame(
     }
   }
 
+  // Offline players sit this game out; returnToLobby brings them back.
   const playerList = room.playerOrder
     .map((id) => room.players.get(id))
-    .filter((p): p is InternalPlayer => p !== undefined);
+    .filter((p): p is InternalPlayer => p?.isConnected === true);
+  room.playerOrder = playerList.map((p) => p.id);
 
-  for (const p of playerList) {
+  for (const p of room.players.values()) {
     p.timeline = [];
     p.score = 0;
   }
@@ -60,15 +85,17 @@ export function startGame(
   room.currentSongIndex = 0;
   room.currentPlayerIndex = 0;
   room.round = 1;
-  room.rounds = Math.max(1, Math.min(rounds, 20));
+  room.rounds = clampRounds(rounds);
   room.audioMode = audioMode;
   room.status = 'playing';
+  room.pausedForPlayerId = null;
   room.lastCorrectSong = new Map();
   return { ok: true };
 }
 
 export function placeSong(room: Room, playerId: string, position: number): PlaceResult {
   if (room.status !== 'playing') return { ok: false, error: 'Spiel läuft nicht.' };
+  if (!Number.isInteger(position)) return { ok: false, error: 'Ungültige Position.' };
 
   const currentPlayerId = room.playerOrder[room.currentPlayerIndex];
   if (playerId !== currentPlayerId) return { ok: false, error: 'Du bist nicht dran.' };
@@ -98,23 +125,12 @@ export function placeSong(room: Room, playerId: string, position: number): Place
   return { ok: true, correct, song, gameOver, lastPlayerId: playerId };
 }
 
-export function skipDisconnectedPlayer(room: Room): SimpleResult {
-  if (!room.paused || !room.pausedForPlayerId) {
+export function skipDisconnectedPlayer(room: Room): SkipResult {
+  if (room.status !== 'playing' || !room.pausedForPlayerId) {
     return { ok: false, error: 'Spiel ist nicht pausiert.' };
   }
 
-  const skippedId = room.pausedForPlayerId;
-  room.playerOrder = room.playerOrder.filter((id) => id !== skippedId);
-
-  if (room.currentPlayerIndex >= room.playerOrder.length) {
-    room.currentPlayerIndex = 0;
-  }
-  if (room.playerOrder.length > 0 && room.currentPlayerIndex === 0) {
-    room.round++;
-  }
-
-  room.paused = false;
-  room.pausedForPlayerId = null;
+  removeFromOrder(room, room.pausedForPlayerId);
 
   const gameOver =
     room.playerOrder.length <= 1 ||
@@ -122,11 +138,14 @@ export function skipDisconnectedPlayer(room: Room): SimpleResult {
     (room.currentPlayerIndex === 0 && room.round > room.rounds);
 
   if (gameOver) room.status = 'finished';
-  return { ok: true };
+  refreshPause(room);
+  return { ok: true, gameOver };
 }
 
 export function returnToLobby(room: Room): void {
   room.status = 'lobby';
+  room.playerOrder = [...room.players.keys()];
+  room.pausedForPlayerId = null;
   room.deck = [];
   room.currentSongIndex = 0;
   room.currentPlayerIndex = 0;
@@ -140,6 +159,5 @@ export function returnToLobby(room: Room): void {
 
 export function finishGame(room: Room): void {
   room.status = 'finished';
-  room.paused = false;
   room.pausedForPlayerId = null;
 }

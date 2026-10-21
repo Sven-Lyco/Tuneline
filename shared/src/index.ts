@@ -70,6 +70,7 @@ export interface ClientToServerEvents {
     playerToken?: string;
   }) => void;
   start_loading: () => void;
+  cancel_loading: () => void;
   start_game: (data: {
     songs: SongFull[];
     rounds: number;
@@ -121,6 +122,7 @@ export interface ServerToClientEvents {
     disconnectedPlayerName: string;
     isHostDisconnected: boolean;
     gameState: GameStateForClient;
+    currentSong: SongMeta;
   }) => void;
   game_resumed: (data: {
     gameState: GameStateForClient;
@@ -130,6 +132,7 @@ export interface ServerToClientEvents {
   player_reconnected: (data: { playerId: string }) => void;
   player_kicked: (data: { playerId: string }) => void;
   game_loading: () => void;
+  game_loading_cancelled: () => void;
   error: (data: { message: string }) => void;
   reaction_received: (data: { playerId: string; playerName: string; emoji: string }) => void;
 }

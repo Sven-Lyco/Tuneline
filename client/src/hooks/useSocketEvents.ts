@@ -79,14 +79,24 @@ export function useSocketEvents({
   // Refs so socket callbacks always see current values without re-registering
   const isHostRef = useRef(isHost);
   const gameStateRef = useRef(gameState);
+  const myNameRef = useRef('');
+  const revealTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => {
     isHostRef.current = isHost;
   });
   useEffect(() => {
     gameStateRef.current = gameState;
   });
+  useEffect(() => {
+    const me = (gameState?.players ?? [])
+      .concat(lobbyState?.players ?? [])
+      .find((p) => p.id === myPlayerId);
+    if (me) myNameRef.current = me.name;
+  });
 
   const resetRoom = useCallback(() => {
+    clearTimeout(revealTimerRef.current);
+    myNameRef.current = '';
     setRoomCode('');
     setMyPlayerId('');
     setIsHost(false);
@@ -97,6 +107,20 @@ export function useSocketEvents({
   }, []);
 
   useEffect(() => {
+    const clearRevealTimer = () => clearTimeout(revealTimerRef.current);
+
+    // Automatic reconnects get a new socket id, so the server must be told who we are again.
+    // Manual disconnects (leave, kick, logout) never fire 'reconnect'.
+    const handleReconnect = () => {
+      const playerToken = sessionStorage.getItem(STORAGE_KEYS.playerToken);
+      const roomCode = sessionStorage.getItem(STORAGE_KEYS.roomCode);
+      const playerName = myNameRef.current;
+      if (playerToken && roomCode && playerName) {
+        socket.emit('join_room', { roomCode, playerName, playerToken });
+      }
+    };
+    socket.io.on('reconnect', handleReconnect);
+
     socket.on('room_created', ({ roomCode: rc, playerId, playerToken }) => {
       setRoomCode(rc);
       setMyPlayerId(playerId);
@@ -107,14 +131,15 @@ export function useSocketEvents({
 
     socket.on('room_joined', ({ playerId, playerToken, room }) => {
       setMyPlayerId(playerId);
-      setIsHost(false);
+      setIsHost(room.players.find((p) => p.id === playerId)?.isHost ?? false);
       setLobbyState(room);
       setRoomCode(room.roomCode);
       setAudioMode(room.audioMode);
       setRounds(room.rounds);
       sessionStorage.setItem(STORAGE_KEYS.playerToken, playerToken);
       sessionStorage.setItem(STORAGE_KEYS.roomCode, room.roomCode);
-      if (room.status !== 'playing') {
+      // 'playing' and 'finished' are followed by game_resumed/game_paused/game_over
+      if (room.status === 'lobby') {
         setScreen('lobby');
       }
     });
@@ -123,8 +148,9 @@ export function useSocketEvents({
       setLobbyState(room);
       setAudioMode(room.audioMode);
       setRounds(room.rounds);
+      // Only leave game/result screens (return to lobby); never interrupt playlist or loading screens.
       if (room.status === 'lobby') {
-        setScreen('lobby');
+        setScreen((prev) => (prev === 'game' || prev === 'result' ? 'lobby' : prev));
       }
     });
 
@@ -133,7 +159,12 @@ export function useSocketEvents({
       setScreen('loading');
     });
 
+    socket.on('game_loading_cancelled', () => {
+      setScreen((prev) => (prev === 'loading' ? 'lobby' : prev));
+    });
+
     socket.on('game_started', ({ gameState: gs, currentSong: cs }) => {
+      clearRevealTimer();
       setGameState(gs);
       setCurrentSong(cs);
       setRevealedSong(null);
@@ -155,7 +186,8 @@ export function useSocketEvents({
       setGameState(gs);
       stopSong();
 
-      setTimeout(() => {
+      clearRevealTimer();
+      revealTimerRef.current = setTimeout(() => {
         setFeedback(null);
         setRevealed(false);
         setRevealedSong(null);
@@ -171,6 +203,7 @@ export function useSocketEvents({
     });
 
     socket.on('game_over', ({ players, lastSong, lastCorrect, lastPlayerId, winnerLastSong }) => {
+      clearRevealTimer();
       stopSong();
       const resultData = {
         players,
@@ -184,7 +217,7 @@ export function useSocketEvents({
         setRevealedSong(lastSong);
         setFeedback(lastCorrect ? 'ok' : 'no');
         setRevealed(true);
-        setTimeout(() => {
+        revealTimerRef.current = setTimeout(() => {
           setFeedback(null);
           setRevealed(false);
           setRevealedSong(null);
@@ -200,6 +233,7 @@ export function useSocketEvents({
     });
 
     socket.on('player_kicked', () => {
+      clearRevealTimer();
       stopSong();
       socket.disconnect();
       setScreen('login');
@@ -208,9 +242,23 @@ export function useSocketEvents({
 
     socket.on(
       'game_paused',
-      ({ disconnectedPlayerId, disconnectedPlayerName, isHostDisconnected, gameState: gs }) => {
-        setGameState(gs);
+      ({
+        disconnectedPlayerId,
+        disconnectedPlayerName,
+        isHostDisconnected,
+        gameState: gs,
+        currentSong: cs,
+      }) => {
+        clearRevealTimer();
         stopSong();
+        setGameState(gs);
+        setCurrentSong(cs);
+        setRevealedSong(null);
+        setFeedback(null);
+        setRevealed(false);
+        setLastPlacedPlayerId(null);
+        setSlot(null);
+        setScreen('game');
         setDisconnectedPlayer({
           id: disconnectedPlayerId,
           name: disconnectedPlayerName,
@@ -220,12 +268,14 @@ export function useSocketEvents({
     );
 
     socket.on('game_resumed', ({ gameState: gs, currentSong: cs }) => {
+      clearRevealTimer();
       setDisconnectedPlayer(null);
       setGameState(gs);
       setCurrentSong(cs);
       setRevealedSong(null);
       setFeedback(null);
       setRevealed(false);
+      setLastPlacedPlayerId(null);
       setSlot(null);
       setScreen('game');
       if (cs.preview && shouldPlay(gs.audioMode, isHostRef.current)) {
@@ -242,10 +292,13 @@ export function useSocketEvents({
     });
 
     return () => {
+      clearRevealTimer();
+      socket.io.off('reconnect', handleReconnect);
       socket.off('room_created');
       socket.off('room_joined');
       socket.off('room_updated');
       socket.off('game_loading');
+      socket.off('game_loading_cancelled');
       socket.off('game_started');
       socket.off('game_paused');
       socket.off('game_resumed');

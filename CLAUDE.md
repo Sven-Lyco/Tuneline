@@ -130,11 +130,12 @@ Tuneline/
 ### Socket.io Events (Überblick)
 
 ```text
-Client → Server: create_room, join_room, start_loading, start_game,
+Client → Server: create_room, join_room, start_loading, cancel_loading, start_game,
                   update_settings, place_song, skip_player, kick_player,
                   return_to_lobby, send_reaction
 Server → Client: room_created, room_joined, room_updated, game_loading,
-                  game_started, turn_started, placement_result, game_over,
+                  game_loading_cancelled, game_started, turn_started,
+                  placement_result, game_over,
                   game_paused, game_resumed, player_disconnected,
                   player_reconnected, player_kicked, error, reaction_received
 ```

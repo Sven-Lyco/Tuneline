@@ -222,6 +222,7 @@ export default function App() {
       );
 
       if (songs.length < playerCount + 3) {
+        socket.emit('cancel_loading');
         setLoadingMsg('Nicht genug Songs. Bitte andere Playlisten wählen.');
         await new Promise((r) => setTimeout(r, 2000));
         setScreen('lobby');
@@ -230,6 +231,7 @@ export default function App() {
 
       socket.emit('start_game', { songs, rounds, audioMode });
     } catch {
+      socket.emit('cancel_loading');
       setLoadingMsg('Fehler beim Laden der Songs. Bitte erneut versuchen.');
       await new Promise((r) => setTimeout(r, 2500));
       setScreen('lobby');

@@ -5,7 +5,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 import express from 'express';
 import { createServer } from 'http';
-import { Server } from 'socket.io';
+import { Server, type Socket } from 'socket.io';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import compression from 'compression';
@@ -196,6 +196,23 @@ function makeRateLimiter(limit = 15, windowMs = 1000) {
   };
 }
 
+const PAYLOAD_EVENTS = new Set<string>([
+  'create_room',
+  'join_room',
+  'start_game',
+  'update_settings',
+  'place_song',
+  'kick_player',
+  'send_reaction',
+]);
+
+// Same single-proxy assumption as `trust proxy 1`: the last X-Forwarded-For entry is set by Coolify.
+function clientIp(handshake: Socket['handshake']): string {
+  const forwarded = handshake.headers['x-forwarded-for'];
+  const last = typeof forwarded === 'string' ? forwarded.split(',').pop()?.trim() : undefined;
+  return last || handshake.address;
+}
+
 // ── Shared helpers ────────────────────────────────────────────────────────
 
 function emitGameOver(
@@ -203,19 +220,42 @@ function emitGameOver(
   roomCode: string,
   lastSong: SongFull | null,
   lastCorrect: boolean,
-  lastPlayerId: string
+  lastPlayerId: string,
+  target: string = roomCode
 ) {
   const players = rooms.getPlayers(roomCode);
   if (!players) return;
   const winner = [...players].sort((a, b) => b.score - a.score)[0];
   const winnerLastSong = winner ? rooms.getLastCorrectSong(roomCode, winner.id) : null;
-  io.to(roomCode).emit('game_over', {
+  io.to(target).emit('game_over', {
     players,
     lastSong,
     lastCorrect,
     lastPlayerId,
     winnerLastSong,
   });
+}
+
+/** Broadcasts game_paused while any player in the turn order is offline, else game_resumed. */
+function emitPauseOrResume(io: IoServer, roomCode: string) {
+  const gameState = rooms.getGameState(roomCode);
+  const currentSong = rooms.getCurrentSongPreview(roomCode);
+  if (!gameState || !currentSong) return;
+
+  const paused = rooms.getPausedPlayer(roomCode);
+  if (paused) {
+    io.to(roomCode).emit('game_paused', {
+      disconnectedPlayerId: paused.id,
+      disconnectedPlayerName: paused.name,
+      isHostDisconnected: false,
+      gameState,
+      currentSong,
+    });
+    logger.info({ roomCode, playerName: paused.name }, 'game_paused');
+  } else {
+    io.to(roomCode).emit('game_resumed', { gameState, currentSong });
+    logger.info({ roomCode, currentPlayerId: gameState.currentPlayerId }, 'game_resumed');
+  }
 }
 
 function onDisconnect(socketId: string, io: IoServer) {
@@ -229,7 +269,7 @@ function onDisconnect(socketId: string, io: IoServer) {
     'player_disconnected'
   );
 
-  if (!info.wasPlaying || !info.shouldPause) {
+  if (!info.wasPlaying) {
     const lobby = rooms.getLobbyState(info.roomCode);
     if (lobby) io.to(info.roomCode).emit('room_updated', { room: lobby });
     return;
@@ -238,30 +278,19 @@ function onDisconnect(socketId: string, io: IoServer) {
   const gameState = rooms.getGameState(info.roomCode);
   if (!gameState) return;
 
-  if (info.isHost) {
+  const connectedCount = gameState.players.filter((p) => p.isConnected).length;
+  if (info.isHost || connectedCount <= 1) {
+    rooms.finishGame(info.roomCode);
     emitGameOver(io, info.roomCode, null, false, info.playerId);
     logger.warn(
       { roomCode: info.roomCode, playerId: info.playerId },
-      'host_disconnected_game_over'
+      info.isHost ? 'host_disconnected_game_over' : 'last_player_disconnected_game_over'
     );
     return;
   }
 
-  const connectedCount = gameState.players.filter((p) => p.isConnected).length;
-  if (connectedCount <= 1) {
-    rooms.finishGame(info.roomCode);
-    emitGameOver(io, info.roomCode, null, false, info.playerId);
-    logger.warn({ roomCode: info.roomCode }, 'last_player_disconnected_game_over');
-    return;
-  }
-
-  io.to(info.roomCode).emit('game_paused', {
-    disconnectedPlayerId: info.playerId,
-    disconnectedPlayerName: info.playerName,
-    isHostDisconnected: false,
-    gameState,
-  });
-  logger.info({ roomCode: info.roomCode, playerName: info.playerName }, 'game_paused');
+  // Spectators (not in the turn order) don't pause the game.
+  if (rooms.getPausedPlayer(info.roomCode)) emitPauseOrResume(io, info.roomCode);
 }
 
 // ── Socket.io event handlers ──────────────────────────────────────────────
@@ -270,11 +299,23 @@ io.on('connection', (socket) => {
   const isLimited = makeRateLimiter();
   logger.debug({ socketId: socket.id }, 'socket_connect');
 
+  // Dropping a packet here (no next()) means its handler never runs.
+  socket.use(([event, payload], next) => {
+    if (isLimited(event)) return;
+    if (PAYLOAD_EVENTS.has(event) && (typeof payload !== 'object' || payload === null)) return;
+    next();
+  });
+
   socket.on('create_room', ({ hostName, rounds, audioMode }) => {
-    if (isLimited('create_room')) return;
     if (typeof hostName !== 'string' || !hostName.trim()) return;
 
-    const result = rooms.createRoom(socket.id, hostName, rounds ?? 5, audioMode ?? 'all');
+    const result = rooms.createRoom(
+      socket.id,
+      clientIp(socket.handshake),
+      hostName,
+      rounds,
+      audioMode
+    );
     if (!result.ok) {
       socket.emit('error', { message: result.error });
       logger.warn({ error: result.error }, 'create_room_denied');
@@ -290,11 +331,11 @@ io.on('connection', (socket) => {
   });
 
   socket.on('join_room', ({ roomCode, playerName, playerToken }) => {
-    if (isLimited('join_room')) return;
     if (typeof roomCode !== 'string' || typeof playerName !== 'string') return;
     if (!playerName.trim()) return;
 
     const code = roomCode.toUpperCase().trim();
+    const wasPaused = rooms.getPausedPlayer(code) !== null;
     const result = rooms.joinRoom(socket.id, code, playerName, playerToken);
 
     if (!result.ok) {
@@ -315,16 +356,17 @@ io.on('connection', (socket) => {
 
     // If reconnecting to an active game, send current game state
     if (lobby.status === 'playing') {
-      const gameState = rooms.getGameState(code);
-      const currentSong = rooms.getCurrentSongPreview(code);
-      if (gameState && currentSong) {
-        io.to(code).emit('game_resumed', { gameState, currentSong });
-        logger.info(
-          { roomCode: code, playerId: result.playerId },
-          'player_reconnected_game_resumed'
-        );
+      if (wasPaused) {
+        emitPauseOrResume(io, code);
+      } else {
+        // Nobody else was waiting — only sync the returning client, don't restart everyone's song.
+        const gameState = rooms.getGameState(code);
+        const currentSong = rooms.getCurrentSongPreview(code);
+        if (gameState && currentSong) socket.emit('game_resumed', { gameState, currentSong });
       }
       io.to(code).emit('player_reconnected', { playerId: result.playerId });
+    } else if (lobby.status === 'finished') {
+      emitGameOver(io, code, null, false, '', socket.id);
     } else {
       io.to(code).emit('room_updated', { room: lobby });
     }
@@ -341,15 +383,20 @@ io.on('connection', (socket) => {
   });
 
   socket.on('start_loading', () => {
-    if (isLimited('start_loading')) return;
     const roomCode = rooms.getRoomCodeForSocket(socket.id);
-    if (!roomCode) return;
+    if (!roomCode || !rooms.isHost(socket.id, roomCode)) return;
     socket.to(roomCode).emit('game_loading');
     logger.debug({ roomCode }, 'start_loading');
   });
 
+  socket.on('cancel_loading', () => {
+    const roomCode = rooms.getRoomCodeForSocket(socket.id);
+    if (!roomCode || !rooms.isHost(socket.id, roomCode)) return;
+    socket.to(roomCode).emit('game_loading_cancelled');
+    logger.debug({ roomCode }, 'cancel_loading');
+  });
+
   socket.on('start_game', ({ songs, rounds, audioMode }) => {
-    if (isLimited('start_game')) return;
     const roomCode = rooms.getRoomCodeForSocket(socket.id);
     if (!roomCode) return;
 
@@ -357,6 +404,7 @@ io.on('connection', (socket) => {
     if (!result.ok) {
       logger.warn({ roomCode, error: result.error }, 'start_game_denied');
       socket.emit('error', { message: result.error });
+      if (rooms.isHost(socket.id, roomCode)) io.to(roomCode).emit('game_loading_cancelled');
       return;
     }
 
@@ -372,7 +420,6 @@ io.on('connection', (socket) => {
   });
 
   socket.on('update_settings', ({ rounds, audioMode }) => {
-    if (isLimited('update_settings')) return;
     const roomCode = rooms.getRoomCodeForSocket(socket.id);
     if (!roomCode) return;
 
@@ -388,7 +435,6 @@ io.on('connection', (socket) => {
   });
 
   socket.on('place_song', ({ position }) => {
-    if (isLimited('place_song')) return;
     if (typeof position !== 'number') return;
     const roomCode = rooms.getRoomCodeForSocket(socket.id);
     if (!roomCode) return;
@@ -432,7 +478,6 @@ io.on('connection', (socket) => {
   });
 
   socket.on('return_to_lobby', () => {
-    if (isLimited('return_to_lobby')) return;
     const roomCode = rooms.getRoomCodeForSocket(socket.id);
     if (!roomCode) return;
 
@@ -449,7 +494,6 @@ io.on('connection', (socket) => {
   });
 
   socket.on('skip_player', () => {
-    if (isLimited('skip_player')) return;
     const roomCode = rooms.getRoomCodeForSocket(socket.id);
     if (!roomCode) return;
 
@@ -459,21 +503,17 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const gameState = rooms.getGameState(roomCode);
-    const currentSong = rooms.getCurrentSongPreview(roomCode);
-
-    if (!gameState || gameState.players.length <= 1 || !currentSong) {
+    if (result.gameOver) {
       emitGameOver(io, roomCode, null, false, '');
       logger.warn({ roomCode }, 'skip_player_game_over');
       return;
     }
 
-    io.to(roomCode).emit('game_resumed', { gameState, currentSong });
-    logger.info({ roomCode, currentPlayerId: gameState.currentPlayerId }, 'skip_player');
+    emitPauseOrResume(io, roomCode);
+    logger.info({ roomCode }, 'skip_player');
   });
 
   socket.on('kick_player', ({ playerId }) => {
-    if (isLimited('kick_player')) return;
     if (typeof playerId !== 'string') return;
     const roomCode = rooms.getRoomCodeForSocket(socket.id);
     if (!roomCode) return;
@@ -496,7 +536,6 @@ io.on('connection', (socket) => {
   });
 
   socket.on('send_reaction', ({ emoji }) => {
-    if (isLimited('send_reaction')) return;
     if (!(REACTION_EMOJIS as readonly string[]).includes(emoji)) return;
     const roomCode = rooms.getRoomCodeForSocket(socket.id);
     if (!roomCode) return;

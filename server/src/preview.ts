@@ -28,9 +28,7 @@ function pickBestPreview(results: ItunesTrack[], artist: string, title: string):
   if (exactMatch) return exactMatch.previewUrl;
 
   const artistMatch = withPreview.find((r) => normalize(r.artistName).includes(normArtist));
-  if (artistMatch) return artistMatch.previewUrl;
-
-  return withPreview[0].previewUrl ?? null;
+  return artistMatch?.previewUrl ?? null;
 }
 
 // In-memory cache: "artist|title" → previewUrl | null (max 2000 entries, LRU-eviction)
@@ -59,10 +57,8 @@ export async function findPreview(artist: string, title: string): Promise<string
       { signal: AbortSignal.timeout(6000) },
     );
 
-    if (!response.ok) {
-      cacheSet(cacheKey, null);
-      return null;
-    }
+    // Not cached: 403/429/5xx are transient (iTunes throttling), not "no preview".
+    if (!response.ok) return null;
 
     const data = (await response.json()) as ItunesSearchResult;
     const previewUrl = pickBestPreview(data.results, artist, title);
@@ -106,7 +102,6 @@ export async function previewHandler(req: Request, res: Response): Promise<void>
 
     if (!response.ok) {
       logger.warn({ artist, title, status: response.status }, 'itunes_fetch_error');
-      cacheSet(cacheKey, null);
       res.json({ previewUrl: null });
       return;
     }

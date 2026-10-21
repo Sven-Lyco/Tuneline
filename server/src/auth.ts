@@ -2,6 +2,7 @@ import { randomBytes } from 'crypto';
 
 export const SESSION_COOKIE = 'tuneline_session';
 export const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 
 export interface SessionData {
   accessToken: string;
@@ -9,20 +10,37 @@ export interface SessionData {
   expiresAt: number;
 }
 
-const sessions = new Map<string, SessionData>();
+const sessions = new Map<string, { data: SessionData; createdAt: number }>();
+
+function isExpired(createdAt: number): boolean {
+  return Date.now() - createdAt > SESSION_MAX_AGE_MS;
+}
+
+setInterval(() => {
+  for (const [id, session] of sessions) {
+    if (isExpired(session.createdAt)) sessions.delete(id);
+  }
+}, SWEEP_INTERVAL_MS).unref();
 
 export function createSession(data: SessionData): string {
   const id = randomBytes(32).toString('hex');
-  sessions.set(id, data);
+  sessions.set(id, { data, createdAt: Date.now() });
   return id;
 }
 
 export function getSession(id: string): SessionData | null {
-  return sessions.get(id) ?? null;
+  const session = sessions.get(id);
+  if (!session) return null;
+  if (isExpired(session.createdAt)) {
+    sessions.delete(id);
+    return null;
+  }
+  return session.data;
 }
 
 export function updateSession(id: string, data: SessionData): void {
-  sessions.set(id, data);
+  const session = sessions.get(id);
+  if (session) session.data = data;
 }
 
 export function deleteSession(id: string): void {

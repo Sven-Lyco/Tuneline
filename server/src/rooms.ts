@@ -456,7 +456,9 @@ export class RoomManager {
     if (!room) return null;
     return {
       roomCode: room.code,
-      players: this.toPublicPlayers(room),
+      // Everyone in the room — after a game this includes skipped players, who are out of
+      // playerOrder until returnToLobby (in the lobby both lists are the same).
+      players: this.toPublicPlayers(room, [...room.players.keys()]),
       rounds: room.rounds,
       audioMode: room.audioMode,
       turnLimit: room.turnLimit,

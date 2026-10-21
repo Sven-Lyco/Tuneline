@@ -253,7 +253,11 @@ describe('playing and leaving', () => {
       lastPlayerId: '',
       winnerLastSong: null,
     });
-    fireEvent.click(await screen.findByText('↻ Nochmal spielen'));
+    await screen.findByText('↻ Nochmal spielen');
+    expect(screen.queryByText('verlassen')).not.toBeInTheDocument();
+    serverEmit('room_updated', { room: lobby({ status: 'finished', players: [player('host')] }) });
+    expect(await screen.findByText('verlassen')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('↻ Nochmal spielen'));
     expect(emittedPayloads('return_to_lobby')).toHaveLength(1);
 
     fireEvent.click(screen.getByText('← Raum verlassen'));

@@ -62,9 +62,22 @@ interface ResultScreenProps {
   lastCorrect: boolean;
   lastPlayerId: string;
   winnerLastSong: SongFull | null;
+  /** Who is still in the room, once the server reported it after the game; null until then. */
+  roomPlayers: RoomPlayer[] | null;
   onRestart: () => void;
   /** For the host this closes the room for everyone. */
   onLeave: () => void;
+}
+
+type Away = 'left' | 'offline';
+
+const AWAY_LABELS: Record<Away, string> = { left: 'verlassen', offline: 'offline' };
+
+/** Final scores stay, but players who left the room or dropped are marked. */
+function awayStatus(player: RoomPlayer, roomPlayers: RoomPlayer[] | null): Away | null {
+  const current = roomPlayers ? roomPlayers.find((p) => p.id === player.id) : player;
+  if (!current) return 'left';
+  return current.isConnected ? null : 'offline';
 }
 
 const GameOverLabel = styled.div`
@@ -112,6 +125,19 @@ const RankRow = styled.div`
   border-radius: 10px;
   background: #1a1a26;
   animation: slideIn 0.4s ease-out both;
+
+  /* slideIn ends at opacity 1, so fade the contents instead of the row */
+  &[data-away='true'] > :not([data-tag]) {
+    opacity: 0.45;
+  }
+`;
+
+const AwayTag = styled.span`
+  font-size: 0.7rem;
+  color: #7a7a8e;
+  border: 1px solid #2a2a3a;
+  border-radius: 20px;
+  padding: 0.05rem 0.4rem;
 `;
 
 const RankPosition = styled.span`
@@ -264,6 +290,7 @@ export function ResultScreen({
   lastCorrect,
   lastPlayerId,
   winnerLastSong,
+  roomPlayers,
   onRestart,
   onLeave,
 }: ResultScreenProps) {
@@ -324,14 +351,22 @@ export function ResultScreen({
         )}
 
         <Rankings>
-          {ranked.map((r, i) => (
-            <RankRow key={r.id} style={{ animationDelay: `${i * 0.12}s` }}>
-              <RankPosition>{RANK_MEDALS[i] ?? `#${i + 1}`}</RankPosition>
-              <RankDot bg={r.color} />
-              <RankName>{r.name}</RankName>
-              <RankScore>{r.score}</RankScore>
-            </RankRow>
-          ))}
+          {ranked.map((r, i) => {
+            const away = awayStatus(r, roomPlayers);
+            return (
+              <RankRow
+                key={r.id}
+                data-away={String(away !== null)}
+                style={{ animationDelay: `${i * 0.12}s` }}
+              >
+                <RankPosition>{RANK_MEDALS[i] ?? `#${i + 1}`}</RankPosition>
+                <RankDot bg={r.color} />
+                <RankName>{r.name}</RankName>
+                {away && <AwayTag data-tag>{AWAY_LABELS[away]}</AwayTag>}
+                <RankScore>{r.score}</RankScore>
+              </RankRow>
+            );
+          })}
         </Rankings>
 
         <TimelinesSection>

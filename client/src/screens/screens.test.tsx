@@ -301,9 +301,41 @@ describe('ResultScreen', () => {
     lastCorrect: true,
     lastPlayerId: 'host',
     winnerLastSong: null,
+    roomPlayers: null,
     onRestart: vi.fn(),
     onLeave: vi.fn(),
     ...overrides,
+  });
+
+  it('marks players who left the room or dropped, keeping their scores', () => {
+    const { rerender } = render(
+      <ResultScreen
+        {...props({
+          players: [player('host', { score: 2 }), player('me', { isConnected: false })],
+        })}
+      />
+    );
+    expect(screen.getByText('offline')).toBeInTheDocument();
+
+    const finalPlayers = [player('host', { score: 2 }), player('me'), player('ben', { score: 1 })];
+    rerender(
+      <ResultScreen
+        {...props({
+          players: finalPlayers,
+          roomPlayers: [player('host'), player('me', { isConnected: false })],
+        })}
+      />
+    );
+    expect(screen.getByText('verlassen')).toBeInTheDocument();
+    expect(screen.getByText('offline')).toBeInTheDocument();
+    // Names also appear as winner and timeline labels; only the ranking row has data-away.
+    const awayOf = (name: string) =>
+      screen
+        .getAllByText(name)
+        .map((el) => el.closest('[data-away]')?.getAttribute('data-away'))
+        .find(Boolean);
+    expect(awayOf('ben')).toBe('true');
+    expect(awayOf('host')).toBe('false');
   });
 
   it('crowns the winner, recaps the last move and offers restart and leave', () => {

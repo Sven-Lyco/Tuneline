@@ -482,6 +482,8 @@ export default function App() {
           lastCorrect={result.lastCorrect}
           lastPlayerId={result.lastPlayerId}
           winnerLastSong={result.winnerLastSong}
+          // Only a room update sent after the game ended says who is still there.
+          roomPlayers={lobbyState?.status === 'finished' ? lobbyState.players : null}
           onRestart={handleRestart}
           onLeave={handleLeave}
         />

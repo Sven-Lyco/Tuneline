@@ -193,6 +193,21 @@ describe('rejoinRoom', () => {
     expect(rooms.getPlayers(code)!.map((p) => p.name)).toEqual(['Host', 'Ben', 'Anna']);
   });
 
+  it('lists skipped players as still in the room after the game', () => {
+    const { rooms, code } = playing(['Anna', 'Ben']);
+    rooms.placeSong('host-socket', code, 0);
+    rooms.handleDisconnect('Anna-socket');
+    rooms.skipDisconnectedPlayer('host-socket', code);
+    finish(rooms, code);
+    const lobby = rooms.getLobbyState(code)!;
+    expect(lobby.status).toBe('finished');
+    expect(lobby.players.map((p) => [p.name, p.isConnected])).toEqual([
+      ['Host', true],
+      ['Anna', false],
+      ['Ben', true],
+    ]);
+  });
+
   it('keeps the host’s round setting when the deck forces a shorter game', () => {
     const rooms = new RoomManager(events);
     const created = rooms.createRoom('host-socket', 'ip', 'Host', 20, 'all', 0);

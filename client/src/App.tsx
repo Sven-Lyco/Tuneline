@@ -128,12 +128,14 @@ export default function App() {
 
   // ── Auth init ─────────────────────────────────────────────────
 
+  // Read once: StrictMode runs the init effect twice and the first run strips the query string.
+  const [initialParams] = useState(() => new URLSearchParams(window.location.search));
+
   useEffect(() => {
     const init = async () => {
-      const params = new URLSearchParams(window.location.search);
-      const authenticated = params.get('authenticated');
-      const authError = params.get('auth_error');
-      const room = params.get('room');
+      const authenticated = initialParams.get('authenticated');
+      const authError = initialParams.get('auth_error');
+      const room = initialParams.get('room');
 
       if (authenticated) {
         window.history.replaceState({}, '', window.location.pathname);
@@ -150,7 +152,7 @@ export default function App() {
       }
     };
     void init();
-  }, [setScreen, showError]);
+  }, [initialParams, setScreen, showError]);
 
   // ── Playlist selection ────────────────────────────────────────
 

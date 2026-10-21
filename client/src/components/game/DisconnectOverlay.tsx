@@ -88,7 +88,7 @@ export function DisconnectOverlay({
         </Title>
         <Sub>
           {isHostDisconnected
-            ? 'Das Spiel wurde beendet. Ergebnis wird gleich angezeigt.'
+            ? 'Das Spiel ist pausiert, bis der Host zurück ist. Kommt er nicht innerhalb von 2 Minuten wieder, endet das Spiel.'
             : isHost
               ? 'Teile den Raum-Code damit der Spieler wieder beitreten kann:'
               : 'Das Spiel ist pausiert. Der Host entscheidet wie es weitergeht.'}

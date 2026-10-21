@@ -73,12 +73,12 @@ const Grid = styled.div`
   flex: 1;
 `;
 
-const PlaylistCard = styled.button<{ selected: string }>`
+const PlaylistCard = styled.button`
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  background: ${({ selected }) => (selected === 'true' ? 'rgba(29,185,84,0.07)' : '#12121a')};
-  border: 1.5px solid ${({ selected }) => (selected === 'true' ? '#1db954' : '#2a2a3a')};
+  background: #12121a;
+  border: 1.5px solid #2a2a3a;
   border-radius: 14px;
   padding: 0;
   overflow: hidden;
@@ -87,10 +87,16 @@ const PlaylistCard = styled.button<{ selected: string }>`
   transition:
     border-color 0.2s,
     background 0.2s;
-  box-shadow: ${({ selected }) => (selected === 'true' ? '0 0 18px rgba(29,185,84,0.2)' : 'none')};
+  box-shadow: none;
 
   &:hover {
-    border-color: ${({ selected }) => (selected === 'true' ? '#1db954' : '#4a4a6a')};
+    border-color: #4a4a6a;
+  }
+
+  &[data-selected='true'] {
+    background: rgba(29, 185, 84, 0.07);
+    border-color: #1db954;
+    box-shadow: 0 0 18px rgba(29, 185, 84, 0.2);
   }
 `;
 
@@ -223,7 +229,12 @@ export function PlaylistScreen({ selected, onToggle, onConfirm, onLogout }: Play
 
       <Grid>
         {playlists.map((p) => (
-          <PlaylistCard key={p.id} selected={String(isSelected(p))} onClick={() => onToggle(p)}>
+          <PlaylistCard
+            key={p.id}
+            data-selected={String(isSelected(p))}
+            aria-pressed={isSelected(p)}
+            onClick={() => onToggle(p)}
+          >
             <CoverWrapper>
               {p.coverUrl ? (
                 <CoverImg

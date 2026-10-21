@@ -176,7 +176,10 @@ if (IS_PROD) {
   });
 }
 
-const rooms = new RoomManager();
+const rooms = new RoomManager((roomCode) => {
+  emitGameOver(io, roomCode, null, false, '');
+  logger.warn({ roomCode }, 'host_timeout_game_over');
+});
 
 // ── Per-socket rate limiter ───────────────────────────────────────────────
 
@@ -245,7 +248,7 @@ function emitPauseOrResume(io: IoServer, roomCode: string, target: string = room
     io.to(target).emit('game_paused', {
       disconnectedPlayerId: paused.id,
       disconnectedPlayerName: paused.name,
-      isHostDisconnected: false,
+      isHostDisconnected: paused.isHost,
       gameState,
       currentSong,
     });
@@ -275,16 +278,7 @@ function onDisconnect(socketId: string, io: IoServer) {
     return;
   }
 
-  if (info.isHost || info.connectedInGame <= 1) {
-    rooms.finishGame(info.roomCode);
-    emitGameOver(io, info.roomCode, null, false, info.playerId);
-    logger.warn(
-      { roomCode: info.roomCode, playerId: info.playerId },
-      info.isHost ? 'host_disconnected_game_over' : 'last_player_disconnected_game_over'
-    );
-    return;
-  }
-
+  // The game waits for whoever dropped (a host only for HOST_RECONNECT_GRACE_MS, see RoomManager).
   // A spectator (not in the turn order) leaving doesn't pause, so there's nothing to resume either.
   if (rooms.getPausedPlayer(info.roomCode)) emitPauseOrResume(io, info.roomCode);
 }

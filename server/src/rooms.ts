@@ -12,6 +12,7 @@ import {
   TOKEN_CHARS,
   ROOM_TTL_MS,
   EMPTY_ROOM_TTL_MS,
+  HOST_RECONNECT_GRACE_MS,
   MAX_PLAYERS,
   MAX_NAME_LENGTH,
   MAX_ROOMS,
@@ -32,6 +33,9 @@ import * as game from './game.js';
 export class RoomManager {
   private rooms = new Map<string, Room>();
   private socketToRoom = new Map<string, string>(); // socketId → roomCode
+
+  /** onHostTimeout runs after the game was finished because the host didn't return in time. */
+  constructor(private readonly onHostTimeout: (roomCode: string) => void) {}
 
   // ── Private helpers ──────────────────────────────────────────────────────
 
@@ -57,6 +61,7 @@ export class RoomManager {
   }
 
   private deleteRoom(room: Room): void {
+    clearTimeout(room.hostTimeout);
     for (const socketId of room.socketToPlayer.keys()) this.unmapSocket(room, socketId);
     this.rooms.delete(room.code);
   }
@@ -168,6 +173,7 @@ export class RoomManager {
           this.unmapSocket(room, player.socketId);
           player.socketId = socketId;
           player.isConnected = true;
+          if (player.isHost) clearTimeout(room.hostTimeout);
           room.socketToPlayer.set(socketId, id);
           this.socketToRoom.set(socketId, roomCode);
           this.scheduleCleanup(room);
@@ -228,7 +234,6 @@ export class RoomManager {
     playerId: string;
     isHost: boolean;
     wasPlaying: boolean;
-    connectedInGame: number;
   } | null {
     const roomCode = this.socketToRoom.get(socketId);
     if (!roomCode) return null;
@@ -245,18 +250,23 @@ export class RoomManager {
     if (!player) return null;
 
     player.isConnected = false;
+    const wasPlaying = room.status === 'playing';
 
     if (![...room.players.values()].some((p) => p.isConnected)) {
       this.scheduleCleanup(room, EMPTY_ROOM_TTL_MS);
     }
 
-    return {
-      roomCode,
-      playerId,
-      isHost: player.isHost,
-      wasPlaying: room.status === 'playing',
-      connectedInGame: room.playerOrder.filter((id) => room.players.get(id)?.isConnected).length,
-    };
+    // Only the host can skip players, so nobody could unblock a game whose host is gone for good.
+    if (player.isHost && wasPlaying) {
+      clearTimeout(room.hostTimeout);
+      room.hostTimeout = setTimeout(() => {
+        if (room.status !== 'playing' || player.isConnected) return;
+        game.finishGame(room);
+        this.onHostTimeout(room.code);
+      }, HOST_RECONNECT_GRACE_MS);
+    }
+
+    return { roomCode, playerId, isHost: player.isHost, wasPlaying };
   }
 
   // ── Game actions (auth check here, logic delegated to game.ts) ───────────
@@ -342,11 +352,11 @@ export class RoomManager {
     return !!room && this.getPlayer(socketId, room)?.isHost === true;
   }
 
-  getPausedPlayer(roomCode: string): { id: string; name: string } | null {
+  getPausedPlayer(roomCode: string): { id: string; name: string; isHost: boolean } | null {
     const room = this.rooms.get(roomCode);
     const pausedId = room ? game.pausedPlayerId(room) : null;
     const player = pausedId ? room?.players.get(pausedId) : undefined;
-    return player ? { id: player.id, name: player.name } : null;
+    return player ? { id: player.id, name: player.name, isHost: player.isHost } : null;
   }
 
   getLobbyState(roomCode: string): LobbyState | null {

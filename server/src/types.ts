@@ -4,6 +4,7 @@ export const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 export const TOKEN_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789';
 export const ROOM_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
 export const EMPTY_ROOM_TTL_MS = 10 * 60 * 1000;
+export const HOST_RECONNECT_GRACE_MS = 2 * 60 * 1000;
 export const MAX_PLAYERS = 10;
 export const MAX_NAME_LENGTH = 30;
 export const MAX_ROOMS = 500;
@@ -48,6 +49,7 @@ export interface Room {
   lastCorrectSong: Map<string, SongFull>; // playerId → last correctly placed song
   hostIp: string;
   cleanupTimer: ReturnType<typeof setTimeout>;
+  hostTimeout?: ReturnType<typeof setTimeout>; // ends a paused game if the host never returns
 }
 
 export type SimpleResult = { ok: true } | { ok: false; error: string };

@@ -181,22 +181,20 @@ const rooms = new RoomManager();
 // ── Per-socket rate limiter ───────────────────────────────────────────────
 
 function makeRateLimiter(limit = 15, windowMs = 1000) {
-  const counts = new Map<string, number>();
+  let count = 0;
   let resetAt = Date.now() + windowMs;
 
-  return function isLimited(event: string): boolean {
+  return function isLimited(): boolean {
     const now = Date.now();
     if (now > resetAt) {
-      counts.clear();
+      count = 0;
       resetAt = now + windowMs;
     }
-    const n = (counts.get(event) ?? 0) + 1;
-    counts.set(event, n);
-    return n > limit;
+    return ++count > limit;
   };
 }
 
-const PAYLOAD_EVENTS = new Set<string>([
+const PAYLOAD_EVENTS = new Set<keyof ClientToServerEvents>([
   'create_room',
   'join_room',
   'start_game',
@@ -236,15 +234,15 @@ function emitGameOver(
   });
 }
 
-/** Broadcasts game_paused while any player in the turn order is offline, else game_resumed. */
-function emitPauseOrResume(io: IoServer, roomCode: string) {
+/** Sends game_paused while any player in the turn order is offline, else game_resumed. */
+function emitPauseOrResume(io: IoServer, roomCode: string, target: string = roomCode) {
   const gameState = rooms.getGameState(roomCode);
   const currentSong = rooms.getCurrentSongPreview(roomCode);
   if (!gameState || !currentSong) return;
 
   const paused = rooms.getPausedPlayer(roomCode);
   if (paused) {
-    io.to(roomCode).emit('game_paused', {
+    io.to(target).emit('game_paused', {
       disconnectedPlayerId: paused.id,
       disconnectedPlayerName: paused.name,
       isHostDisconnected: false,
@@ -253,7 +251,7 @@ function emitPauseOrResume(io: IoServer, roomCode: string) {
     });
     logger.info({ roomCode, playerName: paused.name }, 'game_paused');
   } else {
-    io.to(roomCode).emit('game_resumed', { gameState, currentSong });
+    io.to(target).emit('game_resumed', { gameState, currentSong });
     logger.info({ roomCode, currentPlayerId: gameState.currentPlayerId }, 'game_resumed');
   }
 }
@@ -270,16 +268,14 @@ function onDisconnect(socketId: string, io: IoServer) {
   );
 
   if (!info.wasPlaying) {
+    // A host who drops mid-load can't finish starting the game.
+    if (info.isHost) io.to(info.roomCode).emit('game_loading_cancelled');
     const lobby = rooms.getLobbyState(info.roomCode);
     if (lobby) io.to(info.roomCode).emit('room_updated', { room: lobby });
     return;
   }
 
-  const gameState = rooms.getGameState(info.roomCode);
-  if (!gameState) return;
-
-  const connectedCount = gameState.players.filter((p) => p.isConnected).length;
-  if (info.isHost || connectedCount <= 1) {
+  if (info.isHost || info.connectedInGame <= 1) {
     rooms.finishGame(info.roomCode);
     emitGameOver(io, info.roomCode, null, false, info.playerId);
     logger.warn(
@@ -289,7 +285,7 @@ function onDisconnect(socketId: string, io: IoServer) {
     return;
   }
 
-  // Spectators (not in the turn order) don't pause the game.
+  // A spectator (not in the turn order) leaving doesn't pause, so there's nothing to resume either.
   if (rooms.getPausedPlayer(info.roomCode)) emitPauseOrResume(io, info.roomCode);
 }
 
@@ -301,8 +297,10 @@ io.on('connection', (socket) => {
 
   // Dropping a packet here (no next()) means its handler never runs.
   socket.use(([event, payload], next) => {
-    if (isLimited(event)) return;
-    if (PAYLOAD_EVENTS.has(event) && (typeof payload !== 'object' || payload === null)) return;
+    if (isLimited()) return;
+    const needsPayload = PAYLOAD_EVENTS.has(event as keyof ClientToServerEvents);
+    if (needsPayload && (typeof payload !== 'object' || payload === null)) return;
+    rooms.touch(socket.id);
     next();
   });
 
@@ -332,7 +330,6 @@ io.on('connection', (socket) => {
 
   socket.on('join_room', ({ roomCode, playerName, playerToken }) => {
     if (typeof roomCode !== 'string' || typeof playerName !== 'string') return;
-    if (!playerName.trim()) return;
 
     const code = roomCode.toUpperCase().trim();
     const wasPaused = rooms.getPausedPlayer(code) !== null;
@@ -356,14 +353,9 @@ io.on('connection', (socket) => {
 
     // If reconnecting to an active game, send current game state
     if (lobby.status === 'playing') {
-      if (wasPaused) {
-        emitPauseOrResume(io, code);
-      } else {
-        // Nobody else was waiting — only sync the returning client, don't restart everyone's song.
-        const gameState = rooms.getGameState(code);
-        const currentSong = rooms.getCurrentSongPreview(code);
-        if (gameState && currentSong) socket.emit('game_resumed', { gameState, currentSong });
-      }
+      // Without a pause nobody else is waiting, so only sync the returning client
+      // instead of restarting everyone's song.
+      emitPauseOrResume(io, code, wasPaused ? code : socket.id);
       io.to(code).emit('player_reconnected', { playerId: result.playerId });
     } else if (lobby.status === 'finished') {
       emitGameOver(io, code, null, false, '', socket.id);
@@ -398,13 +390,13 @@ io.on('connection', (socket) => {
 
   socket.on('start_game', ({ songs, rounds, audioMode }) => {
     const roomCode = rooms.getRoomCodeForSocket(socket.id);
-    if (!roomCode) return;
+    if (!roomCode || !rooms.isHost(socket.id, roomCode)) return;
 
     const result = rooms.startGame(socket.id, roomCode, songs, rounds, audioMode);
     if (!result.ok) {
       logger.warn({ roomCode, error: result.error }, 'start_game_denied');
       socket.emit('error', { message: result.error });
-      if (rooms.isHost(socket.id, roomCode)) io.to(roomCode).emit('game_loading_cancelled');
+      io.to(roomCode).emit('game_loading_cancelled');
       return;
     }
 

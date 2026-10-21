@@ -57,7 +57,6 @@ export class RoomManager {
   }
 
   private deleteRoom(room: Room): void {
-    clearTimeout(room.cleanupTimer);
     for (const socketId of room.socketToPlayer.keys()) this.unmapSocket(room, socketId);
     this.rooms.delete(room.code);
   }
@@ -65,13 +64,6 @@ export class RoomManager {
   private unmapSocket(room: Room, socketId: string): void {
     room.socketToPlayer.delete(socketId);
     if (this.socketToRoom.get(socketId) === room.code) this.socketToRoom.delete(socketId);
-  }
-
-  /** Looks up a room for a player action and extends its lifetime. */
-  private touchRoom(roomCode: string): Room | undefined {
-    const room = this.rooms.get(roomCode);
-    if (room) this.scheduleCleanup(room);
-    return room;
   }
 
   /** Resolves socketId to the InternalPlayer within a room, or null. */
@@ -150,7 +142,6 @@ export class RoomManager {
       rounds: clampRounds(rounds),
       audioMode: validMode,
       lastCorrectSong: new Map(),
-      pausedForPlayerId: null,
       hostIp,
       cleanupTimer: setTimeout(() => {}, 0),
     };
@@ -179,7 +170,6 @@ export class RoomManager {
           player.isConnected = true;
           room.socketToPlayer.set(socketId, id);
           this.socketToRoom.set(socketId, roomCode);
-          game.refreshPause(room);
           this.scheduleCleanup(room);
           return { ok: true, playerId: id, playerToken };
         }
@@ -188,6 +178,7 @@ export class RoomManager {
 
     if (room.status !== 'lobby') return { ok: false, error: 'Das Spiel läuft bereits.' };
     if (room.players.size >= MAX_PLAYERS) return { ok: false, error: 'Der Raum ist voll.' };
+    if (!playerName.trim()) return { ok: false, error: 'Bitte gib einen Namen ein.' };
 
     const playerId = this.newPlayerId();
     const token = this.newToken();
@@ -212,7 +203,7 @@ export class RoomManager {
   }
 
   kickPlayer(socketId: string, roomCode: string, targetPlayerId: string): KickResult {
-    const room = this.touchRoom(roomCode);
+    const room = this.rooms.get(roomCode);
     if (!room) return { ok: false, error: 'Raum nicht gefunden.' };
 
     const player = this.getPlayer(socketId, room);
@@ -235,9 +226,9 @@ export class RoomManager {
   handleDisconnect(socketId: string): {
     roomCode: string;
     playerId: string;
-    playerName: string;
     isHost: boolean;
     wasPlaying: boolean;
+    connectedInGame: number;
   } | null {
     const roomCode = this.socketToRoom.get(socketId);
     if (!roomCode) return null;
@@ -254,7 +245,6 @@ export class RoomManager {
     if (!player) return null;
 
     player.isConnected = false;
-    game.refreshPause(room);
 
     if (![...room.players.values()].some((p) => p.isConnected)) {
       this.scheduleCleanup(room, EMPTY_ROOM_TTL_MS);
@@ -263,9 +253,9 @@ export class RoomManager {
     return {
       roomCode,
       playerId,
-      playerName: player.name,
       isHost: player.isHost,
       wasPlaying: room.status === 'playing',
+      connectedInGame: room.playerOrder.filter((id) => room.players.get(id)?.isConnected).length,
     };
   }
 
@@ -278,7 +268,7 @@ export class RoomManager {
     rounds: number,
     audioMode: AudioMode,
   ): SimpleResult {
-    const room = this.touchRoom(roomCode);
+    const room = this.rooms.get(roomCode);
     if (!room) return { ok: false, error: 'Raum nicht gefunden.' };
     const player = this.getPlayer(socketId, room);
     if (!player?.isHost) return { ok: false, error: 'Nur der Host kann das Spiel starten.' };
@@ -286,7 +276,7 @@ export class RoomManager {
   }
 
   placeSong(socketId: string, roomCode: string, position: number): PlaceResult {
-    const room = this.touchRoom(roomCode);
+    const room = this.rooms.get(roomCode);
     if (!room) return { ok: false, error: 'Raum nicht gefunden.' };
     const playerId = room.socketToPlayer.get(socketId);
     if (!playerId) return { ok: false, error: 'Nicht autorisiert.' };
@@ -299,7 +289,7 @@ export class RoomManager {
     rounds: number,
     audioMode: AudioMode,
   ): SimpleResult {
-    const room = this.touchRoom(roomCode);
+    const room = this.rooms.get(roomCode);
     if (!room) return { ok: false, error: 'Raum nicht gefunden.' };
     const player = this.getPlayer(socketId, room);
     if (!player?.isHost) return { ok: false, error: 'Nur der Host kann Einstellungen ändern.' };
@@ -312,7 +302,7 @@ export class RoomManager {
   }
 
   returnToLobby(socketId: string, roomCode: string): SimpleResult {
-    const room = this.touchRoom(roomCode);
+    const room = this.rooms.get(roomCode);
     if (!room) return { ok: false, error: 'Raum nicht gefunden.' };
     const player = this.getPlayer(socketId, room);
     if (!player?.isHost) return { ok: false, error: 'Nur der Host kann das Spiel neu starten.' };
@@ -321,7 +311,7 @@ export class RoomManager {
   }
 
   skipDisconnectedPlayer(socketId: string, roomCode: string): SkipResult {
-    const room = this.touchRoom(roomCode);
+    const room = this.rooms.get(roomCode);
     if (!room) return { ok: false, error: 'Raum nicht gefunden.' };
     const player = this.getPlayer(socketId, room);
     if (!player?.isHost)
@@ -340,6 +330,13 @@ export class RoomManager {
     return this.socketToRoom.get(socketId) ?? null;
   }
 
+  /** Extends the TTL of the socket's room; called for every accepted client event. */
+  touch(socketId: string): void {
+    const roomCode = this.socketToRoom.get(socketId);
+    const room = roomCode ? this.rooms.get(roomCode) : undefined;
+    if (room) this.scheduleCleanup(room);
+  }
+
   isHost(socketId: string, roomCode: string): boolean {
     const room = this.rooms.get(roomCode);
     return !!room && this.getPlayer(socketId, room)?.isHost === true;
@@ -347,7 +344,8 @@ export class RoomManager {
 
   getPausedPlayer(roomCode: string): { id: string; name: string } | null {
     const room = this.rooms.get(roomCode);
-    const player = room?.pausedForPlayerId ? room.players.get(room.pausedForPlayerId) : undefined;
+    const pausedId = room ? game.pausedPlayerId(room) : null;
+    const player = pausedId ? room?.players.get(pausedId) : undefined;
     return player ? { id: player.id, name: player.name } : null;
   }
 

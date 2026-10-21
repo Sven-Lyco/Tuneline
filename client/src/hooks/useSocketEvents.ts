@@ -79,7 +79,6 @@ export function useSocketEvents({
   // Refs so socket callbacks always see current values without re-registering
   const isHostRef = useRef(isHost);
   const gameStateRef = useRef(gameState);
-  const myNameRef = useRef('');
   const revealTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => {
     isHostRef.current = isHost;
@@ -87,16 +86,9 @@ export function useSocketEvents({
   useEffect(() => {
     gameStateRef.current = gameState;
   });
-  useEffect(() => {
-    const me = (gameState?.players ?? [])
-      .concat(lobbyState?.players ?? [])
-      .find((p) => p.id === myPlayerId);
-    if (me) myNameRef.current = me.name;
-  });
 
   const resetRoom = useCallback(() => {
     clearTimeout(revealTimerRef.current);
-    myNameRef.current = '';
     setRoomCode('');
     setMyPlayerId('');
     setIsHost(false);
@@ -109,14 +101,35 @@ export function useSocketEvents({
   useEffect(() => {
     const clearRevealTimer = () => clearTimeout(revealTimerRef.current);
 
+    // Hides the last placement's reveal and cancels its pending timeout.
+    const clearReveal = () => {
+      clearRevealTimer();
+      setFeedback(null);
+      setRevealed(false);
+      setRevealedSong(null);
+      setLastPlacedPlayerId(null);
+      setSlot(null);
+    };
+
+    const showTurn = (gs: GameStateForClient, cs: SongMeta) => {
+      clearReveal();
+      setGameState(gs);
+      setCurrentSong(cs);
+      setScreen('game');
+    };
+
+    const playIfAllowed = (gs: GameStateForClient, song: SongMeta) => {
+      if (song.preview && shouldPlay(gs.audioMode, isHostRef.current)) startSong(song.preview);
+    };
+
     // Automatic reconnects get a new socket id, so the server must be told who we are again.
-    // Manual disconnects (leave, kick, logout) never fire 'reconnect'.
+    // Manual disconnects (leave, kick, logout) never fire 'reconnect'. The name is only
+    // needed for new players; the token identifies us.
     const handleReconnect = () => {
       const playerToken = sessionStorage.getItem(STORAGE_KEYS.playerToken);
       const roomCode = sessionStorage.getItem(STORAGE_KEYS.roomCode);
-      const playerName = myNameRef.current;
-      if (playerToken && roomCode && playerName) {
-        socket.emit('join_room', { roomCode, playerName, playerToken });
+      if (playerToken && roomCode) {
+        socket.emit('join_room', { roomCode, playerName: '', playerToken });
       }
     };
     socket.io.on('reconnect', handleReconnect);
@@ -164,18 +177,9 @@ export function useSocketEvents({
     });
 
     socket.on('game_started', ({ gameState: gs, currentSong: cs }) => {
-      clearRevealTimer();
-      setGameState(gs);
-      setCurrentSong(cs);
-      setRevealedSong(null);
-      setFeedback(null);
-      setRevealed(false);
-      setSlot(null);
       stopSong();
-      setScreen('game');
-      if (cs.preview && shouldPlay(gs.audioMode, isHostRef.current)) {
-        startSong(cs.preview);
-      }
+      showTurn(gs, cs);
+      playIfAllowed(gs, cs);
     });
 
     socket.on('placement_result', ({ correct, song, gameState: gs, nextSong }) => {
@@ -188,16 +192,10 @@ export function useSocketEvents({
 
       clearRevealTimer();
       revealTimerRef.current = setTimeout(() => {
-        setFeedback(null);
-        setRevealed(false);
-        setRevealedSong(null);
-        setLastPlacedPlayerId(null);
-        setSlot(null);
+        clearReveal();
         if (nextSong) {
           setCurrentSong(nextSong);
-          if (nextSong.preview && shouldPlay(gs.audioMode, isHostRef.current)) {
-            startSong(nextSong.preview);
-          }
+          playIfAllowed(gs, nextSong);
         }
       }, 3000);
     });
@@ -218,11 +216,7 @@ export function useSocketEvents({
         setFeedback(lastCorrect ? 'ok' : 'no');
         setRevealed(true);
         revealTimerRef.current = setTimeout(() => {
-          setFeedback(null);
-          setRevealed(false);
-          setRevealedSong(null);
-          setLastPlacedPlayerId(null);
-          setSlot(null);
+          clearReveal();
           setResult(resultData);
           setScreen('result');
         }, 3000);
@@ -249,16 +243,8 @@ export function useSocketEvents({
         gameState: gs,
         currentSong: cs,
       }) => {
-        clearRevealTimer();
         stopSong();
-        setGameState(gs);
-        setCurrentSong(cs);
-        setRevealedSong(null);
-        setFeedback(null);
-        setRevealed(false);
-        setLastPlacedPlayerId(null);
-        setSlot(null);
-        setScreen('game');
+        showTurn(gs, cs);
         setDisconnectedPlayer({
           id: disconnectedPlayerId,
           name: disconnectedPlayerName,
@@ -268,19 +254,9 @@ export function useSocketEvents({
     );
 
     socket.on('game_resumed', ({ gameState: gs, currentSong: cs }) => {
-      clearRevealTimer();
       setDisconnectedPlayer(null);
-      setGameState(gs);
-      setCurrentSong(cs);
-      setRevealedSong(null);
-      setFeedback(null);
-      setRevealed(false);
-      setLastPlacedPlayerId(null);
-      setSlot(null);
-      setScreen('game');
-      if (cs.preview && shouldPlay(gs.audioMode, isHostRef.current)) {
-        startSong(cs.preview);
-      }
+      showTurn(gs, cs);
+      playIfAllowed(gs, cs);
     });
 
     socket.on('player_disconnected', () => {

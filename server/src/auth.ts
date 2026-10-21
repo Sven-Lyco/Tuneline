@@ -10,28 +10,25 @@ export interface SessionData {
   expiresAt: number;
 }
 
-const sessions = new Map<string, { data: SessionData; createdAt: number }>();
-
-function isExpired(createdAt: number): boolean {
-  return Date.now() - createdAt > SESSION_MAX_AGE_MS;
-}
+const sessions = new Map<string, { data: SessionData; expiresAt: number }>();
 
 setInterval(() => {
+  const now = Date.now();
   for (const [id, session] of sessions) {
-    if (isExpired(session.createdAt)) sessions.delete(id);
+    if (now > session.expiresAt) sessions.delete(id);
   }
 }, SWEEP_INTERVAL_MS).unref();
 
 export function createSession(data: SessionData): string {
   const id = randomBytes(32).toString('hex');
-  sessions.set(id, { data, createdAt: Date.now() });
+  sessions.set(id, { data, expiresAt: Date.now() + SESSION_MAX_AGE_MS });
   return id;
 }
 
 export function getSession(id: string): SessionData | null {
   const session = sessions.get(id);
   if (!session) return null;
-  if (isExpired(session.createdAt)) {
+  if (Date.now() > session.expiresAt) {
     sessions.delete(id);
     return null;
   }

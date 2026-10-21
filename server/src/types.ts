@@ -46,7 +46,6 @@ export interface Room {
   rounds: number;
   audioMode: AudioMode;
   lastCorrectSong: Map<string, SongFull>; // playerId → last correctly placed song
-  pausedForPlayerId: string | null;
   hostIp: string;
   cleanupTimer: ReturnType<typeof setTimeout>;
 }

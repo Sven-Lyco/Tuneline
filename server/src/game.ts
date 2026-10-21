@@ -21,13 +21,17 @@ function removeFromOrder(room: Room, playerId: string): void {
   }
 }
 
-/** Pauses for the first offline player still in the turn order, or unpauses. */
-export function refreshPause(room: Room): void {
-  const offlineId =
-    room.status === 'playing'
-      ? room.playerOrder.find((id) => room.players.get(id)?.isConnected === false)
-      : undefined;
-  room.pausedForPlayerId = offlineId ?? null;
+function isGameOver(room: Room): boolean {
+  return (
+    room.currentSongIndex >= room.deck.length ||
+    (room.currentPlayerIndex === 0 && room.round > room.rounds)
+  );
+}
+
+/** A running game is paused while any player in the turn order is offline. */
+export function pausedPlayerId(room: Room): string | null {
+  if (room.status !== 'playing') return null;
+  return room.playerOrder.find((id) => room.players.get(id)?.isConnected === false) ?? null;
 }
 
 export function startGame(
@@ -88,7 +92,6 @@ export function startGame(
   room.rounds = clampRounds(rounds);
   room.audioMode = audioMode;
   room.status = 'playing';
-  room.pausedForPlayerId = null;
   room.lastCorrectSong = new Map();
   return { ok: true };
 }
@@ -117,35 +120,25 @@ export function placeSong(room: Room, playerId: string, position: number): Place
   room.currentPlayerIndex = (room.currentPlayerIndex + 1) % room.playerOrder.length;
   if (room.currentPlayerIndex === 0) room.round++;
 
-  const gameOver =
-    room.currentSongIndex >= room.deck.length ||
-    (room.currentPlayerIndex === 0 && room.round > room.rounds);
-
+  const gameOver = isGameOver(room);
   if (gameOver) room.status = 'finished';
   return { ok: true, correct, song, gameOver, lastPlayerId: playerId };
 }
 
 export function skipDisconnectedPlayer(room: Room): SkipResult {
-  if (room.status !== 'playing' || !room.pausedForPlayerId) {
-    return { ok: false, error: 'Spiel ist nicht pausiert.' };
-  }
+  const skippedId = pausedPlayerId(room);
+  if (!skippedId) return { ok: false, error: 'Spiel ist nicht pausiert.' };
 
-  removeFromOrder(room, room.pausedForPlayerId);
+  removeFromOrder(room, skippedId);
 
-  const gameOver =
-    room.playerOrder.length <= 1 ||
-    room.currentSongIndex >= room.deck.length ||
-    (room.currentPlayerIndex === 0 && room.round > room.rounds);
-
+  const gameOver = room.playerOrder.length <= 1 || isGameOver(room);
   if (gameOver) room.status = 'finished';
-  refreshPause(room);
   return { ok: true, gameOver };
 }
 
 export function returnToLobby(room: Room): void {
   room.status = 'lobby';
   room.playerOrder = [...room.players.keys()];
-  room.pausedForPlayerId = null;
   room.deck = [];
   room.currentSongIndex = 0;
   room.currentPlayerIndex = 0;
@@ -159,5 +152,4 @@ export function returnToLobby(room: Room): void {
 
 export function finishGame(room: Room): void {
   room.status = 'finished';
-  room.pausedForPlayerId = null;
 }

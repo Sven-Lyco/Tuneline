@@ -58,13 +58,18 @@ export async function findPreview(artist: string, title: string): Promise<string
     );
 
     // Not cached: 403/429/5xx are transient (iTunes throttling), not "no preview".
-    if (!response.ok) return null;
+    if (!response.ok) {
+      logger.warn({ artist, title, status: response.status }, 'itunes_fetch_error');
+      return null;
+    }
 
     const data = (await response.json()) as ItunesSearchResult;
     const previewUrl = pickBestPreview(data.results, artist, title);
+    logger.debug({ artist, title, found: previewUrl !== null }, 'preview_fetched');
     cacheSet(cacheKey, previewUrl);
     return previewUrl;
-  } catch {
+  } catch (err) {
+    logger.warn({ artist, title, err }, 'itunes_fetch_exception');
     return null;
   }
 }
@@ -85,34 +90,5 @@ export async function previewHandler(req: Request, res: Response): Promise<void>
     return;
   }
 
-  const cacheKey = `${artist}|${title}`;
-
-  if (cache.has(cacheKey)) {
-    logger.debug({ artist, title }, 'preview_cache_hit');
-    res.json({ previewUrl: cache.get(cacheKey) ?? null });
-    return;
-  }
-
-  try {
-    const query = encodeURIComponent(`${artist} ${title}`);
-    const response = await fetch(
-      `https://itunes.apple.com/search?term=${query}&entity=song&limit=5`,
-      { signal: AbortSignal.timeout(6000) },
-    );
-
-    if (!response.ok) {
-      logger.warn({ artist, title, status: response.status }, 'itunes_fetch_error');
-      res.json({ previewUrl: null });
-      return;
-    }
-
-    const data = (await response.json()) as ItunesSearchResult;
-    const previewUrl = pickBestPreview(data.results, artist, title);
-    logger.debug({ artist, title, found: previewUrl !== null }, 'preview_fetched');
-    cacheSet(cacheKey, previewUrl);
-    res.json({ previewUrl });
-  } catch (err) {
-    logger.error({ artist, title, err }, 'itunes_fetch_exception');
-    res.json({ previewUrl: null });
-  }
+  res.json({ previewUrl: await findPreview(artist, title) });
 }

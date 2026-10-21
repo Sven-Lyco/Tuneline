@@ -70,16 +70,19 @@ describe('findPreview', () => {
     expect(await findPreview(artist(), '!!!')).toBeNull();
   });
 
-  it('caches answers but retries after throttling or network errors', async () => {
+  it('caches answers but retries after throttling or network errors, and counts both', async () => {
     const a = artist();
+    const stats = { lookups: 0, failed: 0 };
     itunes([], false);
-    expect(await findPreview(a, 'Hit')).toBeNull();
+    expect(await findPreview(a, 'Hit', stats)).toBeNull();
     fetchMock.mockRejectedValueOnce(new Error('offline'));
-    expect(await findPreview(a, 'Hit')).toBeNull();
+    expect(await findPreview(a, 'Hit', stats)).toBeNull();
     itunes([track(a, 'Hit')]);
-    expect(await findPreview(a, 'Hit')).toBe('https://audio/Hit');
-    expect(await findPreview(a, 'Hit')).toBe('https://audio/Hit');
+    expect(await findPreview(a, 'Hit', stats)).toBe('https://audio/Hit');
+    expect(await findPreview(a, 'Hit', stats)).toBe('https://audio/Hit');
     expect(fetchMock).toHaveBeenCalledTimes(3);
+    // The cache hit isn't a lookup; throttling and the network error are failures.
+    expect(stats).toEqual({ lookups: 3, failed: 2 });
   });
 
   it('evicts the oldest entry once the cache is full', async () => {

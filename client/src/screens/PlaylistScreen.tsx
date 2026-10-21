@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import styled from '@emotion/styled';
 import type { SpotifyPlaylist } from '../types';
-import { getUserPlaylists } from '../api/spotify';
+import { getUserPlaylists, type PlaylistsProblem } from '../api/spotify';
+import { PLAYLISTS_PROBLEM_MESSAGES } from '../utils/spotifyMessages';
 
 interface PlaylistScreenProps {
   selected: SpotifyPlaylist[];
@@ -203,11 +204,15 @@ const StatusText = styled.div`
 
 export function PlaylistScreen({ selected, onToggle, onConfirm, onLogout }: PlaylistScreenProps) {
   const [playlists, setPlaylists] = useState<SpotifyPlaylist[]>([]);
+  const [problem, setProblem] = useState<PlaylistsProblem | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     getUserPlaylists()
-      .then(setPlaylists)
+      .then((result) => {
+        setPlaylists(result.playlists);
+        setProblem(result.problem);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -225,7 +230,12 @@ export function PlaylistScreen({ selected, onToggle, onConfirm, onLogout }: Play
       <Hint>Wähle eine oder mehrere Playlisten aus:</Hint>
 
       {loading && <StatusText>Playlisten werden geladen...</StatusText>}
-      {!loading && playlists.length === 0 && <StatusText>Keine Playlisten gefunden.</StatusText>}
+      {!loading && problem && (
+        <StatusText role="alert">{PLAYLISTS_PROBLEM_MESSAGES[problem]}</StatusText>
+      )}
+      {!loading && !problem && playlists.length === 0 && (
+        <StatusText>Keine Playlisten gefunden.</StatusText>
+      )}
 
       <Grid>
         {playlists.map((p) => (

@@ -15,6 +15,7 @@ import {
   type LastRoom,
 } from './utils/roomStorage';
 import { isSeatActiveElsewhere } from './utils/tabPresence';
+import { unavailablePlaylistsMessage } from './utils/spotifyMessages';
 import { GlobalStyles } from './components/GlobalStyles';
 import { ResumeBanner } from './components/ResumeBanner';
 import { LoginScreen } from './screens/LoginScreen';
@@ -310,7 +311,7 @@ export default function App() {
 
     const playerCount = lobbyState?.players.filter((p) => p.isConnected).length ?? 1;
     const songsNeeded = Math.ceil(playerCount * (rounds + 1) * 1.5);
-    const songs = await loadSongsFromPlaylists(
+    const { songs, unavailablePlaylists } = await loadSongsFromPlaylists(
       selectedPlaylists.map((p) => p.id),
       songsNeeded,
       getPlayedSongIds(),
@@ -318,16 +319,20 @@ export default function App() {
     );
     if (load.signal.aborted) return;
     setSongLoad(null);
+    const refused = unavailablePlaylistsMessage(unavailablePlaylists, selectedPlaylists);
 
     // Matches the server's minimum: a starting card plus at least one turn per player.
     if (songs.length < Math.max(playerCount + 3, playerCount * 2)) {
       socket.emit('cancel_loading');
-      setLoadingMsg('Nicht genug Songs gefunden. Bitte andere Playlisten wählen.');
-      await sleep(2000);
+      setLoadingMsg(refused ?? 'Nicht genug Songs gefunden. Bitte andere Playlisten wählen.');
+      // The reason why Spotify refused is longer to read than the plain notice.
+      await sleep(refused ? 5000 : 2000);
       setScreen('lobby');
       return;
     }
 
+    // Enough songs from the other playlists: play, but tell the host what was left out.
+    if (refused) showError(refused);
     socket.emit('start_game', { songs, rounds, audioMode });
   }, [
     lobbyState,
@@ -337,6 +342,7 @@ export default function App() {
     getPlayedSongIds,
     setLoadingMsg,
     setScreen,
+    showError,
   ]);
 
   const handleCancelLoading = useCallback(() => {

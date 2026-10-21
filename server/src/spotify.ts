@@ -1,7 +1,14 @@
 import { randomBytes, createHash } from 'crypto';
-import type { SongFull, SpotifyPlaylist } from '@tuneline/shared';
+import type {
+  PlaylistProblem,
+  SongFull,
+  SongsResponse,
+  SpotifyPlaylist,
+  SpotifyProblem,
+} from '@tuneline/shared';
 import { type SessionData, getSession, updateSession } from './auth.js';
-import { findPreview } from './preview.js';
+import { logger } from './logger.js';
+import { type PreviewStats, findPreview } from './preview.js';
 import { shuffle } from './utils.js';
 
 const SCOPES = [
@@ -132,13 +139,20 @@ export async function getValidToken(sessionId: string): Promise<string | null> {
 
 // ── Spotify API fetch ─────────────────────────────────────────────────────────
 
-async function spotifyFetch<T>(token: string, path: string): Promise<T | null> {
-  const response = await fetch(`https://api.spotify.com/v1${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (!response.ok) return null;
-  return response.json() as Promise<T>;
+/** `status` 0 = no answer (network error or timeout). */
+type SpotifyResult<T> = { ok: true; data: T } | { ok: false; status: number };
+
+async function spotifyFetch<T>(token: string, path: string): Promise<SpotifyResult<T>> {
+  try {
+    const response = await fetch(`https://api.spotify.com/v1${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) return { ok: false, status: response.status };
+    return { ok: true, data: (await response.json()) as T };
+  } catch {
+    return { ok: false, status: 0 };
+  }
 }
 
 // ── Playlists ─────────────────────────────────────────────────────────────────
@@ -147,40 +161,56 @@ interface SpotifyPlaylistsResponse {
   items: Array<{
     id: string;
     name: string;
-    images: Array<{ url: string }>;
-    tracks: { total: number };
+    images: Array<{ url: string }> | null;
+    // Apps created since Feb 2026 get the count under `items`, older ones under `tracks`.
+    items?: { total: number };
+    tracks?: { total: number };
     owner: { display_name: string };
   }>;
 }
 
-export async function getUserPlaylists(token: string): Promise<SpotifyPlaylist[]> {
-  const result = await spotifyFetch<SpotifyPlaylistsResponse>(token, '/me/playlists?limit=50');
-  if (!result?.items) return [];
+export type PlaylistsResult =
+  | { ok: true; playlists: SpotifyPlaylist[] }
+  | { ok: false; problem: SpotifyProblem };
 
-  return result.items.map((p) => ({
+export async function getUserPlaylists(token: string): Promise<PlaylistsResult> {
+  const result = await spotifyFetch<SpotifyPlaylistsResponse>(token, '/me/playlists?limit=50');
+  if (!result.ok) {
+    // 403: the user isn't on the app's allowlist (Development Mode).
+    const problem = result.status === 403 ? 'not_allowlisted' : result.status === 429 ? 'quota' : 'unavailable';
+    return { ok: false, problem };
+  }
+
+  const playlists = (result.data.items ?? []).filter(Boolean).map((p) => ({
     id: p.id,
     name: p.name,
     coverUrl: p.images?.[0]?.url ?? null,
-    trackCount: p.tracks.total,
-    ownerName: p.owner.display_name,
+    trackCount: (p.items ?? p.tracks)?.total ?? 0,
+    ownerName: p.owner?.display_name ?? '',
   }));
+  return { ok: true, playlists };
 }
 
 // ── Tracks ────────────────────────────────────────────────────────────────────
 
+interface SpotifyTrack {
+  id: string;
+  name: string;
+  artists: Array<{ name: string }>;
+  album: {
+    name: string;
+    album_type: string;
+    release_date: string;
+    images: Array<{ url: string }>;
+  };
+}
+
 interface SpotifyTracksResponse {
   items: Array<{
-    track: {
-      id: string;
-      name: string;
-      artists: Array<{ name: string }>;
-      album: {
-        name: string;
-        album_type: string;
-        release_date: string;
-        images: Array<{ url: string }>;
-      };
-    } | null;
+    // `/items` (apps since Feb 2026) puts the song under `item` and turns `track` into a
+    // boolean; `/tracks` and older apps put it under `track`.
+    item?: SpotifyTrack | null;
+    track?: SpotifyTrack | boolean | null;
   }>;
   next: string | null;
 }
@@ -207,8 +237,13 @@ interface TrackData {
   cover: string | null;
 }
 
-function parseTrack(item: SpotifyTracksResponse['items'][number]): TrackData | null {
-  const t = item.track;
+function parseTrack(entry: SpotifyTracksResponse['items'][number]): TrackData | null {
+  const t =
+    typeof entry.item === 'object' && entry.item
+      ? entry.item
+      : typeof entry.track === 'object'
+        ? entry.track
+        : null;
   if (!t?.id || !t.name) return null;
   if (isRemastered(t.name)) return null;
   if (t.album?.album_type === 'compilation' || REISSUE_ALBUM_PATTERN.test(t.album?.name ?? '')) {
@@ -227,28 +262,61 @@ function parseTrack(item: SpotifyTracksResponse['items'][number]): TrackData | n
   };
 }
 
-async function getPlaylistTracks(token: string, playlistId: string): Promise<TrackData[]> {
+function playlistProblem(status: number): PlaylistProblem {
+  if (status === 403) return 'not_owned'; // new apps: only playlists the host owns or collaborates on
+  if (status === 404) return 'spotify_owned'; // Spotify's editorial/algorithmic playlists (or deleted)
+  if (status === 429) return 'quota';
+  return 'unavailable';
+}
+
+/**
+ * Reads up to 300 songs. `/items` (max. 50 per page) replaced `/tracks` in Feb 2026, and Spotify
+ * only postponed switching off `/tracks` for older apps — so `/items` comes first, and a refused
+ * first page falls back to `/tracks` for apps that don't know `/items` yet.
+ */
+async function getPlaylistTracks(
+  token: string,
+  playlistId: string,
+): Promise<{ tracks: TrackData[]; problem: PlaylistProblem | null }> {
+  const id = encodeURIComponent(playlistId);
+  const legacyFields = 'items(track(id,name,artists(name),album(name,album_type,release_date,images))),next';
+  let first = await spotifyFetch<SpotifyTracksResponse>(token, `/playlists/${id}/items?limit=50`);
+  // A 429 means the app's quota is used up; asking again would only make it worse.
+  if (!first.ok && first.status !== 429) {
+    const legacy = await spotifyFetch<SpotifyTracksResponse>(
+      token,
+      `/playlists/${id}/tracks?fields=${encodeURIComponent(legacyFields)}&limit=100`,
+    );
+    if (legacy.ok) {
+      // Shows in the log whether this app still depends on /tracks.
+      logger.info({ playlistId, itemsStatus: first.status }, 'playlist_items_fallback');
+      first = legacy;
+    }
+  }
+  if (!first.ok) return { tracks: [], problem: playlistProblem(first.status) };
+
   const tracks: TrackData[] = [];
-  const fields = 'items(track(id,name,artists(name),album(name,album_type,release_date,images))),next';
-  let path: string | null =
-    `/playlists/${playlistId}/tracks?fields=${encodeURIComponent(fields)}&limit=100`;
-
-  while (path && tracks.length < 300) {
-    const result: SpotifyTracksResponse | null = await spotifyFetch<SpotifyTracksResponse>(token, path);
-    if (!result?.items) break;
-
-    for (const item of result.items) {
-      const track = parseTrack(item);
+  let page: SpotifyTracksResponse | null = first.data;
+  while (page?.items && tracks.length < 300) {
+    for (const entry of page.items) {
+      const track = parseTrack(entry);
       if (track) tracks.push(track);
     }
-
-    path = result.next ? result.next.replace('https://api.spotify.com/v1', '') : null;
+    if (!page.next) break;
+    // A later page failing keeps the songs read so far.
+    const nextPath: string = page.next.replace('https://api.spotify.com/v1', '');
+    const next: SpotifyResult<SpotifyTracksResponse> = await spotifyFetch(token, nextPath);
+    page = next.ok ? next.data : null;
   }
 
-  return tracks;
+  return { tracks, problem: null };
 }
 
 // ── Song loading with iTunes enrichment ──────────────────────────────────────
+
+export interface LoadSongsResult extends SongsResponse {
+  previewStats: PreviewStats;
+}
 
 /** `excludeIds` (songs from earlier games) are only used once the fresh songs run out. */
 export async function loadSongs(
@@ -257,13 +325,16 @@ export async function loadSongs(
   target: number,
   excludeIds: Set<string>,
   signal: AbortSignal,
-): Promise<SongFull[]> {
-  const tracksByPlaylist = await Promise.all(playlistIds.map((id) => getPlaylistTracks(token, id)));
+): Promise<LoadSongsResult> {
+  const byPlaylist = await Promise.all(playlistIds.map((id) => getPlaylistTracks(token, id)));
+  const unavailablePlaylists = byPlaylist.flatMap(({ problem }, i) =>
+    problem ? [{ id: playlistIds[i], problem }] : [],
+  );
 
   const seenIds = new Set<string>();
   const allTracks: TrackData[] = [];
 
-  for (const tracks of tracksByPlaylist) {
+  for (const { tracks } of byPlaylist) {
     for (const track of shuffle(tracks)) {
       if (!seenIds.has(track.id)) {
         seenIds.add(track.id);
@@ -279,12 +350,13 @@ export async function loadSongs(
 
   const BATCH = 10;
   const result: SongFull[] = [];
+  const previewStats: PreviewStats = { lookups: 0, failed: 0 };
 
   for (let i = 0; i < shuffled.length && result.length < target && !signal.aborted; i += BATCH) {
     const batch = shuffled.slice(i, i + BATCH);
     const enriched = await Promise.all(
       batch.map(async (track): Promise<SongFull | null> => {
-        const preview = await findPreview(track.artist, track.title);
+        const preview = await findPreview(track.artist, track.title, previewStats);
         if (!preview) return null;
         return { ...track, preview };
       })
@@ -293,5 +365,5 @@ export async function loadSongs(
   }
 
   // The last batch can overshoot into reserve songs; fresh ones come first, so trim from the end.
-  return result.slice(0, target);
+  return { songs: result.slice(0, target), unavailablePlaylists, previewStats };
 }

@@ -8,6 +8,25 @@ export interface SpotifyPlaylist {
   ownerName: string;
 }
 
+/**
+ * Why Spotify refused the host's playlist list; `/api/playlists` sends it as `{ error }` with a
+ * non-2xx status. A Development Mode app only serves allowlisted users (max. 5).
+ */
+export type SpotifyProblem = 'not_allowlisted' | 'quota' | 'unavailable';
+
+/**
+ * Why the songs of one playlist couldn't be read. Since Feb 2026 new apps only get songs from
+ * playlists the host owns or collaborates on; Spotify's own playlists are closed to them since 2024.
+ */
+export type PlaylistProblem = 'not_owned' | 'spotify_owned' | 'quota' | 'unavailable';
+
+/** Response of `POST /api/songs`. */
+export interface SongsResponse {
+  songs: SongFull[];
+  /** Playlists Spotify refused; the songs come from the others. */
+  unavailablePlaylists: Array<{ id: string; problem: PlaylistProblem }>;
+}
+
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 export const REACTION_EMOJIS = ['🔥', '😂', '👏', '😱', '🥳', '❤️', '🤯'] as const;

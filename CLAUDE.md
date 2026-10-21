@@ -59,6 +59,7 @@ Tuneline/
         PlaylistBadge.tsx   Playlist-Cover + Name Badge
         Reactions.tsx       Emoji-Reaktionen während des Spiels
         RoomCodeCopy.tsx    Raum-Code Anzeige mit Copy-Button
+        InviteQr.tsx        Einladungslink als QR-Code (Overlay; Lobby + Spiel-Header), qrcode.react
         ResumeBanner.tsx    „Zurück ins Spiel“ nach geschlossenem Tab
         TurnLimitPicker.tsx Zeitlimit-Auswahl (Aus/30/60/90 s)
         game/

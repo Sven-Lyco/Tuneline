@@ -4,6 +4,7 @@ import type { SpotifyPlaylist } from '../types';
 import { getPlayerColor } from '../constants';
 import { Label } from '../components/Label';
 import { RoomCodeCopy } from '../components/RoomCodeCopy';
+import { InviteQr } from '../components/InviteQr';
 import { PlaylistBadgeRow } from '../components/PlaylistBadgeRow';
 import { AppTitle, AppSubtitle } from '../components/AppTitle';
 import { CenteredScreen } from '../components/CenteredScreen';
@@ -69,6 +70,12 @@ const PlayerBadge = styled.div`
   padding: 0.15rem 0.5rem;
   border: 1px solid #2a2a3a;
   border-radius: 20px;
+`;
+
+const CodeLabelRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
 `;
 
 const KickButton = styled.button`
@@ -138,7 +145,10 @@ export function LobbyScreen({
       <AppSubtitle style={{ marginBottom: '2rem' }}>Musik · Timeline · Challenge</AppSubtitle>
 
       <Card style={{ maxWidth: '480px' }}>
-        <Label>Raum-Code</Label>
+        <CodeLabelRow>
+          <Label>Raum-Code</Label>
+          <InviteQr roomCode={roomCode} />
+        </CodeLabelRow>
         <RoomCodeCopy roomCode={roomCode} />
 
         <Label>Spieler ({lobbyState.players.length})</Label>

@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import styled from '@emotion/styled';
 import type { Feedback } from '../types';
-import type { GameStateForClient, SongFull, SongMeta } from '@tuneline/shared';
+import type { GameStateForClient, SongFull } from '@tuneline/shared';
 import { getPlayerColor } from '../constants';
 import { sortByYear } from '../utils/shuffle';
 import { GameHeader } from '../components/game/GameHeader';
@@ -16,7 +16,7 @@ interface GameScreenProps {
   roomCode: string;
   isHost: boolean;
   gameState: GameStateForClient;
-  currentSong: SongMeta;
+  turnEndsAt: number | null;
   revealedSong: SongFull | null;
   feedback: Feedback;
   revealed: boolean;
@@ -25,6 +25,7 @@ interface GameScreenProps {
   volume: number;
   slot: number | null;
   setSlot: (slot: number | null) => void;
+  placing: boolean;
   onToggleAudio: () => void;
   onVolumeChange: (v: number) => void;
   onPlace: () => void;
@@ -85,6 +86,18 @@ const PlaceButton = styled.button<{ ready: string }>`
   }
 `;
 
+const SpectatorBanner = styled.div`
+  margin: 1rem auto 0;
+  padding: 0.6rem 1.1rem;
+  border-radius: 12px;
+  border: 1px solid #2a2a3a;
+  background: #12121a;
+  color: #7a7a8e;
+  font-size: 0.85rem;
+  text-align: center;
+  max-width: 90vw;
+`;
+
 // ── Component ──────────────────────────────────────────────────
 
 export function GameScreen({
@@ -92,7 +105,7 @@ export function GameScreen({
   roomCode,
   isHost,
   gameState,
-  currentSong,
+  turnEndsAt,
   revealedSong,
   feedback,
   revealed,
@@ -101,6 +114,7 @@ export function GameScreen({
   volume,
   slot,
   setSlot,
+  placing,
   onToggleAudio,
   onVolumeChange,
   onPlace,
@@ -108,6 +122,9 @@ export function GameScreen({
   onSkipPlayer,
 }: GameScreenProps) {
   const isMyTurn = gameState.currentPlayerId === myPlayerId;
+  // Not in the turn order: joined too late for the deck, or offline when the game started.
+  const isSpectator = !gameState.players.some((p) => p.id === myPlayerId);
+  const hasAudio = gameState.audioMode === 'all' || isHost;
   const { activePlayer, lastPlacedPlayer, otherPlayers, myTimeline, activePlayerColor } =
     useMemo(() => {
       const myPlayer = gameState.players.find((p) => p.id === myPlayerId);
@@ -123,7 +140,12 @@ export function GameScreen({
         activePlayerColor: getPlayerColor(activePlayerIndex),
       };
     }, [gameState.players, gameState.currentPlayerId, myPlayerId, lastPlacedPlayerId]);
-  const isReady = isMyTurn && slot !== null && !revealed;
+  const isReady = isMyTurn && slot !== null && !revealed && !placing;
+
+  let placeLabel = 'Position wählen...';
+  if (!isMyTurn) placeLabel = `Warten auf ${activePlayer?.name ?? '?'}…`;
+  else if (placing) placeLabel = 'Wird platziert…';
+  else if (slot !== null) placeLabel = 'Hier platzieren ▶';
 
   return (
     <Screen>
@@ -136,9 +158,16 @@ export function GameScreen({
         myPlayerId={myPlayerId}
       />
 
+      {isSpectator && (
+        <SpectatorBanner>
+          👀 Du schaust gerade zu – in der nächsten Partie bist du wieder dabei.
+        </SpectatorBanner>
+      )}
+
       <GameBody>
         <SongCard
-          currentSong={currentSong}
+          hasAudio={hasAudio}
+          turnEndsAt={turnEndsAt}
           revealedSong={revealedSong}
           revealed={revealed}
           feedback={feedback}
@@ -173,11 +202,7 @@ export function GameScreen({
 
         <PlaceButtonRow>
           <PlaceButton ready={String(isReady)} disabled={!isReady} onClick={onPlace}>
-            {!isMyTurn
-              ? `Warten auf ${activePlayer?.name ?? '?'}…`
-              : slot !== null
-                ? 'Hier platzieren ▶'
-                : 'Position wählen...'}
+            {placeLabel}
           </PlaceButton>
         </PlaceButtonRow>
       </GameBody>

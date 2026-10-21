@@ -11,12 +11,25 @@ export function setVolume(v: number): void {
   if (gAudio) gAudio.volume = v;
 }
 
-export function playAudio(url: string, onEnded?: () => void): void {
+/**
+ * Resolves to whether playback really started — it doesn't when the browser blocks
+ * autoplay (no user gesture yet) or the preview fails to load.
+ */
+export async function playAudio(url: string, onStop?: () => void): Promise<boolean> {
   stopAudio();
-  gAudio = new Audio(url);
-  gAudio.volume = getVolume();
-  if (onEnded) gAudio.addEventListener('ended', onEnded, { once: true });
-  gAudio.play().catch(() => {});
+  const audio = new Audio(url);
+  gAudio = audio;
+  audio.volume = getVolume();
+  if (onStop) {
+    audio.addEventListener('ended', onStop, { once: true });
+    audio.addEventListener('error', onStop, { once: true });
+  }
+  try {
+    await audio.play();
+    return gAudio === audio;
+  } catch {
+    return false;
+  }
 }
 
 export function stopAudio(): void {
@@ -27,13 +40,17 @@ export function stopAudio(): void {
   }
 }
 
-export function toggleAudio(): boolean {
+/** Resolves to whether audio is playing afterwards. */
+export async function toggleAudio(): Promise<boolean> {
   if (!gAudio) return false;
-  if (gAudio.paused) {
-    gAudio.play().catch(() => {});
-    return true;
-  } else {
+  if (!gAudio.paused) {
     gAudio.pause();
+    return false;
+  }
+  try {
+    await gAudio.play();
+    return true;
+  } catch {
     return false;
   }
 }

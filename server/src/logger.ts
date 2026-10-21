@@ -4,17 +4,19 @@ import { Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 
 const IS_PROD = process.env.NODE_ENV === 'production';
+const LEVEL = process.env.LOG_LEVEL ?? (IS_PROD ? 'info' : 'debug');
 
 export const logger = pino(
-  IS_PROD
+  // Pretty-printing runs in a worker thread; skip it when nothing is logged (tests).
+  IS_PROD || LEVEL === 'silent'
     ? {
-        level: 'info',
+        level: LEVEL,
         formatters: {
           level: (label) => ({ level: label.toUpperCase() }),
         },
       }
     : {
-        level: 'debug',
+        level: LEVEL,
         transport: {
           target: 'pino-pretty',
           options: {

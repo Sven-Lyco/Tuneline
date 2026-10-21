@@ -3,7 +3,7 @@ export type { SpotifyPlaylist } from '@tuneline/shared';
 export type Screen =
   'login' | 'join' | 'playlists' | 'menu' | 'loading' | 'lobby' | 'game' | 'result' | 'help';
 
-export type Feedback = 'ok' | 'no' | null;
+export type Feedback = 'ok' | 'no' | 'timeout' | null;
 
 export interface GameResult {
   players: import('@tuneline/shared').RoomPlayer[];

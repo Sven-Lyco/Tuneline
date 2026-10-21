@@ -1,3 +1,5 @@
 echo "Pre-commit: prettier + eslint..."
 npx lint-staged
+echo "Pre-commit: tests..."
+npm test --silent
 echo "Pre-commit checks passed."

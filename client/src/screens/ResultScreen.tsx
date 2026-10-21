@@ -8,6 +8,7 @@ import { CenteredScreen } from '../components/CenteredScreen';
 import { Card } from '../components/Card';
 import { SongTile } from '../components/SongTile';
 import { Reactions } from '../components/Reactions';
+import { LinkButton } from '../components/LinkButton';
 
 const LastTipBanner = styled.div`
   display: flex;
@@ -62,6 +63,8 @@ interface ResultScreenProps {
   lastPlayerId: string;
   winnerLastSong: SongFull | null;
   onRestart: () => void;
+  /** For the host this closes the room for everyone. */
+  onLeave: () => void;
 }
 
 const GameOverLabel = styled.div`
@@ -262,6 +265,7 @@ export function ResultScreen({
   lastPlayerId,
   winnerLastSong,
   onRestart,
+  onLeave,
 }: ResultScreenProps) {
   const ranked = useMemo(
     () =>
@@ -353,6 +357,9 @@ export function ResultScreen({
 
         {isHost && <RestartButton onClick={onRestart}>↻ Nochmal spielen</RestartButton>}
       </Card>
+      <LinkButton variant="muted" style={{ marginTop: '1.25rem' }} onClick={onLeave}>
+        ← Raum verlassen
+      </LinkButton>
       <Reactions players={players} />
     </CenteredScreen>
   );

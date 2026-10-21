@@ -36,6 +36,18 @@ const PlayerPanel = styled.div<{ isActive: string; borderColor: string }>`
   padding: 0.75rem 1rem;
   min-width: 200px;
   flex-shrink: 0;
+
+  &[data-offline='true'] {
+    opacity: 0.45;
+  }
+`;
+
+const OfflineTag = styled.span`
+  font-size: 0.7rem;
+  color: #7a7a8e;
+  border: 1px solid #2a2a3a;
+  border-radius: 20px;
+  padding: 0.05rem 0.4rem;
 `;
 
 const PlayerHeader = styled.div`
@@ -91,10 +103,16 @@ export function OtherPlayers({ players, allPlayers, currentPlayerId }: OtherPlay
         const color = getPlayerColor(globalIdx);
         const sortedTl = sortByYear(p.timeline);
         return (
-          <PlayerPanel key={p.id} isActive={String(p.id === currentPlayerId)} borderColor={color}>
+          <PlayerPanel
+            key={p.id}
+            isActive={String(p.id === currentPlayerId)}
+            borderColor={color}
+            data-offline={String(!p.isConnected)}
+          >
             <PlayerHeader>
               <Dot bg={color} />
               <PlayerName>{p.name}</PlayerName>
+              {!p.isConnected && <OfflineTag>offline</OfflineTag>}
               <PlayerScore>{p.score} Pkt</PlayerScore>
             </PlayerHeader>
             <Timeline>

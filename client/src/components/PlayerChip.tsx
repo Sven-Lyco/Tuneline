@@ -17,6 +17,9 @@ const Chip = styled.div`
     background: rgba(255, 45, 120, 0.07);
     box-shadow: 0 0 12px rgba(255, 45, 120, 0.15);
   }
+  &[data-offline='true'] {
+    opacity: 0.45;
+  }
 `;
 
 const Dot = styled.div`
@@ -50,6 +53,7 @@ interface PlayerChipProps {
   score?: number;
   isActive?: boolean;
   isMe?: boolean;
+  offline?: boolean;
 }
 
 export function PlayerChip({
@@ -58,16 +62,20 @@ export function PlayerChip({
   score,
   isActive = false,
   isMe = false,
+  offline = false,
 }: PlayerChipProps) {
   return (
     <Chip
       data-active={String(isActive)}
+      data-offline={String(offline)}
       style={isActive ? { border: `1px solid ${color}` } : undefined}
+      title={offline ? `${name} ist offline` : undefined}
     >
       <Dot style={{ background: color }} />
       <Name data-active={String(isActive)}>
         {name}
         {isMe ? ' (du)' : ''}
+        {offline ? ' · offline' : ''}
       </Name>
       {score !== undefined && <Score>{score}</Score>}
     </Chip>

@@ -12,6 +12,8 @@
     "dev:server": "npm run dev -w @tuneline/server",
     "build": "npm run build -w @tuneline/client && npm run build -w @tuneline/server",
     "typecheck": "npm run typecheck -w @tuneline/client && npm run typecheck -w @tuneline/server",
+    "test": "npm run test -w @tuneline/server && npm run test -w @tuneline/client",
+    "coverage": "npm run coverage -w @tuneline/server && npm run coverage -w @tuneline/client",
     "lint": "npm run lint -w @tuneline/client",
     "prettier:check": "npx prettier --check client/src/**/*.{ts,tsx}",
     "prettier:write": "npx prettier --write client/src/**/*.{ts,tsx}",

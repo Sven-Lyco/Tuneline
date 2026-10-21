@@ -1,12 +1,15 @@
 import React, { useMemo } from 'react';
 import styled from '@emotion/styled';
-import type { SongFull, SongMeta } from '@tuneline/shared';
+import type { SongFull } from '@tuneline/shared';
 import type { Feedback } from '../../types';
 import { Vinyl } from '../Vinyl';
 import { Wave } from '../Wave';
+import { TurnTimer } from './TurnTimer';
 
 interface SongCardProps {
-  currentSong: SongMeta;
+  /** False in host-only mode on guest devices: no local audio to control. */
+  hasAudio: boolean;
+  turnEndsAt: number | null;
   revealedSong: SongFull | null;
   revealed: boolean;
   feedback: Feedback;
@@ -94,12 +97,9 @@ const SongTitle = styled.div`
   text-overflow: ellipsis;
   white-space: nowrap;
   margin-bottom: 0.2rem;
-  transition: filter 0.3s;
 
-  &[data-blurred='true'] {
-    filter: blur(10px);
-    transition: none;
-    user-select: none;
+  &[data-hidden='true'] {
+    color: #4a4a6a;
   }
 
   @media (max-width: 480px) {
@@ -111,12 +111,9 @@ const SongArtist = styled.div`
   font-size: 1.05rem;
   color: #7a7a8e;
   margin-bottom: 0.6rem;
-  transition: filter 0.3s;
 
-  &[data-blurred='true'] {
-    filter: blur(8px);
-    transition: none;
-    user-select: none;
+  &[data-hidden='true'] {
+    color: #4a4a6a;
   }
 
   @media (max-width: 480px) {
@@ -226,8 +223,31 @@ const WaitingLabel = styled.div`
   animation: pulse 1.5s ease-in-out infinite;
 `;
 
+const NoAudioHint = styled.div`
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: #7a7a8e;
+`;
+
+const TimerRow = styled.div`
+  display: flex;
+  justify-content: center;
+  margin-top: 0.4rem;
+`;
+
+function feedbackText(
+  feedback: Exclude<Feedback, null>,
+  scorer: string,
+  year: number | undefined
+): string {
+  if (feedback === 'ok') return `✓ Richtig! +1 Punkt für ${scorer}`;
+  if (feedback === 'timeout') return `⏰ Zeit abgelaufen! Der Song war von ${year ?? '?'}.`;
+  return `✗ Falsch! Der Song war von ${year ?? '?'}.`;
+}
+
 export function SongCard({
-  currentSong,
+  hasAudio,
+  turnEndsAt,
   revealedSong,
   revealed,
   feedback,
@@ -242,7 +262,8 @@ export function SongCard({
   onVolumeChange,
 }: SongCardProps) {
   const vinylSize = useMemo(() => (window.matchMedia('(max-width: 480px)').matches ? 80 : 120), []);
-  const displayYear = revealed && revealedSong ? revealedSong.year : null;
+  // Nobody learns anything about the song before it's placed — otherwise others could call it out.
+  const shown = revealed ? revealedSong : null;
 
   return (
     <SongArea>
@@ -252,14 +273,15 @@ export function SongCard({
       <Card>
         <CardAccent />
         <CardBody>
-          <Vinyl spinning={playing} cover={currentSong.cover} size={vinylSize} />
+          <Vinyl spinning={playing} cover={shown?.cover ?? null} size={vinylSize} />
           <SongInfo>
-            <SongTitle data-blurred={String(isMyTurn && !revealed)}>{currentSong.title}</SongTitle>
-            <SongArtist data-blurred={String(isMyTurn && !revealed)}>
-              {currentSong.artist}
-            </SongArtist>
-            {displayYear !== null && <RevealedYear>{displayYear}</RevealedYear>}
-            {!revealed && (
+            <SongTitle data-hidden={String(!shown)}>
+              {shown ? shown.title : 'Welcher Song ist das?'}
+            </SongTitle>
+            <SongArtist data-hidden={String(!shown)}>{shown ? shown.artist : '???'}</SongArtist>
+            {shown && <RevealedYear>{shown.year}</RevealedYear>}
+            {!revealed && !hasAudio && <NoAudioHint>🔈 Die Musik läuft beim Host</NoAudioHint>}
+            {!revealed && hasAudio && (
               <AudioControls>
                 <AudioButton onClick={onToggleAudio}>{playing ? '⏸ Pause' : '▶ Play'}</AudioButton>
                 <VolumeIcon>{volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊'}</VolumeIcon>
@@ -286,11 +308,18 @@ export function SongCard({
             Warten auf {activePlayerName}…
           </WaitingLabel>
         )}
+        {turnEndsAt !== null && !revealed && (
+          <TimerRow>
+            <TurnTimer endsAt={turnEndsAt} />
+          </TimerRow>
+        )}
         {feedback && (
           <FeedbackOverlay ok={String(feedback === 'ok')}>
-            {feedback === 'ok'
-              ? `✓ Richtig! +1 Punkt für ${lastPlacedIsMe ? 'dich' : (lastPlacedPlayerName ?? activePlayerName)}`
-              : `✗ Falsch! Der Song war von ${revealedSong?.year ?? '?'}.`}
+            {feedbackText(
+              feedback,
+              lastPlacedIsMe ? 'dich' : (lastPlacedPlayerName ?? activePlayerName),
+              revealedSong?.year
+            )}
           </FeedbackOverlay>
         )}
       </Card>

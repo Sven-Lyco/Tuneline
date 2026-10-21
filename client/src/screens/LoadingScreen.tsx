@@ -1,8 +1,11 @@
 import styled from '@emotion/styled';
 import { AppTitle } from '../components/AppTitle';
+import { LinkButton } from '../components/LinkButton';
 
 interface LoadingScreenProps {
   message: string;
+  /** Shown to the host while songs load; guests just wait. */
+  onCancel?: () => void;
 }
 
 const Screen = styled.div`
@@ -37,13 +40,18 @@ const Hint = styled.div`
   color: #555;
 `;
 
-export function LoadingScreen({ message }: LoadingScreenProps) {
+export function LoadingScreen({ message, onCancel }: LoadingScreenProps) {
   return (
     <Screen>
       <AppTitle size="sm" animate={false} style={{ marginBottom: '1.5rem' }} />
       <Spinner />
       <Message>{message}</Message>
       <Hint>Das kann ein paar Sekunden dauern...</Hint>
+      {onCancel && (
+        <LinkButton style={{ marginTop: '1.5rem' }} onClick={onCancel}>
+          Abbrechen
+        </LinkButton>
+      )}
     </Screen>
   );
 }

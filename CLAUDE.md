@@ -39,9 +39,11 @@ Tuneline/
       api/
         spotify.ts          Server-API-Wrapper: /api/auth/*, /api/playlists, /api/songs
       utils/
-        shuffle.ts          shuffle<T>()
+        shuffle.ts          sortByYear<T>()
         audio.ts            playAudio, stopAudio, toggleAudio, getVolume, setVolume
                             (iTunes Preview via HTMLAudioElement; Lautstärke in localStorage)
+        roomStorage.ts      Sitzplatz in sessionStorage (Reload) + lastRoom in localStorage (Zurück-Button)
+        tabPresence.ts      BroadcastChannel: hält ein anderer Tab diesen Platz? (Duplikat-Schutz)
       hooks/
         useGameAudio.ts     playing, volume, startSong, stopSong, toggle, changeVolume
         useSocketEvents.ts  alle Socket-Events + abgeleiteter State (screen, gameState …)
@@ -57,12 +59,15 @@ Tuneline/
         PlaylistBadge.tsx   Playlist-Cover + Name Badge
         Reactions.tsx       Emoji-Reaktionen während des Spiels
         RoomCodeCopy.tsx    Raum-Code Anzeige mit Copy-Button
+        ResumeBanner.tsx    „Zurück ins Spiel“ nach geschlossenem Tab
+        TurnLimitPicker.tsx Zeitlimit-Auswahl (Aus/30/60/90 s)
         game/
           GameHeader.tsx    Header-Leiste (Runde, Spieler-Chips, Raum-Code)
           SongCard.tsx      Vinyl + Song-Info + Audio-Controls + Wave
           MyTimeline.tsx    Eigene Timeline mit DropZones
           OtherPlayers.tsx  Mini-Panels der anderen Spieler
           DisconnectOverlay.tsx  Overlay bei Verbindungsverlust
+          TurnTimer.tsx     Countdown für das Zeitlimit
       screens/
         LoginScreen.tsx     Spotify-Login + Gast-Join-Button
         HelpScreen.tsx      Spielanleitung (Host + Spieler Tabs)
@@ -83,7 +88,8 @@ Tuneline/
 
   server/                   ← Express + Socket.io Server
     src/
-      index.ts              HTTP-Server, Socket.io-Setup, CORS, Rate-Limiting, Auth/Spotify-Routes
+      index.ts              Einstieg: Env laden, Server starten (listen), Prozess-Signale
+      app.ts                createTunelineServer(): Express-Routen, Socket.io-Handler, Rate-Limiting (ohne listen → testbar)
       rooms.ts              RoomManager: create, join, kick, cleanup (2h TTL)
       game.ts               Spiellogik: startGame, placeSong, skipPlayer, returnToLobby
       types.ts              Interne Server-Typen + Konstanten (Room, InternalPlayer, MAX_*)
@@ -120,31 +126,43 @@ Tuneline/
 
 - **Server ist Source of Truth** — alle Spielzustände liegen im Server-Memory (RoomManager)
 - **Room-Code**: 6 Zeichen alphanumerisch (z.B. `6ER2T5`), 2h TTL
-- **Spieler-Token**: 48-Zeichen-Token für Reconnect-Fähigkeit ohne erneuten Join — gespeichert in `sessionStorage` (wird bei Tab-Schließen geleert)
-- **Anti-Cheat**: `SongMeta` (ohne Jahr) wird an aktiven Spieler gesendet; Jahr erst nach Platzierung via `placement_result`
+- **Spieler-Token**: 48-Zeichen-Token für Reconnect-Fähigkeit ohne erneuten Join (`client/src/utils/roomStorage.ts`)
+  - `sessionStorage` (pro Tab): `rejoin_room` (nur Token, legt nie Spieler an) läuft automatisch beim Socket-Reconnect und beim Neuladen; schlägt er fehl → `rejoin_failed` → Start-Screen
+  - `localStorage` (`lastRoom`, max. 2 h): nach Tab-Schließen bietet `ResumeBanner` „Zurück ins Spiel“ an — nur per Klick, nie automatisch
+  - Duplizierter Tab (kopiert sessionStorage): `utils/tabPresence.ts` fragt per `BroadcastChannel`, ob ein anderer Tab den Platz hält → Duplikat startet ohne Spieler. Übernimmt trotzdem ein Socket einen verbundenen Spieler, bekommt der alte `session_replaced` und wird getrennt
+  - Bewusstes Verlassen (`leave_room` in Lobby/Ergebnis, Kick, Raum geschlossen) löscht beide Einträge
+- **Anti-Cheat / kein Vorsagen**: Während eines Zugs geht nur `SongMeta = { preview }` an alle Clients; Titel, Interpret, Cover und Jahr erst mit `placement_result.song`/`game_over`
 - **Audio-Modus**: `'all'` (jeder hört auf eigenem Gerät) oder `'host-only'` (nur Host-Gerät)
 - **Spotify-Token bleibt beim Server**: Host ruft `/api/songs` auf → Server fetcht via Spotify+iTunes → Client empfängt `SongFull[]` und übergibt sie via `start_game` an den Server
 - Server validiert Song-Daten (Pflichtfelder, Jahr zwischen 1900–2100)
-- Socket-Events rate-limitiert (15 Events/Sekunde pro Socket)
+- Socket-Events rate-limitiert (15 Events/Sekunde pro Socket); max. 5 offene Räume pro IP, 1 pro Socket
+- **Alles nur im Speicher**: Ein Server-Neustart/Deploy beendet alle Spiele und Spotify-Logins. Bei `SIGTERM` bekommen Clients `server_restarting` → Deploys außerhalb von Spielzeiten
 
 ### Socket.io Events (Überblick)
 
 ```text
-Client → Server: create_room, join_room, start_loading, start_game,
-                  update_settings, place_song, skip_player, kick_player,
-                  return_to_lobby, send_reaction
-Server → Client: room_created, room_joined, room_updated, game_loading,
-                  game_started, turn_started, placement_result, game_over,
-                  game_paused, game_resumed, player_disconnected,
-                  player_reconnected, player_kicked, error, reaction_received
+Client → Server: create_room, join_room, rejoin_room, leave_room, start_loading,
+                  cancel_loading, start_game, update_settings, place_song,
+                  skip_player, kick_player, return_to_lobby, send_reaction
+Server → Client: room_created, room_joined, rejoin_failed, session_replaced, room_updated,
+                  room_closed, game_loading, game_loading_cancelled, game_started,
+                  placement_result, game_over, game_paused, game_resumed,
+                  game_state_updated, player_kicked, server_restarting, error,
+                  reaction_received
 ```
 
 ## Spiellogik
 
 - **Server** (`game.ts`): `startGame()` verteilt Startsongs, `placeSong()` prüft Platzierung und gibt `correct`/`gameOver` zurück; `rooms.ts` orchestriert via `RoomManager`
 - **Client** (`App.tsx`): verwaltet Socket-State, leitet Events an Screens weiter — nicht verändern ohne Rückfrage
-- Gameover-Bedingung: `currentSongIndex >= deck.length || (currentPlayerIndex === 0 && round > rounds)`
-- Songs ohne iTunes-Preview werden server-seitig in `loadSongs()` herausgefiltert (garantiert Ton für jeden Song)
+- Gameover-Bedingung (`isGameOver` in `game.ts`): nur an Rundengrenzen (`currentPlayerIndex === 0`), wenn `round > rounds` oder der Stapel keine volle Runde mehr hergibt; mitten in der Runde nur, wenn gar kein Song mehr da ist
+- `startGame()` startet nur aus der Lobby und setzt `gameRounds` auf das, was der Stapel für alle hergibt; `rounds` bleibt die Einstellung des Hosts (Client zeigt dem Host einen Hinweis)
+- Songs vom Host-Client werden geprüft (`isValidSong`): Audio nur von `audio-ssl.itunes.apple.com`, Cover nur von `i.scdn.co` oder `null`
+- **Pause** (`pausedPlayerId`): nur wenn der Host oder der Spieler am Zug offline ist. Andere Disconnects → `game_state_updated` (Spieler erscheint „offline“). Kommt der Host nicht binnen 2 Min. zurück → Spielende
+- Übersprungene, beim Start offline gewesene und spät beitretende Spieler werden per `seatPlayer()` wieder in die Reihenfolge aufgenommen (ohne Karten: Startkarte vom Stapel, sonst Zuschauer bis zur nächsten Partie)
+- **Zeitlimit pro Zug** (`turnLimit`: 0/30/60/90 s): Server-Timer in `RoomManager.syncTurnTimer`, läuft nicht während Pausen; Ablauf zählt als falsch (`placement_result.timedOut`)
+- Songs ohne passende iTunes-Preview (gleicher Interpret **und** Titel) werden server-seitig in `loadSongs()` herausgefiltert; Compilations/Re-Releases werden ignoriert (Album-Jahr ≠ Song-Jahr)
+- „Nochmal spielen“: Client schickt bereits gespielte Song-IDs als `excludeIds` an `/api/songs`, die nur als Reserve genutzt werden
 - Bei Punktgleichstand am Ende: `ResultScreen` zeigt "Unentschieden!" statt arbiträrem Sieger
 - Server trackt `lastCorrectSong` pro Spieler → `winnerLastSong` wird mit `game_over` gesendet und in ResultScreen hervorgehoben
 - Lautstärke-Regler im GameScreen (pro Gerät), gespeichert in localStorage
@@ -164,8 +182,16 @@ Server → Client: room_created, room_joined, room_updated, game_loading,
 
 ## Geplante Features (Backlog)
 
-- **Weitere Spielmodi**: Team-Modus, Zeitlimit pro Zug
+- **Weitere Spielmodi**: Team-Modus
 - **Soundeffekte** bei richtigem/falschem Platzieren
+
+## Tests
+
+- **Vitest** in beiden Workspaces, Testdateien liegen als `*.test.ts(x)` neben dem Code
+- **Server** (`server/vitest.config.mts`): Unit-Tests für Spiellogik, `RoomManager` (Timer mit `vi.useFakeTimers()`), Preview, Spotify (`fetch` gemockt), Sessions; Integrationstests starten echte Server über `createTunelineServer()` auf Port 0 (`src/test/server.ts`, `socket.io-client`)
+- **Client** (`client/vite.config.js`, Block `test`): jsdom + Testing Library; `src/test/setup.ts` mockt `src/socket.ts` global durch `src/test/fakeSocket.ts` (`serverEmit()` simuliert Server-Events, `emittedPayloads()` prüft Emits)
+- **Coverage-Schwelle 80 %** (Statements, Branches, Functions, Lines) je Workspace — `npm run coverage` bricht darunter ab
+- **Pre-Commit-Hook** führt nach lint-staged `npm test` aus (~13 s); **CI** führt `npm run coverage` aus
 
 ## Scripts
 
@@ -176,6 +202,8 @@ npm run dev:client   # nur Vite Dev-Server → http://[::1]:5174
 npm run dev:server   # nur Express/Socket.io → http://[::1]:3001
 npm run build        # baut client + server für Production
 npm run typecheck    # tsc --noEmit für client + server
+npm test             # Vitest für server + client
+npm run coverage     # wie test, mit 80-%-Coverage-Schwelle
 
 # Im jeweiligen Unterordner
 npm run lint         # ESLint (client)

@@ -12,6 +12,7 @@ import { PrimaryButton } from '../components/PrimaryButton';
 import { LinkButton } from '../components/LinkButton';
 import { AudioModePicker } from '../components/AudioModePicker';
 import { RoundsPicker } from '../components/RoundsPicker';
+import { TurnLimitPicker } from '../components/TurnLimitPicker';
 import { Reactions } from '../components/Reactions';
 
 interface LobbyScreenProps {
@@ -25,6 +26,7 @@ interface LobbyScreenProps {
   onLeave: () => void;
   onAudioModeChange: (mode: AudioMode) => void;
   onRoundsChange: (rounds: number) => void;
+  onTurnLimitChange: (seconds: number) => void;
   onChangePlaylists: () => void;
 }
 
@@ -96,6 +98,10 @@ const WaitingMsg = styled.div`
   color: #7a7a8e;
   font-size: 0.95rem;
   padding: 1rem 0;
+
+  &[data-warning='true'] {
+    color: #fbbf24;
+  }
 `;
 
 // ── Component ──────────────────────────────────────────────────
@@ -111,9 +117,12 @@ export function LobbyScreen({
   onLeave,
   onAudioModeChange,
   onRoundsChange,
+  onTurnLimitChange,
   onChangePlaylists,
 }: LobbyScreenProps) {
-  const canStart = isHost && lobbyState.players.length >= 2;
+  const connectedCount = lobbyState.players.filter((p) => p.isConnected).length;
+  const canStart = isHost && connectedCount >= 2;
+  const hostOffline = lobbyState.players.some((p) => p.isHost && !p.isConnected);
 
   return (
     <CenteredScreen>
@@ -140,7 +149,7 @@ export function LobbyScreen({
               )}
             </PlayerRow>
           ))}
-          {lobbyState.players.length < 2 && <WaitingDots>Warten auf weitere Spieler…</WaitingDots>}
+          {connectedCount < 2 && <WaitingDots>Warten auf weitere Spieler…</WaitingDots>}
         </PlayerList>
 
         {isHost && (
@@ -150,6 +159,9 @@ export function LobbyScreen({
 
             <Label>Runden</Label>
             <RoundsPicker value={lobbyState.rounds} onChange={onRoundsChange} />
+
+            <Label>Zeitlimit pro Zug</Label>
+            <TurnLimitPicker value={lobbyState.turnLimit} onChange={onTurnLimitChange} />
 
             <Label>Playlisten</Label>
             <PlaylistBadgeRow
@@ -165,7 +177,14 @@ export function LobbyScreen({
           </>
         )}
 
-        {!isHost && <WaitingMsg>Warten darauf, dass der Host das Spiel startet…</WaitingMsg>}
+        {!isHost &&
+          (hostOffline ? (
+            <WaitingMsg data-warning="true">
+              Der Host ist gerade offline. Warte kurz oder verlasse den Raum.
+            </WaitingMsg>
+          ) : (
+            <WaitingMsg>Warten darauf, dass der Host das Spiel startet…</WaitingMsg>
+          ))}
       </Card>
 
       <LinkButton variant="muted" style={{ marginTop: '1.25rem' }} onClick={onLeave}>

@@ -76,6 +76,7 @@ export function GameHeader({
               score={p.score}
               isActive={isActive}
               isMe={p.id === myPlayerId}
+              offline={!p.isConnected}
             />
           );
         })}

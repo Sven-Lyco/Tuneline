@@ -24,24 +24,28 @@ export async function getUserPlaylists(): Promise<SpotifyPlaylist[]> {
   try {
     const res = await fetch('/api/playlists');
     if (!res.ok) return [];
-    return res.json() as Promise<SpotifyPlaylist[]>;
+    return (await res.json()) as SpotifyPlaylist[];
   } catch {
     return [];
   }
 }
 
+/** `excludeIds` are songs from earlier games; the server only falls back to them if needed. */
 export async function loadSongsFromPlaylists(
   playlistIds: string[],
-  target: number
+  target: number,
+  excludeIds: string[],
+  signal: AbortSignal
 ): Promise<SongFull[]> {
   try {
     const res = await fetch('/api/songs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ playlistIds, target }),
+      body: JSON.stringify({ playlistIds, target, excludeIds }),
+      signal,
     });
     if (!res.ok) return [];
-    return res.json() as Promise<SongFull[]>;
+    return (await res.json()) as SongFull[];
   } catch {
     return [];
   }

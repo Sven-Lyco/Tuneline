@@ -6,8 +6,7 @@ export function useGameAudio() {
   const [volume, setVolumeState] = useState(() => getVolume());
 
   const startSong = useCallback((preview: string) => {
-    playAudio(preview, () => setPlaying(false));
-    setPlaying(true);
+    void playAudio(preview, () => setPlaying(false)).then(setPlaying);
   }, []);
 
   const stopSong = useCallback(() => {
@@ -16,7 +15,7 @@ export function useGameAudio() {
   }, []);
 
   const toggle = useCallback(() => {
-    setPlaying(toggleAudio());
+    void toggleAudio().then(setPlaying);
   }, []);
 
   const changeVolume = useCallback((v: number) => {

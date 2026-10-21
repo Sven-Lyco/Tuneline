@@ -308,7 +308,7 @@ describe('game', () => {
     b.s.emit('place_song', { position: 99 });
     const final = await over;
     expect(final.players).toHaveLength(2);
-    expect(final.lastPlayerId).toBe(b.playerId);
+    expect(final).toMatchObject({ lastPlayerId: b.playerId, lastTimedOut: false });
 
     const leaveB = waitFor(a.s, 'room_closed', 300);
     b.s.emit('leave_room');

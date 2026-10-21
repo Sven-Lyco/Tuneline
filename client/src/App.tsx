@@ -4,15 +4,14 @@ import type { SpotifyPlaylist } from './types';
 import { STORAGE_KEYS } from './constants';
 import type { AudioMode } from '@tuneline/shared';
 import { isAuthenticated, loadSongsFromPlaylists, logout } from './api/spotify';
-import { stopAudio } from './utils/audio';
 import { socket } from './socket';
 import { useGameAudio } from './hooks/useGameAudio';
 import { useSocketEvents } from './hooks/useSocketEvents';
 import {
   clearSessionRoom,
-  clearStoredRoom,
   discardLastRoom,
   readLastRoom,
+  storeSessionRoom,
   type LastRoom,
 } from './utils/roomStorage';
 import { isSeatActiveElsewhere } from './utils/tabPresence';
@@ -159,7 +158,7 @@ export default function App() {
     disconnectedPlayer,
     result,
     getPlayedSongIds,
-    resetRoom,
+    exitRoom,
   } = useSocketEvents({ startSong, stopSong, showError });
 
   // ── Auth init ─────────────────────────────────────────────────
@@ -167,6 +166,8 @@ export default function App() {
   /** Takes a stored seat back (reload or "back to game"); the socket hook routes on the answer. */
   const rejoin = useCallback(
     (code: string, playerToken: string) => {
+      // Lets a failed rejoin find and drop the saved room, and a reload retry it.
+      storeSessionRoom(code, playerToken);
       setLoadingMsg('Verbinde mit dem Raum…');
       setScreen('loading');
       if (!socket.connected) socket.connect();
@@ -185,7 +186,8 @@ export default function App() {
       const room = initialParams.get('room')?.toUpperCase();
       const storedRoom = sessionStorage.getItem(STORAGE_KEYS.roomCode);
       const storedToken = sessionStorage.getItem(STORAGE_KEYS.playerToken);
-      if (initialParams.size > 0) window.history.replaceState({}, '', window.location.pathname);
+      // (URLSearchParams.size is missing in Safari < 17.)
+      if (window.location.search) window.history.replaceState({}, '', window.location.pathname);
 
       if (authenticated) {
         setScreen('playlists');
@@ -269,27 +271,17 @@ export default function App() {
     socket.emit('join_room', { roomCode: code, playerName: name, playerToken });
   }, []);
 
-  /** Leaves for good: the server drops us from the lobby (or closes it, for the host). */
-  const leaveRoom = useCallback(() => {
-    // socket.io buffers emits while offline; a late leave_room would hit the next room we join.
-    if (socket.connected) socket.emit('leave_room');
-    clearStoredRoom();
-    stopAudio();
-    socket.disconnect();
-    resetRoom();
-  }, [resetRoom]);
-
   const handleLeave = useCallback(() => {
-    leaveRoom();
+    exitRoom();
     setScreen(isHost ? 'menu' : 'login');
-  }, [isHost, leaveRoom, setScreen]);
+  }, [isHost, exitRoom, setScreen]);
 
   const handleLogout = useCallback(() => {
-    leaveRoom();
+    exitRoom();
     void logout();
     setSelectedPlaylists([]);
     setScreen('login');
-  }, [leaveRoom, setScreen]);
+  }, [exitRoom, setScreen]);
 
   // ── Lobby settings (host) ─────────────────────────────────────
 

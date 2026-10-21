@@ -53,7 +53,8 @@ export interface Room {
   currentSongIndex: number;
   currentPlayerIndex: number;
   round: number;
-  rounds: number;
+  rounds: number; // the host's setting
+  gameRounds: number; // rounds of the running game; capped by what the deck covers
   audioMode: AudioMode;
   turnLimit: number; // seconds, 0 = unlimited
   turnDeadline: number | null; // epoch ms while a turn timer runs

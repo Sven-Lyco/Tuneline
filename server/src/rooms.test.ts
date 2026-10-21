@@ -152,6 +152,21 @@ describe('rejoinRoom', () => {
     expect(rooms.getPlayerForSocket('second-tab')).toMatchObject({ name: 'Anna' });
   });
 
+  it('refuses a socket that already sits in another room', () => {
+    const { rooms, code } = setup();
+    const anna = join(rooms, code, 'Anna');
+    const other = rooms.createRoom('other-host', '2.2.2.2', 'Other', 5, 'all', 0);
+    if (!other.ok) throw new Error(other.error);
+    expect(rooms.joinRoom('Anna-socket', other.roomCode, 'Anna')).toEqual({
+      ok: false,
+      error: 'Du bist bereits in einem Raum.',
+    });
+    expect(rooms.rejoinRoom('other-host', code, anna.playerToken)).toEqual({
+      ok: false,
+      error: 'Du bist bereits in einem Raum.',
+    });
+  });
+
   it('fails for unknown rooms or tokens', () => {
     const { rooms, code } = setup();
     expect(rooms.rejoinRoom('s', code, 'nope')).toEqual({ ok: false, error: 'Raum nicht gefunden.' });
@@ -167,6 +182,25 @@ describe('rejoinRoom', () => {
 
     rooms.rejoinRoom('anna-back', code, guests[0].playerToken);
     expect(rooms.getGameState(code)!.players.map((p) => p.name)).toEqual(['Host', 'Ben', 'Anna']);
+  });
+
+  it('keeps skipped players with cards in the final ranking', () => {
+    const { rooms, code } = playing(['Anna', 'Ben']);
+    rooms.placeSong('host-socket', code, 0);
+    rooms.handleDisconnect('Anna-socket');
+    rooms.skipDisconnectedPlayer('host-socket', code);
+    expect(rooms.getGameState(code)!.players.map((p) => p.name)).toEqual(['Host', 'Ben']);
+    expect(rooms.getPlayers(code)!.map((p) => p.name)).toEqual(['Host', 'Ben', 'Anna']);
+  });
+
+  it('keeps the host’s round setting when the deck forces a shorter game', () => {
+    const rooms = new RoomManager(events);
+    const created = rooms.createRoom('host-socket', 'ip', 'Host', 20, 'all', 0);
+    if (!created.ok) throw new Error(created.error);
+    join(rooms, created.roomCode, 'Anna');
+    rooms.startGame('host-socket', created.roomCode, songs(10), 20, 'all');
+    expect(rooms.getGameState(created.roomCode)!.rounds).toBe(4);
+    expect(rooms.getLobbyState(created.roomCode)!.rounds).toBe(20);
   });
 });
 

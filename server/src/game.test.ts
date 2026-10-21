@@ -30,11 +30,22 @@ describe('startGame', () => {
       { ...song(1990), preview: 'https://evil.example.com/a.m4a' },
       { ...song(1990), id: undefined },
       { ...song(1990), artist: undefined },
+      { ...song(1990), cover: 'https://tracker.example.com/pixel.gif' },
+      { ...song(1990), cover: `https://i.scdn.co/${'x'.repeat(300)}` },
     ];
     for (const entry of bad) {
       const result = startGame(r, [...songs(5), entry as SongFull], 5, 'all');
       expect(result).toEqual({ ok: false, error: 'Ungültige Song-Daten.' });
     }
+    const withCover = { ...song(1999), cover: 'https://i.scdn.co/image/abc' };
+    expect(startGame(r, [...songs(5), withCover], 5, 'all')).toEqual({ ok: true });
+  });
+
+  it('refuses to restart a running or finished game', () => {
+    const r = playingRoom(['a', 'b'], songs(10));
+    expect(startGame(r, songs(10), 5, 'all')).toEqual({ ok: false, error: 'Das Spiel läuft bereits.' });
+    r.status = 'finished';
+    expect(startGame(r, songs(10), 5, 'all').ok).toBe(false);
   });
 
   it('needs two connected players and enough songs for them', () => {
@@ -65,7 +76,7 @@ describe('startGame', () => {
     expect(r.players.get('c')!.score).toBe(0);
     expect(r.deck).toHaveLength(8);
     expect(r.audioMode).toBe('host-only');
-    expect(r.rounds).toBe(3);
+    expect([r.rounds, r.gameRounds]).toEqual([3, 3]);
     expect(r.lastCorrectSong.size).toBe(0);
     expect([r.currentSongIndex, r.currentPlayerIndex, r.round]).toEqual([0, 0, 1]);
   });
@@ -73,7 +84,7 @@ describe('startGame', () => {
   it('caps the rounds to what the deck covers for everyone', () => {
     const r = room(['a', 'b']);
     startGame(r, songs(10), 20, 'all');
-    expect(r.rounds).toBe(4); // 8 songs left for 2 players
+    expect([r.rounds, r.gameRounds]).toEqual([20, 4]); // setting kept, 8 songs cover 4 rounds
   });
 });
 
@@ -138,7 +149,7 @@ describe('placeSong', () => {
   });
 
   it('ends after the last round', () => {
-    const r = playingRoom(['a', 'b'], songs(10), {}, { rounds: 1 });
+    const r = playingRoom(['a', 'b'], songs(10), {}, { gameRounds: 1 });
     placeSong(r, 'a', 0);
     expect(placeSong(r, 'b', 0)).toMatchObject({ gameOver: true });
     expect(r.status).toBe('finished');

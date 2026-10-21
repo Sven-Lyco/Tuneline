@@ -33,13 +33,14 @@ function pickBestPreview(results: ItunesTrack[], artist: string, title: string):
   const normArtist = normalize(artist);
   const normTitle = normalize(title);
   const base = baseTitle(title);
-  if (!normArtist || !normTitle || !base) return null;
+  if (!normArtist || !normTitle) return null;
 
   const byArtist = results.filter(
     (r) => r.previewUrl !== null && normalize(r.artistName).includes(normArtist),
   );
   const exact = byArtist.find((r) => normalize(r.trackName) === normTitle);
-  const variant = byArtist.find((r) => baseTitle(r.trackName) === base);
+  // A title made only of brackets ("(Untitled)") has no base to compare variants with.
+  const variant = base ? byArtist.find((r) => baseTitle(r.trackName) === base) : undefined;
   return exact?.previewUrl ?? variant?.previewUrl ?? null;
 }
 

@@ -163,6 +163,8 @@ describe('coming back', () => {
     openAt('/');
     fireEvent.click(await screen.findByText('Zurück ins Spiel'));
     expect(emittedPayloads('rejoin_room')).toEqual([{ roomCode: 'ROOM01', playerToken: 'tok' }]);
+    // so a failed rejoin can drop the saved room instead of offering it again
+    expect(sessionStorage.getItem(STORAGE_KEYS.playerToken)).toBe('tok');
   });
 
   it('can dismiss the offer, and hides it while another tab plays the seat', async () => {

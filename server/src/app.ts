@@ -5,7 +5,7 @@ import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
-import type { ClientToServerEvents, ServerToClientEvents, SongFull } from '@tuneline/shared';
+import type { ClientToServerEvents, ServerToClientEvents } from '@tuneline/shared';
 import type { TurnResult } from './types.js';
 import { REACTION_EMOJIS } from '@tuneline/shared';
 import { join } from 'path';
@@ -191,7 +191,7 @@ export function createTunelineServer({ frontendOrigin, isProd }: TunelineServerO
 
   const rooms = new RoomManager({
     onHostTimeout: (roomCode) => {
-      emitGameOver(io, roomCode, null, false, '');
+      emitGameOver(io, roomCode, null);
       logger.warn({ roomCode }, 'host_timeout_game_over');
     },
     onTurnTimeout: (roomCode, result) => {
@@ -236,23 +236,18 @@ export function createTunelineServer({ frontendOrigin, isProd }: TunelineServerO
 
   // ── Shared helpers ────────────────────────────────────────────────────────
 
-  function emitGameOver(
-    io: IoServer,
-    roomCode: string,
-    lastSong: SongFull | null,
-    lastCorrect: boolean,
-    lastPlayerId: string,
-    target: string = roomCode
-  ) {
+  /** `last` is the turn that ended the game, if a turn did (not a skip or the host leaving). */
+  function emitGameOver(io: IoServer, roomCode: string, last: TurnResult | null, target: string = roomCode) {
     const players = rooms.getPlayers(roomCode);
     if (!players) return;
     const winner = [...players].sort((a, b) => b.score - a.score)[0];
     const winnerLastSong = winner ? rooms.getLastCorrectSong(roomCode, winner.id) : null;
     io.to(target).emit('game_over', {
       players,
-      lastSong,
-      lastCorrect,
-      lastPlayerId,
+      lastSong: last?.song ?? null,
+      lastCorrect: last?.correct ?? false,
+      lastTimedOut: last?.timedOut ?? false,
+      lastPlayerId: last?.lastPlayerId ?? '',
       winnerLastSong,
     });
   }
@@ -260,7 +255,7 @@ export function createTunelineServer({ frontendOrigin, isProd }: TunelineServerO
   /** Broadcasts the outcome of a finished turn (placement or timeout). */
   function emitTurnResult(io: IoServer, roomCode: string, result: TurnResult) {
     if (result.gameOver) {
-      emitGameOver(io, roomCode, result.song, result.correct, result.lastPlayerId);
+      emitGameOver(io, roomCode, result);
       const players = rooms.getPlayers(roomCode);
       const scores = Object.fromEntries(players?.map((p) => [p.name, p.score]) ?? []);
       logger.info({ roomCode, scores }, 'game_over');
@@ -403,7 +398,7 @@ export function createTunelineServer({ frontendOrigin, isProd }: TunelineServerO
           if (gameState) socket.to(code).emit('game_state_updated', { gameState });
         }
       } else if (lobby.status === 'finished') {
-        emitGameOver(io, code, null, false, '', socket.id);
+        emitGameOver(io, code, null, socket.id);
       } else {
         io.to(code).emit('room_updated', { room: lobby });
       }
@@ -563,7 +558,7 @@ export function createTunelineServer({ frontendOrigin, isProd }: TunelineServerO
       }
 
       if (result.gameOver) {
-        emitGameOver(io, roomCode, null, false, '');
+        emitGameOver(io, roomCode, null);
         logger.warn({ roomCode }, 'skip_player_game_over');
         return;
       }

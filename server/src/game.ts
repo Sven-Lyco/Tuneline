@@ -37,7 +37,7 @@ function isGameOver(room: Room): boolean {
   // Only end at a round boundary so everyone gets the same number of turns.
   return (
     room.currentPlayerIndex === 0 &&
-    (room.round > room.rounds || songsLeft(room) < room.playerOrder.length)
+    (room.round > room.gameRounds || songsLeft(room) < room.playerOrder.length)
   );
 }
 
@@ -55,6 +55,28 @@ function endTurn(
   const gameOver = isGameOver(room);
   if (gameOver) room.status = 'finished';
   return { correct, timedOut, song, gameOver, lastPlayerId: playerId };
+}
+
+const isShortText = (v: unknown): v is string => typeof v === 'string' && v.length <= MAX_FIELD_LENGTH;
+
+/**
+ * Songs come from the host's client, so everything that's broadcast to others is checked:
+ * audio only from iTunes, covers only from Spotify's image CDN (no tracking pixels).
+ */
+function isValidSong(song: SongFull): boolean {
+  return (
+    !!song &&
+    typeof song === 'object' &&
+    isShortText(song.id) &&
+    isShortText(song.title) &&
+    isShortText(song.artist) &&
+    typeof song.year === 'number' &&
+    song.year >= 1900 &&
+    song.year <= 2100 &&
+    isShortText(song.preview) &&
+    song.preview.startsWith('https://audio-ssl.itunes.apple.com/') &&
+    (song.cover === null || (isShortText(song.cover) && song.cover.startsWith('https://i.scdn.co/')))
+  );
 }
 
 /**
@@ -76,6 +98,8 @@ export function startGame(
   rounds: number,
   audioMode: AudioMode,
 ): SimpleResult {
+  // A second start (double click, slow load, modified client) must not wipe a running game.
+  if (room.status !== 'lobby') return { ok: false, error: 'Das Spiel läuft bereits.' };
   if (!Array.isArray(songs) || songs.length < 2) {
     return { ok: false, error: 'Zu wenige Songs (min. 2).' };
   }
@@ -85,25 +109,7 @@ export function startGame(
   if (!isValidAudioMode(audioMode)) {
     return { ok: false, error: 'Ungültiger Audio-Modus.' };
   }
-  for (const song of songs) {
-    if (
-      !song ||
-      typeof song !== 'object' ||
-      typeof song.id !== 'string' ||
-      song.id.length > MAX_FIELD_LENGTH ||
-      typeof song.title !== 'string' ||
-      song.title.length > MAX_FIELD_LENGTH ||
-      typeof song.artist !== 'string' ||
-      song.artist.length > MAX_FIELD_LENGTH ||
-      typeof song.year !== 'number' ||
-      song.year < 1900 ||
-      song.year > 2100 ||
-      typeof song.preview !== 'string' ||
-      !song.preview.startsWith('https://audio-ssl.itunes.apple.com/')
-    ) {
-      return { ok: false, error: 'Ungültige Song-Daten.' };
-    }
-  }
+  if (!songs.every((s) => isValidSong(s))) return { ok: false, error: 'Ungültige Song-Daten.' };
 
   // Offline players sit this game out; they're seated again if they come back.
   const playerList = room.playerOrder
@@ -131,9 +137,10 @@ export function startGame(
   room.currentSongIndex = 0;
   room.currentPlayerIndex = 0;
   room.round = 1;
-  // Never promise more rounds than the deck can cover for everyone.
+  // Never promise more rounds than the deck can cover for everyone; the setting itself stays.
   const affordableRounds = Math.floor(room.deck.length / playerList.length);
-  room.rounds = Math.max(1, Math.min(clampRounds(rounds), affordableRounds));
+  room.rounds = clampRounds(rounds);
+  room.gameRounds = Math.max(1, Math.min(room.rounds, affordableRounds));
   room.audioMode = audioMode;
   room.status = 'playing';
   room.lastCorrectSong = new Map();

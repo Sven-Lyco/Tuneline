@@ -40,6 +40,7 @@ export function room(playerIds: string[], overrides: Partial<Room> = {}): Room {
     currentPlayerIndex: 0,
     round: 1,
     rounds: 5,
+    gameRounds: 5,
     audioMode: 'all',
     turnLimit: 0,
     turnDeadline: null,

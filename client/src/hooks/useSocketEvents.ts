@@ -23,6 +23,9 @@ function shouldPlay(audioMode: AudioMode, isHost: boolean): boolean {
   return audioMode === 'all' || isHost;
 }
 
+// Same cap as the server's /api/songs validation.
+const MAX_EXCLUDED_SONGS = 1000;
+
 function toFeedback(correct: boolean, timedOut: boolean): Feedback {
   if (correct) return 'ok';
   return timedOut ? 'timeout' : 'no';
@@ -76,6 +79,8 @@ export interface SocketState {
   /** Songs already used in this room, so the next game can avoid them. */
   getPlayedSongIds: () => string[];
   resetRoom: () => void;
+  /** Leaves the room for good (leave button, logout). */
+  exitRoom: () => void;
 }
 
 export function useSocketEvents({
@@ -106,6 +111,7 @@ export function useSocketEvents({
 
   // Refs so socket callbacks always see current values without re-registering
   const isHostRef = useRef(isHost);
+  const roomCodeRef = useRef(roomCode);
   const gameStateRef = useRef(gameState);
   const roundsRef = useRef(rounds);
   const revealTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -113,6 +119,7 @@ export function useSocketEvents({
   const playedSongIdsRef = useRef(new Set<string>());
   useEffect(() => {
     isHostRef.current = isHost;
+    roomCodeRef.current = roomCode;
     gameStateRef.current = gameState;
     roundsRef.current = rounds;
   });
@@ -142,12 +149,35 @@ export function useSocketEvents({
     setResult(null);
   }, []);
 
+  /** keepLastRoom: another tab now holds the seat and owns the saved room. */
+  const teardown = useCallback(
+    (keepLastRoom: boolean) => {
+      if (keepLastRoom) clearSessionRoom();
+      else clearStoredRoom();
+      stopSong();
+      resetRoom();
+      socket.disconnect();
+    },
+    [stopSong, resetRoom]
+  );
+
+  /** Leaves for good: the server drops us from the lobby/result, or closes the room for the host. */
+  const exitRoom = useCallback(() => {
+    // socket.io buffers emits while offline; a late leave_room would hit the next room we join.
+    if (socket.connected) socket.emit('leave_room');
+    teardown(false);
+  }, [teardown]);
+
   const placeSong = useCallback((position: number) => {
     setPlacing(true);
     socket.emit('place_song', { position });
   }, []);
 
-  const getPlayedSongIds = useCallback(() => [...playedSongIdsRef.current], []);
+  // The server takes at most this many exclusions; the most recent songs matter most.
+  const getPlayedSongIds = useCallback(
+    () => [...playedSongIdsRef.current].slice(-MAX_EXCLUDED_SONGS),
+    []
+  );
 
   useEffect(() => {
     const clearRevealTimer = () => {
@@ -189,13 +219,8 @@ export function useSocketEvents({
     };
 
     // We're no longer in a room (closed, kicked, gone after a restart): back to a start screen.
-    // keepLastRoom: another tab now holds the seat and owns the saved room.
     const leaveRoom = (message: string, keepLastRoom = false) => {
-      if (keepLastRoom) clearSessionRoom();
-      else clearStoredRoom();
-      stopSong();
-      resetRoom();
-      socket.disconnect();
+      teardown(keepLastRoom);
       showError(message);
       void isAuthenticated().then((auth) => setScreen(auth ? 'playlists' : 'login'));
     };
@@ -210,6 +235,8 @@ export function useSocketEvents({
     socket.io.on('reconnect', handleReconnect);
 
     socket.on('room_created', ({ roomCode: rc, playerId, playerToken }) => {
+      isHostRef.current = true;
+      roomCodeRef.current = rc;
       setRoomCode(rc);
       setMyPlayerId(playerId);
       setIsHost(true);
@@ -217,17 +244,25 @@ export function useSocketEvents({
     });
 
     socket.on('room_joined', ({ playerId, playerToken, room }) => {
+      const host = room.players.find((p) => p.id === playerId)?.isHost ?? false;
+      const reconnected = roomCodeRef.current === room.roomCode;
+      // game_resumed can follow before the next render; it must already see the host role.
+      isHostRef.current = host;
+      roomCodeRef.current = room.roomCode;
       setMyPlayerId(playerId);
-      setIsHost(room.players.find((p) => p.id === playerId)?.isHost ?? false);
+      setIsHost(host);
       setLobbyState(room);
       setRoomCode(room.roomCode);
       setAudioMode(room.audioMode);
       setRounds(room.rounds);
       setTurnLimit(room.turnLimit);
       storeSessionRoom(room.roomCode, playerToken);
-      // 'playing' and 'finished' are followed by game_resumed/game_paused/game_over
+      // 'playing' and 'finished' are followed by game_resumed/game_paused/game_over.
+      // A reconnect must not pull the host out of the playlist picker or a running song load.
       if (room.status === 'lobby') {
-        setScreen('lobby');
+        setScreen((prev) =>
+          reconnected && (prev === 'playlists' || prev === 'loading') ? prev : 'lobby'
+        );
       }
     });
 
@@ -299,35 +334,38 @@ export function useSocketEvents({
       }, REVEAL_DURATION_MS);
     });
 
-    socket.on('game_over', ({ players, lastSong, lastCorrect, lastPlayerId, winnerLastSong }) => {
-      clearRevealTimer();
-      pendingPauseRef.current = null;
-      setPlacing(false);
-      setDisconnectedPlayer(null);
-      stopSong();
-      if (lastSong) playedSongIdsRef.current.add(lastSong.id);
-      const resultData = {
-        players,
-        lastSong,
-        lastCorrect,
-        lastPlayerId,
-        winnerLastSong: winnerLastSong ?? null,
-      };
-      if (lastSong) {
-        setLastPlacedPlayerId(lastPlayerId);
-        setRevealedSong(lastSong);
-        setFeedback(lastCorrect ? 'ok' : 'no');
-        setRevealed(true);
-        revealTimerRef.current = setTimeout(() => {
-          clearReveal();
+    socket.on(
+      'game_over',
+      ({ players, lastSong, lastCorrect, lastTimedOut, lastPlayerId, winnerLastSong }) => {
+        clearRevealTimer();
+        pendingPauseRef.current = null;
+        setPlacing(false);
+        setDisconnectedPlayer(null);
+        stopSong();
+        if (lastSong) playedSongIdsRef.current.add(lastSong.id);
+        const resultData = {
+          players,
+          lastSong,
+          lastCorrect,
+          lastPlayerId,
+          winnerLastSong: winnerLastSong ?? null,
+        };
+        if (lastSong) {
+          setLastPlacedPlayerId(lastPlayerId);
+          setRevealedSong(lastSong);
+          setFeedback(toFeedback(lastCorrect, lastTimedOut));
+          setRevealed(true);
+          revealTimerRef.current = setTimeout(() => {
+            clearReveal();
+            setResult(resultData);
+            setScreen('result');
+          }, REVEAL_DURATION_MS);
+        } else {
           setResult(resultData);
           setScreen('result');
-        }, REVEAL_DURATION_MS);
-      } else {
-        setResult(resultData);
-        setScreen('result');
+        }
       }
-    });
+    );
 
     socket.on(
       'game_paused',
@@ -385,7 +423,7 @@ export function useSocketEvents({
       socket.off('game_state_updated');
       socket.off('error');
     };
-  }, [startSong, stopSong, showError, resetRoom]);
+  }, [startSong, stopSong, showError, resetRoom, teardown]);
 
   return {
     screen,
@@ -418,5 +456,6 @@ export function useSocketEvents({
     result,
     getPlayedSongIds,
     resetRoom,
+    exitRoom,
   };
 }

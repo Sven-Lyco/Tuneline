@@ -3,7 +3,13 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import type { GameStateForClient, LobbyState, RoomPlayer, SongFull } from '@tuneline/shared';
 import { REVEAL_DURATION_MS } from '@tuneline/shared';
 import { useSocketEvents } from './useSocketEvents';
-import { emittedPayloads, managerEmit, serverEmit, socket } from '../test/fakeSocket';
+import {
+  emittedPayloads,
+  managerEmit,
+  serverEmit,
+  serverEmitBatch,
+  socket,
+} from '../test/fakeSocket';
 import { STORAGE_KEYS } from '../constants';
 import { readLastRoom, saveLastRoom } from '../utils/roomStorage';
 import { isAuthenticated } from '../api/spotify';
@@ -113,6 +119,38 @@ describe('joining', () => {
       room: lobby({ status: 'playing' }),
     });
     expect(result.current.screen).toBe('login');
+  });
+
+  it('lets the host hear the song when the resume arrives right after the rejoin', () => {
+    setup();
+    serverEmitBatch([
+      [
+        'room_joined',
+        {
+          playerId: 'host',
+          playerToken: 'tok',
+          room: lobby({ status: 'playing', audioMode: 'host-only' }),
+        },
+      ],
+      ['game_resumed', { gameState: state({ audioMode: 'host-only' }), currentSong: clip(5) }],
+    ]);
+    expect(startSong).toHaveBeenCalledWith('https://audio/5.m4a');
+  });
+
+  it('keeps the host in the playlist picker or a song load when a reconnect lands', () => {
+    const { result } = setup();
+    const rejoined = () =>
+      serverEmit('room_joined', { playerId: 'host', playerToken: 'tok', room: lobby() });
+    rejoined();
+    act(() => result.current.setScreen('playlists'));
+    rejoined();
+    expect(result.current.screen).toBe('playlists');
+    act(() => result.current.setScreen('loading'));
+    rejoined();
+    expect(result.current.screen).toBe('loading');
+    act(() => result.current.setScreen('result'));
+    rejoined();
+    expect(result.current.screen).toBe('lobby');
   });
 
   it('rejoins automatically after a reconnect, but only with a stored seat', () => {
@@ -307,6 +345,32 @@ describe('game over', () => {
     expect(result.current.getPlayedSongIds()).toContain('s1999');
   });
 
+  it('says time ran out when the final turn timed out', () => {
+    const { result } = inGame();
+    serverEmit('game_over', {
+      players,
+      lastSong: full(1999),
+      lastCorrect: false,
+      lastTimedOut: true,
+      lastPlayerId: 'me',
+      winnerLastSong: null,
+    });
+    expect(result.current.feedback).toBe('timeout');
+  });
+
+  it('reports at most as many played songs as the server accepts, newest last', () => {
+    const { result } = setup();
+    serverEmit('room_joined', { playerId: 'me', playerToken: 'tok', room: lobby() });
+    const many = Array.from({ length: 1005 }, (_, i) => ({ ...full(1990), id: `x${i}` }));
+    serverEmit('game_started', {
+      gameState: state({ players: [player('host', { timeline: many }), player('me')] }),
+      currentSong: clip(),
+    });
+    const ids = result.current.getPlayedSongIds();
+    expect(ids).toHaveLength(1000);
+    expect(ids.at(-1)).toBe('x1004');
+  });
+
   it('shows the result directly without a last placement', () => {
     const { result } = inGame();
     serverEmit('game_over', {
@@ -354,6 +418,21 @@ describe('leaving the room', () => {
     expect(sessionStorage.getItem(STORAGE_KEYS.playerToken)).toBeNull();
     expect(readLastRoom()).toMatchObject({ playerToken: 'tok' });
     await waitFor(() => expect(result.current.screen).toBe('playlists'));
+  });
+
+  it('exits for good, telling the server only while connected', () => {
+    const { result } = inGame();
+    seatStored();
+    socket.connected = true;
+    act(() => result.current.exitRoom());
+    expect(emittedPayloads('leave_room')).toHaveLength(1);
+    expect(stopSong).toHaveBeenCalled();
+    expect(socket.connected).toBe(false);
+    expect(readLastRoom()).toBeNull();
+    expect(result.current.roomCode).toBe('');
+
+    act(() => result.current.exitRoom());
+    expect(emittedPayloads('leave_room')).toHaveLength(1);
   });
 
   it('warns before a server restart and resets on request', () => {

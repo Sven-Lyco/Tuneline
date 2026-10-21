@@ -60,6 +60,16 @@ describe('api/spotify', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('aborted')));
     expect(await loadSongsFromPlaylists(['p1'], 10, [], signal)).toEqual([]);
   });
+
+  it('treats an unreadable response body as empty', async () => {
+    const broken = vi.fn(async () => ({
+      ok: true,
+      json: async () => Promise.reject(new Error('bad json')),
+    }));
+    vi.stubGlobal('fetch', broken);
+    expect(await loadSongsFromPlaylists(['p1'], 10, [], new AbortController().signal)).toEqual([]);
+    expect(await getUserPlaylists()).toEqual([]);
+  });
 });
 
 describe('sortByYear', () => {

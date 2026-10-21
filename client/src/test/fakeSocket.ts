@@ -60,6 +60,15 @@ export function serverEmit(event: string, payload?: unknown) {
   });
 }
 
+/** Delivers several server events back-to-back without a render in between, like one network read. */
+export function serverEmitBatch(events: Array<[string, unknown?]>) {
+  act(() => {
+    for (const [event, payload] of events) {
+      for (const handler of [...(handlers.get(event) ?? [])]) handler(payload);
+    }
+  });
+}
+
 /** Fires a socket.io manager event such as 'reconnect'. */
 export function managerEmit(event: string) {
   act(() => {

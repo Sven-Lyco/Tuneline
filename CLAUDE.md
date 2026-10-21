@@ -156,7 +156,8 @@ Server → Client: room_created, room_joined, rejoin_failed, session_replaced, r
 - **Server** (`game.ts`): `startGame()` verteilt Startsongs, `placeSong()` prüft Platzierung und gibt `correct`/`gameOver` zurück; `rooms.ts` orchestriert via `RoomManager`
 - **Client** (`App.tsx`): verwaltet Socket-State, leitet Events an Screens weiter — nicht verändern ohne Rückfrage
 - Gameover-Bedingung (`isGameOver` in `game.ts`): nur an Rundengrenzen (`currentPlayerIndex === 0`), wenn `round > rounds` oder der Stapel keine volle Runde mehr hergibt; mitten in der Runde nur, wenn gar kein Song mehr da ist
-- `startGame()` begrenzt `rounds` auf das, was der Stapel für alle hergibt (Client zeigt dem Host dann einen Hinweis)
+- `startGame()` startet nur aus der Lobby und setzt `gameRounds` auf das, was der Stapel für alle hergibt; `rounds` bleibt die Einstellung des Hosts (Client zeigt dem Host einen Hinweis)
+- Songs vom Host-Client werden geprüft (`isValidSong`): Audio nur von `audio-ssl.itunes.apple.com`, Cover nur von `i.scdn.co` oder `null`
 - **Pause** (`pausedPlayerId`): nur wenn der Host oder der Spieler am Zug offline ist. Andere Disconnects → `game_state_updated` (Spieler erscheint „offline“). Kommt der Host nicht binnen 2 Min. zurück → Spielende
 - Übersprungene, beim Start offline gewesene und spät beitretende Spieler werden per `seatPlayer()` wieder in die Reihenfolge aufgenommen (ohne Karten: Startkarte vom Stapel, sonst Zuschauer bis zur nächsten Partie)
 - **Zeitlimit pro Zug** (`turnLimit`: 0/30/60/90 s): Server-Timer in `RoomManager.syncTurnTimer`, läuft nicht während Pausen; Ablauf zählt als falsch (`placement_result.timedOut`)

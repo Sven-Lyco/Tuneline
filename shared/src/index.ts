@@ -131,6 +131,7 @@ export interface ServerToClientEvents {
     players: RoomPlayer[];
     lastSong: SongFull | null;
     lastCorrect: boolean;
+    lastTimedOut: boolean;
     lastPlayerId: string;
     winnerLastSong: SongFull | null;
   }) => void;

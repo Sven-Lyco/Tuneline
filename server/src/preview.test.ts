@@ -51,6 +51,12 @@ describe('findPreview', () => {
     expect(await findPreview('Beyoncé', 'Halo')).toBe('https://audio/HALO');
   });
 
+  it('matches titles made only of brackets exactly', async () => {
+    const a = artist();
+    itunes([track(a, '[Interlude]'), track(a, '(Untitled)')]);
+    expect(await findPreview(a, '(Untitled)')).toBe('https://audio/(Untitled)');
+  });
+
   it('never falls back to another song or artist', async () => {
     const a = artist();
     itunes([track(a, 'Love'), track('Someone Else', 'Love Me Do')]);

@@ -83,8 +83,8 @@ export class RoomManager {
     return playerId ? (room.players.get(playerId) ?? null) : null;
   }
 
-  private toPublicPlayers(room: Room): RoomPlayer[] {
-    return room.playerOrder
+  private toPublicPlayers(room: Room, ids: string[] = room.playerOrder): RoomPlayer[] {
+    return ids
       .map((id) => room.players.get(id))
       .filter((p): p is InternalPlayer => p !== undefined)
       .map((p) => ({
@@ -123,6 +123,12 @@ export class RoomManager {
       this.syncTurnTimer(room, REVEAL_DURATION_MS);
       this.events.onTurnTimeout(room.code, result);
     }, ms);
+  }
+
+  /** A socket sits in one room only; otherwise the old room keeps it "connected" forever. */
+  private isInOtherRoom(socketId: string, roomCode: string): boolean {
+    const current = this.socketToRoom.get(socketId);
+    return current !== undefined && current !== roomCode;
   }
 
   /** Reconnects the player owning `playerToken` on a new socket, or returns null. */
@@ -199,6 +205,7 @@ export class RoomManager {
       currentPlayerIndex: 0,
       round: 1,
       rounds: clampRounds(rounds),
+      gameRounds: clampRounds(rounds),
       audioMode: validMode,
       turnLimit: toTurnLimit(turnLimit),
       turnDeadline: null,
@@ -221,6 +228,7 @@ export class RoomManager {
   ): JoinResult {
     const room = this.rooms.get(roomCode);
     if (!room) return { ok: false, error: 'Raum nicht gefunden.' };
+    if (this.isInOtherRoom(socketId, roomCode)) return { ok: false, error: 'Du bist bereits in einem Raum.' };
 
     if (playerToken) {
       const reconnected = this.reconnect(socketId, room, playerToken);
@@ -261,6 +269,7 @@ export class RoomManager {
   /** Token-only reconnect (reload, auto-reconnect); never creates a player. */
   rejoinRoom(socketId: string, roomCode: string, playerToken: string): JoinResult {
     const room = this.rooms.get(roomCode);
+    if (this.isInOtherRoom(socketId, roomCode)) return { ok: false, error: 'Du bist bereits in einem Raum.' };
     const result = room ? this.reconnect(socketId, room, playerToken) : null;
     return result ?? { ok: false, error: 'Raum nicht gefunden.' };
   }
@@ -462,7 +471,7 @@ export class RoomManager {
       players: this.toPublicPlayers(room),
       currentPlayerId: room.playerOrder[room.currentPlayerIndex] ?? '',
       round: room.round,
-      rounds: room.rounds,
+      rounds: room.gameRounds,
       audioMode: room.audioMode,
       deckRemaining: room.deck.length - room.currentSongIndex,
       turnEndsInMs: room.turnDeadline === null ? null : Math.max(0, room.turnDeadline - Date.now()),
@@ -477,10 +486,14 @@ export class RoomManager {
     return song ? { preview: song.preview } : null;
   }
 
+  /** Everyone who played: the turn order plus skipped players who still hold cards. */
   getPlayers(roomCode: string): RoomPlayer[] | null {
     const room = this.rooms.get(roomCode);
     if (!room) return null;
-    return this.toPublicPlayers(room);
+    const skipped = [...room.players.values()]
+      .filter((p) => !room.playerOrder.includes(p.id) && p.timeline.length > 0)
+      .map((p) => p.id);
+    return this.toPublicPlayers(room, [...room.playerOrder, ...skipped]);
   }
 
   getLastCorrectSong(roomCode: string, playerId: string): SongFull | null {

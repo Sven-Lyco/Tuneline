@@ -24,7 +24,7 @@ export async function getUserPlaylists(): Promise<SpotifyPlaylist[]> {
   try {
     const res = await fetch('/api/playlists');
     if (!res.ok) return [];
-    return res.json() as Promise<SpotifyPlaylist[]>;
+    return (await res.json()) as SpotifyPlaylist[];
   } catch {
     return [];
   }
@@ -45,7 +45,7 @@ export async function loadSongsFromPlaylists(
       signal,
     });
     if (!res.ok) return [];
-    return res.json() as Promise<SongFull[]>;
+    return (await res.json()) as SongFull[];
   } catch {
     return [];
   }

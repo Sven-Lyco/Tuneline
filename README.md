@@ -16,6 +16,8 @@ Players listen to a 30-second song preview and place it chronologically on their
 5. Each turn: listen to the preview, place the song in the right spot on your timeline
 6. Correct placement → +1 point and the card stays. Wrong → card is discarded
 
+Diagrams of the room states, turns, reconnects and pause rules (German): [docs/architecture.md](docs/architecture.md)
+
 ## Tech Stack
 
 - **React 19 + TypeScript 5** with Vite
@@ -36,6 +38,14 @@ http://[::1]:5174/api/auth/callback
 ```
 
 > **Note:** Spotify does not accept `localhost` — the URI must use `[::1]` exactly as shown.
+
+**Spotify limits for apps in Development Mode** (as of 2026, see Spotify's [quota modes](https://developer.spotify.com/documentation/web-api/concepts/quota-modes)):
+
+- The account that owns the app needs an active **Spotify Premium** subscription. If it lapses, login and playlist loading stop working.
+- At most **5 Spotify users** can use the app. Add everyone who should be able to host under **Settings → User Management** (name and the e-mail address of their Spotify account). Hosts who aren't on the list can log in but get no playlists. Players who join via room code never log in to Spotify.
+- Apps created since February 2026 only get the songs of playlists the host **owns or collaborates on**. Spotify-owned playlists (editorial lists, Discover Weekly, Daily Mix …) can't be loaded by any Development Mode app — copy their songs into a playlist of your own instead.
+
+Audio previews come from the iTunes Search API, which Apple limits to roughly **20 requests per minute** per IP — here, the server's. Songs without a matching preview are skipped.
 
 ### 2. Configure the server
 

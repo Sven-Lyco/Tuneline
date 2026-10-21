@@ -20,5 +20,6 @@ export const RANK_MEDALS = ['🥇', '🥈', '🥉'];
 export const STORAGE_KEYS = {
   playerToken: 'tuneline_player_token',
   roomCode: 'tuneline_room_code',
+  selectedPlaylists: 'tuneline_selected_playlists',
   volume: 'tuneline_volume',
 } as const;

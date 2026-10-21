@@ -6,6 +6,7 @@ import type {
   GameStateForClient,
   AudioMode,
 } from '@tuneline/shared';
+import { REVEAL_DURATION_MS } from '@tuneline/shared';
 import { generateCode } from './utils.js';
 import {
   ROOM_CODE_CHARS,
@@ -19,14 +20,18 @@ import {
   MAX_ROOMS_PER_IP,
   clampRounds,
   isValidAudioMode,
+  sameName,
+  toTurnLimit,
   type InternalPlayer,
   type Room,
+  type RoomEvents,
   type CreateRoomResult,
   type JoinResult,
   type SimpleResult,
   type PlaceResult,
   type KickResult,
   type SkipResult,
+  type LeaveResult,
 } from './types.js';
 import * as game from './game.js';
 
@@ -34,8 +39,7 @@ export class RoomManager {
   private rooms = new Map<string, Room>();
   private socketToRoom = new Map<string, string>(); // socketId → roomCode
 
-  /** onHostTimeout runs after the game was finished because the host didn't return in time. */
-  constructor(private readonly onHostTimeout: (roomCode: string) => void) {}
+  constructor(private readonly events: RoomEvents) {}
 
   // ── Private helpers ──────────────────────────────────────────────────────
 
@@ -61,7 +65,9 @@ export class RoomManager {
   }
 
   private deleteRoom(room: Room): void {
+    clearTimeout(room.cleanupTimer);
     clearTimeout(room.hostTimeout);
+    clearTimeout(room.turnTimer);
     for (const socketId of room.socketToPlayer.keys()) this.unmapSocket(room, socketId);
     this.rooms.delete(room.code);
   }
@@ -91,6 +97,51 @@ export class RoomManager {
       }));
   }
 
+  /**
+   * Keeps the turn timer in line with the game: it runs only while a game with a
+   * turn limit is playing and not paused. `restartAfterMs` starts a new turn's
+   * timer (after the reveal delay); otherwise a running timer is left alone.
+   */
+  private syncTurnTimer(room: Room, restartAfterMs?: number): void {
+    const shouldRun =
+      room.status === 'playing' && room.turnLimit > 0 && game.pausedPlayerId(room) === null;
+    if (!shouldRun) {
+      clearTimeout(room.turnTimer);
+      room.turnTimer = undefined;
+      room.turnDeadline = null;
+      return;
+    }
+    if (room.turnTimer && restartAfterMs === undefined) return;
+
+    clearTimeout(room.turnTimer);
+    const ms = (restartAfterMs ?? 0) + room.turnLimit * 1000;
+    room.turnDeadline = Date.now() + ms;
+    room.turnTimer = setTimeout(() => {
+      room.turnTimer = undefined;
+      const result = game.timeoutTurn(room);
+      if (!result) return this.syncTurnTimer(room);
+      this.syncTurnTimer(room, REVEAL_DURATION_MS);
+      this.events.onTurnTimeout(room.code, result);
+    }, ms);
+  }
+
+  /** Reconnects the player owning `playerToken` on a new socket, or returns null. */
+  private reconnect(socketId: string, room: Room, playerToken: string): JoinResult | null {
+    const player = [...room.players.values()].find((p) => p.token === playerToken);
+    if (!player) return null;
+
+    this.unmapSocket(room, player.socketId);
+    player.socketId = socketId;
+    player.isConnected = true;
+    if (player.isHost) clearTimeout(room.hostTimeout);
+    room.socketToPlayer.set(socketId, player.id);
+    this.socketToRoom.set(socketId, room.code);
+    game.seatPlayer(room, player);
+    this.syncTurnTimer(room);
+    this.scheduleCleanup(room);
+    return { ok: true, playerId: player.id, playerToken };
+  }
+
   getPlayerForSocket(socketId: string): { id: string; name: string } | null {
     const roomCode = this.socketToRoom.get(socketId);
     if (!roomCode) return null;
@@ -109,6 +160,7 @@ export class RoomManager {
     hostName: string,
     rounds: number,
     audioMode: AudioMode,
+    turnLimit: number,
   ): CreateRoomResult {
     if (this.socketToRoom.has(socketId)) return { ok: false, error: 'Du bist bereits in einem Raum.' };
     if (this.rooms.size >= MAX_ROOMS) return { ok: false, error: 'Server ist ausgelastet. Bitte später erneut versuchen.' };
@@ -146,6 +198,8 @@ export class RoomManager {
       round: 1,
       rounds: clampRounds(rounds),
       audioMode: validMode,
+      turnLimit: toTurnLimit(turnLimit),
+      turnDeadline: null,
       lastCorrectSong: new Map(),
       hostIp,
       cleanupTimer: setTimeout(() => {}, 0),
@@ -166,32 +220,24 @@ export class RoomManager {
     const room = this.rooms.get(roomCode);
     if (!room) return { ok: false, error: 'Raum nicht gefunden.' };
 
-    // Reconnect via token — must be checked BEFORE status guard
     if (playerToken) {
-      for (const [id, player] of room.players) {
-        if (player.token === playerToken) {
-          this.unmapSocket(room, player.socketId);
-          player.socketId = socketId;
-          player.isConnected = true;
-          if (player.isHost) clearTimeout(room.hostTimeout);
-          room.socketToPlayer.set(socketId, id);
-          this.socketToRoom.set(socketId, roomCode);
-          this.scheduleCleanup(room);
-          return { ok: true, playerId: id, playerToken };
-        }
-      }
+      const reconnected = this.reconnect(socketId, room, playerToken);
+      if (reconnected) return reconnected;
     }
 
-    if (room.status !== 'lobby') return { ok: false, error: 'Das Spiel läuft bereits.' };
+    const name = playerName.trim().slice(0, MAX_NAME_LENGTH);
+    if (!name) return { ok: false, error: 'Bitte gib einen Namen ein.' };
     if (room.players.size >= MAX_PLAYERS) return { ok: false, error: 'Der Raum ist voll.' };
-    if (!playerName.trim()) return { ok: false, error: 'Bitte gib einen Namen ein.' };
+    if ([...room.players.values()].some((p) => sameName(p.name, name))) {
+      return { ok: false, error: `Der Name „${name}“ ist schon vergeben.` };
+    }
 
     const playerId = this.newPlayerId();
     const token = this.newToken();
 
     const player: InternalPlayer = {
       id: playerId,
-      name: playerName.trim().slice(0, MAX_NAME_LENGTH),
+      name,
       isHost: false,
       isConnected: true,
       token,
@@ -202,10 +248,36 @@ export class RoomManager {
 
     room.players.set(playerId, player);
     room.socketToPlayer.set(socketId, playerId);
-    room.playerOrder.push(playerId);
     this.socketToRoom.set(socketId, roomCode);
+    // Late joiners play along if the deck allows; in a finished game they wait for the lobby.
+    if (room.status === 'lobby') room.playerOrder.push(playerId);
+    else game.seatPlayer(room, player);
     this.scheduleCleanup(room);
     return { ok: true, playerId, playerToken: token };
+  }
+
+  /** Token-only reconnect (reload, auto-reconnect); never creates a player. */
+  rejoinRoom(socketId: string, roomCode: string, playerToken: string): JoinResult {
+    const room = this.rooms.get(roomCode);
+    const result = room ? this.reconnect(socketId, room, playerToken) : null;
+    return result ?? { ok: false, error: 'Raum nicht gefunden.' };
+  }
+
+  /** Leaving the lobby removes the player; the host leaving closes the room. */
+  leaveRoom(socketId: string): LeaveResult | null {
+    const roomCode = this.socketToRoom.get(socketId);
+    const room = roomCode ? this.rooms.get(roomCode) : undefined;
+    const player = room ? this.getPlayer(socketId, room) : null;
+    if (!room || !player || room.status !== 'lobby') return null;
+
+    if (player.isHost) {
+      this.deleteRoom(room);
+      return { closed: true, roomCode: room.code };
+    }
+    this.unmapSocket(room, socketId);
+    room.players.delete(player.id);
+    room.playerOrder = room.playerOrder.filter((id) => id !== player.id);
+    return { closed: false, roomCode: room.code };
   }
 
   kickPlayer(socketId: string, roomCode: string, targetPlayerId: string): KickResult {
@@ -251,6 +323,7 @@ export class RoomManager {
 
     player.isConnected = false;
     const wasPlaying = room.status === 'playing';
+    this.syncTurnTimer(room);
 
     if (![...room.players.values()].some((p) => p.isConnected)) {
       this.scheduleCleanup(room, EMPTY_ROOM_TTL_MS);
@@ -262,7 +335,8 @@ export class RoomManager {
       room.hostTimeout = setTimeout(() => {
         if (room.status !== 'playing' || player.isConnected) return;
         game.finishGame(room);
-        this.onHostTimeout(room.code);
+        this.syncTurnTimer(room);
+        this.events.onHostTimeout(room.code);
       }, HOST_RECONNECT_GRACE_MS);
     }
 
@@ -282,7 +356,9 @@ export class RoomManager {
     if (!room) return { ok: false, error: 'Raum nicht gefunden.' };
     const player = this.getPlayer(socketId, room);
     if (!player?.isHost) return { ok: false, error: 'Nur der Host kann das Spiel starten.' };
-    return game.startGame(room, songs, rounds, audioMode);
+    const result = game.startGame(room, songs, rounds, audioMode);
+    if (result.ok) this.syncTurnTimer(room, 0);
+    return result;
   }
 
   placeSong(socketId: string, roomCode: string, position: number): PlaceResult {
@@ -290,7 +366,9 @@ export class RoomManager {
     if (!room) return { ok: false, error: 'Raum nicht gefunden.' };
     const playerId = room.socketToPlayer.get(socketId);
     if (!playerId) return { ok: false, error: 'Nicht autorisiert.' };
-    return game.placeSong(room, playerId, position);
+    const result = game.placeSong(room, playerId, position);
+    if (result.ok) this.syncTurnTimer(room, REVEAL_DURATION_MS);
+    return result;
   }
 
   updateSettings(
@@ -298,6 +376,7 @@ export class RoomManager {
     roomCode: string,
     rounds: number,
     audioMode: AudioMode,
+    turnLimit: number,
   ): SimpleResult {
     const room = this.rooms.get(roomCode);
     if (!room) return { ok: false, error: 'Raum nicht gefunden.' };
@@ -308,6 +387,7 @@ export class RoomManager {
     if (!isValidAudioMode(audioMode)) return { ok: false, error: 'Ungültiger Audio-Modus.' };
     room.rounds = clampRounds(rounds);
     room.audioMode = audioMode;
+    room.turnLimit = toTurnLimit(turnLimit);
     return { ok: true };
   }
 
@@ -317,6 +397,7 @@ export class RoomManager {
     const player = this.getPlayer(socketId, room);
     if (!player?.isHost) return { ok: false, error: 'Nur der Host kann das Spiel neu starten.' };
     game.returnToLobby(room);
+    this.syncTurnTimer(room);
     return { ok: true };
   }
 
@@ -326,12 +407,9 @@ export class RoomManager {
     const player = this.getPlayer(socketId, room);
     if (!player?.isHost)
       return { ok: false, error: 'Nur der Host kann den Spieler überspringen.' };
-    return game.skipDisconnectedPlayer(room);
-  }
-
-  finishGame(roomCode: string): void {
-    const room = this.rooms.get(roomCode);
-    if (room) game.finishGame(room);
+    const result = game.skipDisconnectedPlayer(room);
+    if (result.ok) this.syncTurnTimer(room, 0);
+    return result;
   }
 
   // ── State queries ────────────────────────────────────────────────────────
@@ -367,6 +445,7 @@ export class RoomManager {
       players: this.toPublicPlayers(room),
       rounds: room.rounds,
       audioMode: room.audioMode,
+      turnLimit: room.turnLimit,
       status: room.status,
     };
   }
@@ -381,6 +460,7 @@ export class RoomManager {
       rounds: room.rounds,
       audioMode: room.audioMode,
       deckRemaining: room.deck.length - room.currentSongIndex,
+      turnEndsInMs: room.turnDeadline === null ? null : Math.max(0, room.turnDeadline - Date.now()),
     };
   }
 

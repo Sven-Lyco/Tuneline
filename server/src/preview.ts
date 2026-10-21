@@ -11,24 +11,36 @@ interface ItunesSearchResult {
   results: ItunesTrack[];
 }
 
+/** Lowercase letters/digits of any script, accents stripped ("Beyoncé" → "beyonce"). */
 function normalize(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return s
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .replace(/[^\p{L}\p{N}]/gu, '');
 }
 
-function pickBestPreview(results: ItunesTrack[], artist: string, title: string): string | null {
-  const withPreview = results.filter((r) => r.previewUrl !== null);
-  if (withPreview.length === 0) return null;
+/** Title without "(Remastered 2011)", "[Live]" or " - Radio Edit" style suffixes. */
+function baseTitle(s: string): string {
+  return normalize(s.replace(/[([][^)\]]*[)\]]/g, '').split(' - ')[0]);
+}
 
+/**
+ * Only accepts a result by the same artist whose title matches; a different song
+ * by that artist would play while the card shows another title and year.
+ */
+function pickBestPreview(results: ItunesTrack[], artist: string, title: string): string | null {
   const normArtist = normalize(artist);
   const normTitle = normalize(title);
+  const base = baseTitle(title);
+  if (!normArtist || !normTitle || !base) return null;
 
-  const exactMatch = withPreview.find(
-    (r) => normalize(r.artistName).includes(normArtist) && normalize(r.trackName) === normTitle,
+  const byArtist = results.filter(
+    (r) => r.previewUrl !== null && normalize(r.artistName).includes(normArtist),
   );
-  if (exactMatch) return exactMatch.previewUrl;
-
-  const artistMatch = withPreview.find((r) => normalize(r.artistName).includes(normArtist));
-  return artistMatch?.previewUrl ?? null;
+  const exact = byArtist.find((r) => normalize(r.trackName) === normTitle);
+  const variant = byArtist.find((r) => baseTitle(r.trackName) === base);
+  return exact?.previewUrl ?? variant?.previewUrl ?? null;
 }
 
 // In-memory cache: "artist|title" → previewUrl | null (max 2000 entries, LRU-eviction)

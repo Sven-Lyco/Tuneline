@@ -11,6 +11,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import type { ClientToServerEvents, ServerToClientEvents, SongFull } from '@tuneline/shared';
+import type { TurnResult } from './types.js';
 import { REACTION_EMOJIS } from '@tuneline/shared';
 import { join } from 'path';
 
@@ -145,13 +146,18 @@ app.post('/api/songs', async (req, res) => {
     return;
   }
 
-  const { playlistIds, target } = req.body as { playlistIds?: unknown; target?: unknown };
+  const { playlistIds, target, excludeIds = [] } = req.body as {
+    playlistIds?: unknown;
+    target?: unknown;
+    excludeIds?: unknown;
+  };
+  const isIdList = (v: unknown, max: number): v is string[] =>
+    Array.isArray(v) && v.length <= max && v.every((id) => typeof id === 'string' && id.length <= 64);
 
   if (
-    !Array.isArray(playlistIds) ||
+    !isIdList(playlistIds, 10) ||
     playlistIds.length === 0 ||
-    playlistIds.length > 10 ||
-    playlistIds.some((id) => typeof id !== 'string' || id.length > 64) ||
+    !isIdList(excludeIds, 1000) ||
     typeof target !== 'number' ||
     target < 1 ||
     target > 500
@@ -160,7 +166,14 @@ app.post('/api/songs', async (req, res) => {
     return;
   }
 
-  const songs = await loadSongs(token, playlistIds as string[], target);
+  // The host can cancel loading; stop hitting Spotify/iTunes once nobody waits for the answer.
+  const abort = new AbortController();
+  res.on('close', () => {
+    if (!res.writableFinished) abort.abort();
+  });
+
+  const songs = await loadSongs(token, playlistIds, target, new Set(excludeIds), abort.signal);
+  if (abort.signal.aborted) return;
   logger.info({ playlists: playlistIds.length, songs: songs.length }, 'songs_loaded');
   res.json(songs);
 });
@@ -176,9 +189,15 @@ if (IS_PROD) {
   });
 }
 
-const rooms = new RoomManager((roomCode) => {
-  emitGameOver(io, roomCode, null, false, '');
-  logger.warn({ roomCode }, 'host_timeout_game_over');
+const rooms = new RoomManager({
+  onHostTimeout: (roomCode) => {
+    emitGameOver(io, roomCode, null, false, '');
+    logger.warn({ roomCode }, 'host_timeout_game_over');
+  },
+  onTurnTimeout: (roomCode, result) => {
+    emitTurnResult(io, roomCode, result);
+    logger.info({ roomCode, playerId: result.lastPlayerId }, 'turn_timed_out');
+  },
 });
 
 // ── Per-socket rate limiter ───────────────────────────────────────────────
@@ -200,6 +219,7 @@ function makeRateLimiter(limit = 15, windowMs = 1000) {
 const PAYLOAD_EVENTS = new Set<keyof ClientToServerEvents>([
   'create_room',
   'join_room',
+  'rejoin_room',
   'start_game',
   'update_settings',
   'place_song',
@@ -237,7 +257,30 @@ function emitGameOver(
   });
 }
 
-/** Sends game_paused while any player in the turn order is offline, else game_resumed. */
+/** Broadcasts the outcome of a finished turn (placement or timeout). */
+function emitTurnResult(io: IoServer, roomCode: string, result: TurnResult) {
+  if (result.gameOver) {
+    emitGameOver(io, roomCode, result.song, result.correct, result.lastPlayerId);
+    const players = rooms.getPlayers(roomCode);
+    const scores = Object.fromEntries(players?.map((p) => [p.name, p.score]) ?? []);
+    logger.info({ roomCode, scores }, 'game_over');
+    return;
+  }
+
+  const gameState = rooms.getGameState(roomCode);
+  if (!gameState) return;
+  io.to(roomCode).emit('placement_result', {
+    correct: result.correct,
+    timedOut: result.timedOut,
+    song: result.song,
+    gameState,
+    nextSong: rooms.getCurrentSongPreview(roomCode),
+  });
+  // The next player may be offline; clients apply the pause once the reveal is over.
+  if (rooms.getPausedPlayer(roomCode)) emitPauseOrResume(io, roomCode);
+}
+
+/** Sends game_paused while the host or the current player is offline, else game_resumed. */
 function emitPauseOrResume(io: IoServer, roomCode: string, target: string = roomCode) {
   const gameState = rooms.getGameState(roomCode);
   const currentSong = rooms.getCurrentSongPreview(roomCode);
@@ -278,9 +321,14 @@ function onDisconnect(socketId: string, io: IoServer) {
     return;
   }
 
-  // The game waits for whoever dropped (a host only for HOST_RECONNECT_GRACE_MS, see RoomManager).
-  // A spectator (not in the turn order) leaving doesn't pause, so there's nothing to resume either.
-  if (rooms.getPausedPlayer(info.roomCode)) emitPauseOrResume(io, info.roomCode);
+  // Only the host or the player on turn pauses the game (a host only for HOST_RECONNECT_GRACE_MS,
+  // see RoomManager); anyone else just shows up as offline until their turn comes.
+  if (rooms.getPausedPlayer(info.roomCode)) {
+    emitPauseOrResume(io, info.roomCode);
+  } else {
+    const gameState = rooms.getGameState(info.roomCode);
+    if (gameState) io.to(info.roomCode).emit('game_state_updated', { gameState });
+  }
 }
 
 // ── Socket.io event handlers ──────────────────────────────────────────────
@@ -298,7 +346,7 @@ io.on('connection', (socket) => {
     next();
   });
 
-  socket.on('create_room', ({ hostName, rounds, audioMode }) => {
+  socket.on('create_room', ({ hostName, rounds, audioMode, turnLimit }) => {
     if (typeof hostName !== 'string' || !hostName.trim()) return;
 
     const result = rooms.createRoom(
@@ -306,7 +354,8 @@ io.on('connection', (socket) => {
       clientIp(socket.handshake),
       hostName,
       rounds,
-      audioMode
+      audioMode,
+      turnLimit
     );
     if (!result.ok) {
       socket.emit('error', { message: result.error });
@@ -322,6 +371,36 @@ io.on('connection', (socket) => {
     logger.info({ roomCode, hostName: hostName.trim(), playerId }, 'create_room');
   });
 
+  /** Puts a freshly joined or reconnected socket into the room and syncs everyone. */
+  const finishJoin = (
+    code: string,
+    joined: { playerId: string; playerToken: string },
+    wasPaused: boolean
+  ) => {
+    socket.join(code);
+    const lobby = rooms.getLobbyState(code);
+    if (!lobby) return;
+
+    socket.emit('room_joined', { ...joined, room: lobby });
+
+    if (lobby.status === 'playing') {
+      if (wasPaused) {
+        // Others were waiting: tell everyone whether the game goes on.
+        emitPauseOrResume(io, code);
+      } else {
+        // Only sync the newcomer; a game_resumed for all would restart everyone's song.
+        emitPauseOrResume(io, code, socket.id);
+        const gameState = rooms.getGameState(code);
+        if (gameState) socket.to(code).emit('game_state_updated', { gameState });
+      }
+      io.to(code).emit('player_reconnected', { playerId: joined.playerId });
+    } else if (lobby.status === 'finished') {
+      emitGameOver(io, code, null, false, '', socket.id);
+    } else {
+      io.to(code).emit('room_updated', { room: lobby });
+    }
+  };
+
   socket.on('join_room', ({ roomCode, playerName, playerToken }) => {
     if (typeof roomCode !== 'string' || typeof playerName !== 'string') return;
 
@@ -335,37 +414,47 @@ io.on('connection', (socket) => {
       return;
     }
 
-    socket.join(code);
-    const lobby = rooms.getLobbyState(code);
-    if (!lobby) return;
-
-    socket.emit('room_joined', {
-      playerId: result.playerId,
-      playerToken: result.playerToken,
-      room: lobby,
-    });
-
-    // If reconnecting to an active game, send current game state
-    if (lobby.status === 'playing') {
-      // Without a pause nobody else is waiting, so only sync the returning client
-      // instead of restarting everyone's song.
-      emitPauseOrResume(io, code, wasPaused ? code : socket.id);
-      io.to(code).emit('player_reconnected', { playerId: result.playerId });
-    } else if (lobby.status === 'finished') {
-      emitGameOver(io, code, null, false, '', socket.id);
-    } else {
-      io.to(code).emit('room_updated', { room: lobby });
-    }
-
+    finishJoin(code, result, wasPaused);
     logger.info(
-      {
-        roomCode: code,
-        playerName: playerName.trim(),
-        playerId: result.playerId,
-        players: lobby.players.length,
-      },
+      { roomCode: code, playerName: playerName.trim(), playerId: result.playerId },
       'join_room'
     );
+  });
+
+  socket.on('rejoin_room', ({ roomCode, playerToken }) => {
+    if (typeof roomCode !== 'string' || typeof playerToken !== 'string') {
+      socket.emit('rejoin_failed');
+      return;
+    }
+
+    const code = roomCode.toUpperCase().trim();
+    const wasPaused = rooms.getPausedPlayer(code) !== null;
+    const result = rooms.rejoinRoom(socket.id, code, playerToken);
+    if (!result.ok) {
+      socket.emit('rejoin_failed');
+      logger.info({ roomCode: code }, 'rejoin_failed');
+      return;
+    }
+
+    finishJoin(code, result, wasPaused);
+    logger.info({ roomCode: code, playerId: result.playerId }, 'rejoin_room');
+  });
+
+  socket.on('leave_room', () => {
+    const result = rooms.leaveRoom(socket.id);
+    if (!result) return;
+
+    socket.leave(result.roomCode);
+    if (result.closed) {
+      io.to(result.roomCode).emit('room_closed');
+      io.in(result.roomCode).socketsLeave(result.roomCode);
+      logger.info({ roomCode: result.roomCode }, 'room_closed_by_host');
+      return;
+    }
+
+    const lobby = rooms.getLobbyState(result.roomCode);
+    if (lobby) io.to(result.roomCode).emit('room_updated', { room: lobby });
+    logger.info({ roomCode: result.roomCode }, 'leave_room');
   });
 
   socket.on('start_loading', () => {
@@ -405,11 +494,11 @@ io.on('connection', (socket) => {
     );
   });
 
-  socket.on('update_settings', ({ rounds, audioMode }) => {
+  socket.on('update_settings', ({ rounds, audioMode, turnLimit }) => {
     const roomCode = rooms.getRoomCodeForSocket(socket.id);
     if (!roomCode) return;
 
-    const result = rooms.updateSettings(socket.id, roomCode, rounds, audioMode);
+    const result = rooms.updateSettings(socket.id, roomCode, rounds, audioMode, turnLimit);
     if (!result.ok) {
       socket.emit('error', { message: result.error });
       return;
@@ -417,7 +506,7 @@ io.on('connection', (socket) => {
 
     const lobby = rooms.getLobbyState(roomCode);
     if (lobby) io.to(roomCode).emit('room_updated', { room: lobby });
-    logger.info({ roomCode, rounds, audioMode }, 'update_settings');
+    logger.info({ roomCode, rounds, audioMode, turnLimit }, 'update_settings');
   });
 
   socket.on('place_song', ({ position }) => {
@@ -432,35 +521,11 @@ io.on('connection', (socket) => {
       return;
     }
 
-    if (result.gameOver) {
-      emitGameOver(io, roomCode, result.song, result.correct, result.lastPlayerId);
-      const players = rooms.getPlayers(roomCode);
-      const scores = Object.fromEntries(players?.map((p) => [p.name, p.score]) ?? []);
-      logger.info({ roomCode, scores }, 'game_over');
-    } else {
-      const gameState = rooms.getGameState(roomCode);
-      const nextSong = rooms.getCurrentSongPreview(roomCode);
-      if (!gameState) return;
-      io.to(roomCode).emit('placement_result', {
-        correct: result.correct,
-        song: result.song,
-        gameState,
-        nextSong,
-      });
-      const playerName = gameState.players.find((p) => p.id === result.lastPlayerId)?.name ?? '?';
-      logger.info(
-        {
-          roomCode,
-          playerName,
-          song: result.song.title,
-          position,
-          correct: result.correct,
-          round: gameState.round,
-          rounds: gameState.rounds,
-        },
-        'place_song'
-      );
-    }
+    emitTurnResult(io, roomCode, result);
+    logger.info(
+      { roomCode, playerId: result.lastPlayerId, song: result.song.title, position, correct: result.correct },
+      'place_song'
+    );
   });
 
   socket.on('return_to_lobby', () => {
@@ -541,6 +606,13 @@ process.on('unhandledRejection', (reason) => {
 process.on('uncaughtException', (err) => {
   logger.fatal({ err }, 'uncaught_exception');
   process.exit(1);
+});
+
+// Rooms live in memory only, so a restart (e.g. a deploy) ends every game. At least tell players.
+process.on('SIGTERM', () => {
+  logger.info('sigterm_shutdown');
+  io.emit('server_restarting');
+  setTimeout(() => process.exit(0), 500);
 });
 
 httpServer.listen(PORT, () => {

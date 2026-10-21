@@ -1,5 +1,12 @@
 import type { SongFull, AudioMode } from '@tuneline/shared';
-import type { Room, InternalPlayer, SimpleResult, PlaceResult, SkipResult } from './types.js';
+import type {
+  Room,
+  InternalPlayer,
+  SimpleResult,
+  PlaceResult,
+  SkipResult,
+  TurnResult,
+} from './types.js';
 import { clampRounds, isValidAudioMode, MAX_FIELD_LENGTH, MAX_SONGS } from './types.js';
 import { shuffle } from './utils.js';
 
@@ -21,17 +28,46 @@ function removeFromOrder(room: Room, playerId: string): void {
   }
 }
 
+function songsLeft(room: Room): number {
+  return room.deck.length - room.currentSongIndex;
+}
+
 function isGameOver(room: Room): boolean {
+  if (songsLeft(room) <= 0) return true;
+  // Only end at a round boundary so everyone gets the same number of turns.
   return (
-    room.currentSongIndex >= room.deck.length ||
-    (room.currentPlayerIndex === 0 && room.round > room.rounds)
+    room.currentPlayerIndex === 0 &&
+    (room.round > room.rounds || songsLeft(room) < room.playerOrder.length)
   );
 }
 
-/** A running game is paused while any player in the turn order is offline. */
+function endTurn(
+  room: Room,
+  playerId: string,
+  song: SongFull,
+  correct: boolean,
+  timedOut: boolean,
+): TurnResult {
+  room.currentSongIndex++;
+  room.currentPlayerIndex = (room.currentPlayerIndex + 1) % room.playerOrder.length;
+  if (room.currentPlayerIndex === 0) room.round++;
+
+  const gameOver = isGameOver(room);
+  if (gameOver) room.status = 'finished';
+  return { correct, timedOut, song, gameOver, lastPlayerId: playerId };
+}
+
+/**
+ * A running game waits while the host is offline (only the host can skip, and in
+ * host-only mode the music plays on the host's device) or while the player whose
+ * turn it is is offline. Other players dropping out don't stop the game.
+ */
 export function pausedPlayerId(room: Room): string | null {
   if (room.status !== 'playing') return null;
-  return room.playerOrder.find((id) => room.players.get(id)?.isConnected === false) ?? null;
+  const host = [...room.players.values()].find((p) => p.isHost);
+  if (host && !host.isConnected) return host.id;
+  const currentId = room.playerOrder[room.currentPlayerIndex];
+  return currentId && room.players.get(currentId)?.isConnected === false ? currentId : null;
 }
 
 export function startGame(
@@ -69,10 +105,16 @@ export function startGame(
     }
   }
 
-  // Offline players sit this game out; returnToLobby brings them back.
+  // Offline players sit this game out; they're seated again if they come back.
   const playerList = room.playerOrder
     .map((id) => room.players.get(id))
     .filter((p): p is InternalPlayer => p?.isConnected === true);
+  if (playerList.length < 2) {
+    return { ok: false, error: 'Es müssen mindestens 2 Spieler verbunden sein.' };
+  }
+  if (songs.length < playerList.length * 2) {
+    return { ok: false, error: `Zu wenige Songs für ${playerList.length} Spieler.` };
+  }
   room.playerOrder = playerList.map((p) => p.id);
 
   for (const p of room.players.values()) {
@@ -82,14 +124,16 @@ export function startGame(
 
   const shuffled = shuffle([...songs]);
   playerList.forEach((p, i) => {
-    if (shuffled[i]) p.timeline = [shuffled[i]];
+    p.timeline = [shuffled[i]];
   });
 
   room.deck = shuffled.slice(playerList.length);
   room.currentSongIndex = 0;
   room.currentPlayerIndex = 0;
   room.round = 1;
-  room.rounds = clampRounds(rounds);
+  // Never promise more rounds than the deck can cover for everyone.
+  const affordableRounds = Math.floor(room.deck.length / playerList.length);
+  room.rounds = Math.max(1, Math.min(clampRounds(rounds), affordableRounds));
   room.audioMode = audioMode;
   room.status = 'playing';
   room.lastCorrectSong = new Map();
@@ -98,6 +142,7 @@ export function startGame(
 
 export function placeSong(room: Room, playerId: string, position: number): PlaceResult {
   if (room.status !== 'playing') return { ok: false, error: 'Spiel läuft nicht.' };
+  if (pausedPlayerId(room)) return { ok: false, error: 'Das Spiel ist pausiert.' };
   if (!Number.isInteger(position)) return { ok: false, error: 'Ungültige Position.' };
 
   const currentPlayerId = room.playerOrder[room.currentPlayerIndex];
@@ -116,13 +161,16 @@ export function placeSong(room: Room, playerId: string, position: number): Place
     room.lastCorrectSong.set(playerId, song);
   }
 
-  room.currentSongIndex++;
-  room.currentPlayerIndex = (room.currentPlayerIndex + 1) % room.playerOrder.length;
-  if (room.currentPlayerIndex === 0) room.round++;
+  return { ok: true, ...endTurn(room, playerId, song, correct, false) };
+}
 
-  const gameOver = isGameOver(room);
-  if (gameOver) room.status = 'finished';
-  return { ok: true, correct, song, gameOver, lastPlayerId: playerId };
+/** Resolves the current turn as wrong because its time ran out. */
+export function timeoutTurn(room: Room): TurnResult | null {
+  if (room.status !== 'playing' || pausedPlayerId(room)) return null;
+  const playerId = room.playerOrder[room.currentPlayerIndex];
+  const song = room.deck[room.currentSongIndex];
+  if (!playerId || !song) return null;
+  return endTurn(room, playerId, song, false, true);
 }
 
 export function skipDisconnectedPlayer(room: Room): SkipResult {
@@ -134,6 +182,20 @@ export function skipDisconnectedPlayer(room: Room): SkipResult {
   const gameOver = room.playerOrder.length <= 1 || isGameOver(room);
   if (gameOver) room.status = 'finished';
   return { ok: true, gameOver };
+}
+
+/**
+ * Puts a player who isn't in the turn order (late join, skipped, offline at start)
+ * back in. Without cards they get a starting card from the deck, if it can spare one;
+ * otherwise they watch until the next game.
+ */
+export function seatPlayer(room: Room, player: InternalPlayer): void {
+  if (room.status !== 'playing' || room.playerOrder.includes(player.id)) return;
+  if (player.timeline.length === 0) {
+    if (songsLeft(room) <= room.playerOrder.length) return;
+    player.timeline = [room.deck.pop()!];
+  }
+  room.playerOrder.push(player.id);
 }
 
 export function returnToLobby(room: Room): void {

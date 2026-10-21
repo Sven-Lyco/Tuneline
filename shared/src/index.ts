@@ -12,6 +12,12 @@ export interface SpotifyPlaylist {
 
 export const REACTION_EMOJIS = ['🔥', '😂', '👏', '😱', '🥳', '❤️', '🤯'] as const;
 
+/** How long a placement result is shown before the next turn starts. */
+export const REVEAL_DURATION_MS = 3000;
+
+/** Seconds per turn; 0 = no limit. */
+export const TURN_LIMITS = [0, 30, 60, 90] as const;
+
 // ─── Song types ─────────────────────────────────────────────────────────────
 
 /** Song metadata without the release year — safe to send to the active player */
@@ -48,6 +54,7 @@ export interface LobbyState {
   players: RoomPlayer[];
   rounds: number;
   audioMode: AudioMode;
+  turnLimit: number;
   status: RoomStatus;
 }
 
@@ -58,17 +65,27 @@ export interface GameStateForClient {
   rounds: number;
   audioMode: AudioMode;
   deckRemaining: number;
+  /** Time left for the current turn when this state was sent; null = no limit or paused. */
+  turnEndsInMs: number | null;
 }
 
 // ─── Socket.io Events ────────────────────────────────────────────────────────
 
 export interface ClientToServerEvents {
-  create_room: (data: { hostName: string; rounds: number; audioMode: AudioMode }) => void;
+  create_room: (data: {
+    hostName: string;
+    rounds: number;
+    audioMode: AudioMode;
+    turnLimit: number;
+  }) => void;
   join_room: (data: {
     roomCode: string;
     playerName: string;
     playerToken?: string;
   }) => void;
+  /** Reconnect with a stored token only; never creates a new player. */
+  rejoin_room: (data: { roomCode: string; playerToken: string }) => void;
+  leave_room: () => void;
   start_loading: () => void;
   cancel_loading: () => void;
   start_game: (data: {
@@ -76,7 +93,7 @@ export interface ClientToServerEvents {
     rounds: number;
     audioMode: AudioMode;
   }) => void;
-  update_settings: (data: { rounds: number; audioMode: AudioMode }) => void;
+  update_settings: (data: { rounds: number; audioMode: AudioMode; turnLimit: number }) => void;
   place_song: (data: { position: number }) => void;
   kick_player: (data: { playerId: string }) => void;
   skip_player: () => void;
@@ -106,6 +123,7 @@ export interface ServerToClientEvents {
   }) => void;
   placement_result: (data: {
     correct: boolean;
+    timedOut: boolean;
     song: SongFull;
     gameState: GameStateForClient;
     nextSong: SongMeta | null;
@@ -128,6 +146,11 @@ export interface ServerToClientEvents {
     gameState: GameStateForClient;
     currentSong: SongMeta;
   }) => void;
+  /** Player list/connectivity changed without affecting the current turn. */
+  game_state_updated: (data: { gameState: GameStateForClient }) => void;
+  rejoin_failed: () => void;
+  room_closed: () => void;
+  server_restarting: () => void;
   player_disconnected: (data: { playerId: string }) => void;
   player_reconnected: (data: { playerId: string }) => void;
   player_kicked: (data: { playerId: string }) => void;

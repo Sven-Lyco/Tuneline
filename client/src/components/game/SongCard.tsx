@@ -4,8 +4,12 @@ import type { SongFull, SongMeta } from '@tuneline/shared';
 import type { Feedback } from '../../types';
 import { Vinyl } from '../Vinyl';
 import { Wave } from '../Wave';
+import { TurnTimer } from './TurnTimer';
 
 interface SongCardProps {
+  /** False in host-only mode on guest devices: no local audio to control. */
+  hasAudio: boolean;
+  turnEndsAt: number | null;
   currentSong: SongMeta;
   revealedSong: SongFull | null;
   revealed: boolean;
@@ -226,7 +230,31 @@ const WaitingLabel = styled.div`
   animation: pulse 1.5s ease-in-out infinite;
 `;
 
+const NoAudioHint = styled.div`
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: #7a7a8e;
+`;
+
+const TimerRow = styled.div`
+  display: flex;
+  justify-content: center;
+  margin-top: 0.4rem;
+`;
+
+function feedbackText(
+  feedback: Exclude<Feedback, null>,
+  scorer: string,
+  year: number | undefined
+): string {
+  if (feedback === 'ok') return `✓ Richtig! +1 Punkt für ${scorer}`;
+  if (feedback === 'timeout') return `⏰ Zeit abgelaufen! Der Song war von ${year ?? '?'}.`;
+  return `✗ Falsch! Der Song war von ${year ?? '?'}.`;
+}
+
 export function SongCard({
+  hasAudio,
+  turnEndsAt,
   currentSong,
   revealedSong,
   revealed,
@@ -259,7 +287,8 @@ export function SongCard({
               {currentSong.artist}
             </SongArtist>
             {displayYear !== null && <RevealedYear>{displayYear}</RevealedYear>}
-            {!revealed && (
+            {!revealed && !hasAudio && <NoAudioHint>🔈 Die Musik läuft beim Host</NoAudioHint>}
+            {!revealed && hasAudio && (
               <AudioControls>
                 <AudioButton onClick={onToggleAudio}>{playing ? '⏸ Pause' : '▶ Play'}</AudioButton>
                 <VolumeIcon>{volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊'}</VolumeIcon>
@@ -286,11 +315,18 @@ export function SongCard({
             Warten auf {activePlayerName}…
           </WaitingLabel>
         )}
+        {turnEndsAt !== null && !revealed && (
+          <TimerRow>
+            <TurnTimer endsAt={turnEndsAt} />
+          </TimerRow>
+        )}
         {feedback && (
           <FeedbackOverlay ok={String(feedback === 'ok')}>
-            {feedback === 'ok'
-              ? `✓ Richtig! +1 Punkt für ${lastPlacedIsMe ? 'dich' : (lastPlacedPlayerName ?? activePlayerName)}`
-              : `✗ Falsch! Der Song war von ${revealedSong?.year ?? '?'}.`}
+            {feedbackText(
+              feedback,
+              lastPlacedIsMe ? 'dich' : (lastPlacedPlayerName ?? activePlayerName),
+              revealedSong?.year
+            )}
           </FeedbackOverlay>
         )}
       </Card>

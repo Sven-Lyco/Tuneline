@@ -16,6 +16,7 @@ interface GameScreenProps {
   roomCode: string;
   isHost: boolean;
   gameState: GameStateForClient;
+  turnEndsAt: number | null;
   currentSong: SongMeta;
   revealedSong: SongFull | null;
   feedback: Feedback;
@@ -25,6 +26,7 @@ interface GameScreenProps {
   volume: number;
   slot: number | null;
   setSlot: (slot: number | null) => void;
+  placing: boolean;
   onToggleAudio: () => void;
   onVolumeChange: (v: number) => void;
   onPlace: () => void;
@@ -85,6 +87,18 @@ const PlaceButton = styled.button<{ ready: string }>`
   }
 `;
 
+const SpectatorBanner = styled.div`
+  margin: 1rem auto 0;
+  padding: 0.6rem 1.1rem;
+  border-radius: 12px;
+  border: 1px solid #2a2a3a;
+  background: #12121a;
+  color: #7a7a8e;
+  font-size: 0.85rem;
+  text-align: center;
+  max-width: 90vw;
+`;
+
 // ── Component ──────────────────────────────────────────────────
 
 export function GameScreen({
@@ -92,6 +106,7 @@ export function GameScreen({
   roomCode,
   isHost,
   gameState,
+  turnEndsAt,
   currentSong,
   revealedSong,
   feedback,
@@ -101,6 +116,7 @@ export function GameScreen({
   volume,
   slot,
   setSlot,
+  placing,
   onToggleAudio,
   onVolumeChange,
   onPlace,
@@ -108,6 +124,9 @@ export function GameScreen({
   onSkipPlayer,
 }: GameScreenProps) {
   const isMyTurn = gameState.currentPlayerId === myPlayerId;
+  // Not in the turn order: joined too late for the deck, or offline when the game started.
+  const isSpectator = !gameState.players.some((p) => p.id === myPlayerId);
+  const hasAudio = gameState.audioMode === 'all' || isHost;
   const { activePlayer, lastPlacedPlayer, otherPlayers, myTimeline, activePlayerColor } =
     useMemo(() => {
       const myPlayer = gameState.players.find((p) => p.id === myPlayerId);
@@ -123,7 +142,12 @@ export function GameScreen({
         activePlayerColor: getPlayerColor(activePlayerIndex),
       };
     }, [gameState.players, gameState.currentPlayerId, myPlayerId, lastPlacedPlayerId]);
-  const isReady = isMyTurn && slot !== null && !revealed;
+  const isReady = isMyTurn && slot !== null && !revealed && !placing;
+
+  let placeLabel = 'Position wählen...';
+  if (!isMyTurn) placeLabel = `Warten auf ${activePlayer?.name ?? '?'}…`;
+  else if (placing) placeLabel = 'Wird platziert…';
+  else if (slot !== null) placeLabel = 'Hier platzieren ▶';
 
   return (
     <Screen>
@@ -136,8 +160,16 @@ export function GameScreen({
         myPlayerId={myPlayerId}
       />
 
+      {isSpectator && (
+        <SpectatorBanner>
+          👀 Du schaust gerade zu – in der nächsten Partie bist du wieder dabei.
+        </SpectatorBanner>
+      )}
+
       <GameBody>
         <SongCard
+          hasAudio={hasAudio}
+          turnEndsAt={turnEndsAt}
           currentSong={currentSong}
           revealedSong={revealedSong}
           revealed={revealed}
@@ -173,11 +205,7 @@ export function GameScreen({
 
         <PlaceButtonRow>
           <PlaceButton ready={String(isReady)} disabled={!isReady} onClick={onPlace}>
-            {!isMyTurn
-              ? `Warten auf ${activePlayer?.name ?? '?'}…`
-              : slot !== null
-                ? 'Hier platzieren ▶'
-                : 'Position wählen...'}
+            {placeLabel}
           </PlaceButton>
         </PlaceButtonRow>
       </GameBody>

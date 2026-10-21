@@ -9,6 +9,7 @@ import { Card } from '../components/Card';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { AudioModePicker } from '../components/AudioModePicker';
 import { RoundsPicker } from '../components/RoundsPicker';
+import { TurnLimitPicker } from '../components/TurnLimitPicker';
 
 interface MenuScreenProps {
   playlists: SpotifyPlaylist[];
@@ -18,6 +19,8 @@ interface MenuScreenProps {
   setRounds: (rounds: number) => void;
   audioMode: AudioMode;
   setAudioMode: (mode: AudioMode) => void;
+  turnLimit: number;
+  setTurnLimit: (seconds: number) => void;
   onCreateRoom: () => void;
   onChangePlaylists: () => void;
 }
@@ -52,6 +55,8 @@ export function MenuScreen({
   setRounds,
   audioMode,
   setAudioMode,
+  turnLimit,
+  setTurnLimit,
   onCreateRoom,
   onChangePlaylists,
 }: MenuScreenProps) {
@@ -77,6 +82,9 @@ export function MenuScreen({
 
         <Label>Runden</Label>
         <RoundsPicker value={rounds} onChange={setRounds} />
+
+        <Label>Zeitlimit pro Zug</Label>
+        <TurnLimitPicker value={turnLimit} onChange={setTurnLimit} />
 
         <PrimaryButton onClick={onCreateRoom}>Raum erstellen →</PrimaryButton>
       </Card>

@@ -175,6 +175,8 @@ interface SpotifyTracksResponse {
       name: string;
       artists: Array<{ name: string }>;
       album: {
+        name: string;
+        album_type: string;
         release_date: string;
         images: Array<{ url: string }>;
       };
@@ -185,6 +187,9 @@ interface SpotifyTracksResponse {
 
 const YEAR_PATTERN = /[\s–-]+[\[(]?(?:remaster(?:ed)?|live|single version|anniversary|deluxe)?[\s]?\d{4}[\s]?(?:remaster(?:ed)?|version|edit|mix|anniversary)?[\])]?$/i;
 const REMASTER_PATTERN = /\bremaster(?:ed|ing)?\b/i;
+// Re-releases carry the reissue date, not the song's original year.
+const REISSUE_ALBUM_PATTERN =
+  /\b(?:greatest hits|best of|very best|essential|anniversary|deluxe|expanded|remaster(?:ed)?|collection|anthology)\b/i;
 
 function sanitizeTitle(raw: string): string {
   return raw.replace(YEAR_PATTERN, '').trim();
@@ -206,6 +211,9 @@ function parseTrack(item: SpotifyTracksResponse['items'][number]): TrackData | n
   const t = item.track;
   if (!t?.id || !t.name) return null;
   if (isRemastered(t.name)) return null;
+  if (t.album?.album_type === 'compilation' || REISSUE_ALBUM_PATTERN.test(t.album?.name ?? '')) {
+    return null;
+  }
 
   const year = t.album?.release_date ? parseInt(t.album.release_date.split('-')[0], 10) : 0;
   if (year < 1900 || year > 2100) return null;
@@ -221,7 +229,7 @@ function parseTrack(item: SpotifyTracksResponse['items'][number]): TrackData | n
 
 async function getPlaylistTracks(token: string, playlistId: string): Promise<TrackData[]> {
   const tracks: TrackData[] = [];
-  const fields = 'items(track(id,name,artists(name),album(release_date,images))),next';
+  const fields = 'items(track(id,name,artists(name),album(name,album_type,release_date,images))),next';
   let path: string | null =
     `/playlists/${playlistId}/tracks?fields=${encodeURIComponent(fields)}&limit=100`;
 
@@ -242,10 +250,13 @@ async function getPlaylistTracks(token: string, playlistId: string): Promise<Tra
 
 // ── Song loading with iTunes enrichment ──────────────────────────────────────
 
+/** `excludeIds` (songs from earlier games) are only used once the fresh songs run out. */
 export async function loadSongs(
   token: string,
   playlistIds: string[],
   target: number,
+  excludeIds: Set<string>,
+  signal: AbortSignal,
 ): Promise<SongFull[]> {
   const tracksByPlaylist = await Promise.all(playlistIds.map((id) => getPlaylistTracks(token, id)));
 
@@ -261,12 +272,15 @@ export async function loadSongs(
     }
   }
 
-  const shuffled = shuffle(allTracks);
+  const shuffled = [
+    ...shuffle(allTracks.filter((t) => !excludeIds.has(t.id))),
+    ...shuffle(allTracks.filter((t) => excludeIds.has(t.id))),
+  ];
 
   const BATCH = 10;
   const result: SongFull[] = [];
 
-  for (let i = 0; i < shuffled.length && result.length < target; i += BATCH) {
+  for (let i = 0; i < shuffled.length && result.length < target && !signal.aborted; i += BATCH) {
     const batch = shuffled.slice(i, i + BATCH);
     const enriched = await Promise.all(
       batch.map(async (track): Promise<SongFull | null> => {

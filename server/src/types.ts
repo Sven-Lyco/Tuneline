@@ -1,4 +1,5 @@
 import type { SongFull, AudioMode, RoomStatus } from '@tuneline/shared';
+import { TURN_LIMITS } from '@tuneline/shared';
 
 export const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 export const TOKEN_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -21,6 +22,14 @@ export function isValidAudioMode(mode: unknown): mode is AudioMode {
 export function clampRounds(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_ROUNDS;
   return Math.max(1, Math.min(Math.round(value), MAX_ROUNDS));
+}
+
+export function toTurnLimit(value: unknown): number {
+  return (TURN_LIMITS as readonly unknown[]).includes(value) ? (value as number) : 0;
+}
+
+export function sameName(a: string, b: string): boolean {
+  return a.trim().toLocaleLowerCase('de') === b.trim().toLocaleLowerCase('de');
 }
 
 export interface InternalPlayer {
@@ -46,10 +55,13 @@ export interface Room {
   round: number;
   rounds: number;
   audioMode: AudioMode;
+  turnLimit: number; // seconds, 0 = unlimited
+  turnDeadline: number | null; // epoch ms while a turn timer runs
   lastCorrectSong: Map<string, SongFull>; // playerId → last correctly placed song
   hostIp: string;
   cleanupTimer: ReturnType<typeof setTimeout>;
   hostTimeout?: ReturnType<typeof setTimeout>; // ends a paused game if the host never returns
+  turnTimer?: ReturnType<typeof setTimeout>;
 }
 
 export type SimpleResult = { ok: true } | { ok: false; error: string };
@@ -64,10 +76,26 @@ export type JoinResult =
   | { ok: true; playerId: string; playerToken: string }
   | { ok: false; error: string };
 
-export type PlaceResult =
-  | { ok: false; error: string }
-  | { ok: true; correct: boolean; song: SongFull; gameOver: boolean; lastPlayerId: string };
+export type TurnResult = {
+  correct: boolean;
+  timedOut: boolean;
+  song: SongFull;
+  gameOver: boolean;
+  lastPlayerId: string;
+};
+
+export type PlaceResult = ({ ok: true } & TurnResult) | { ok: false; error: string };
 
 export type KickResult =
   | { ok: true; kickedSocketId: string | null }
   | { ok: false; error: string };
+
+/** closed = the host left the lobby and the room is gone. */
+export type LeaveResult = { closed: boolean; roomCode: string };
+
+export interface RoomEvents {
+  /** The host stayed away too long; the game was finished. */
+  onHostTimeout: (roomCode: string) => void;
+  /** The current player ran out of time; their turn was resolved as wrong. */
+  onTurnTimeout: (roomCode: string, result: TurnResult) => void;
+}

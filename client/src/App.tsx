@@ -7,7 +7,7 @@ import { isAuthenticated, loadSongsFromPlaylists, logout } from './api/spotify';
 import { stopAudio } from './utils/audio';
 import { socket } from './socket';
 import { useGameAudio } from './hooks/useGameAudio';
-import { useSocketEvents } from './hooks/useSocketEvents';
+import { clearStoredRoom, useSocketEvents } from './hooks/useSocketEvents';
 import { GlobalStyles } from './components/GlobalStyles';
 import { LoginScreen } from './screens/LoginScreen';
 import { JoinScreen } from './screens/JoinScreen';
@@ -83,14 +83,32 @@ const ErrorToast = styled.div`
   text-align: center;
 `;
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+function loadStoredPlaylists(): SpotifyPlaylist[] {
+  try {
+    return JSON.parse(sessionStorage.getItem(STORAGE_KEYS.selectedPlaylists) ?? '[]');
+  } catch {
+    return [];
+  }
+}
+
+type Settings = { rounds: number; audioMode: AudioMode; turnLimit: number };
+
 // ── App ─────────────────────────────────────────────────────────
 
 export default function App() {
-  const [selectedPlaylists, setSelectedPlaylists] = useState<SpotifyPlaylist[]>([]);
+  // Kept in sessionStorage so a host who reloads can start the next game right away.
+  const [selectedPlaylists, setSelectedPlaylists] = useState(loadStoredPlaylists);
   const [hostName, setHostName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [playlistReturnTarget, setPlaylistReturnTarget] = useState<'menu' | 'lobby'>('menu');
+  const [songLoad, setSongLoad] = useState<AbortController | null>(null);
+
+  useEffect(() => {
+    sessionStorage.setItem(STORAGE_KEYS.selectedPlaylists, JSON.stringify(selectedPlaylists));
+  }, [selectedPlaylists]);
 
   const showError = useCallback((msg: string) => {
     setErrorMsg(msg);
@@ -113,7 +131,10 @@ export default function App() {
     setAudioMode,
     rounds,
     setRounds,
+    turnLimit,
+    setTurnLimit,
     gameState,
+    turnEndsAt,
     currentSong,
     revealedSong,
     feedback,
@@ -121,8 +142,11 @@ export default function App() {
     lastPlacedPlayerId,
     slot,
     setSlot,
+    placing,
+    placeSong,
     disconnectedPlayer,
     result,
+    getPlayedSongIds,
     resetRoom,
   } = useSocketEvents({ startSong, stopSong, showError });
 
@@ -135,24 +159,30 @@ export default function App() {
     const init = async () => {
       const authenticated = initialParams.get('authenticated');
       const authError = initialParams.get('auth_error');
-      const room = initialParams.get('room');
+      const room = initialParams.get('room')?.toUpperCase();
+      const storedRoom = sessionStorage.getItem(STORAGE_KEYS.roomCode);
+      const storedToken = sessionStorage.getItem(STORAGE_KEYS.playerToken);
+      if (initialParams.size > 0) window.history.replaceState({}, '', window.location.pathname);
 
       if (authenticated) {
-        window.history.replaceState({}, '', window.location.pathname);
         setScreen('playlists');
       } else if (authError) {
-        window.history.replaceState({}, '', window.location.pathname);
         showError('Spotify-Login fehlgeschlagen. Bitte erneut versuchen.');
+      } else if (storedRoom && storedToken && (!room || room === storedRoom)) {
+        // Reloaded (or reopened the link) mid-session: go straight back into the room.
+        setLoadingMsg('Verbinde mit dem Raum…');
+        setScreen('loading');
+        if (!socket.connected) socket.connect();
+        socket.emit('rejoin_room', { roomCode: storedRoom, playerToken: storedToken });
       } else if (room) {
-        window.history.replaceState({}, '', window.location.pathname);
-        setJoinCode(room.toUpperCase());
+        setJoinCode(room);
         setScreen('join');
       } else if (await isAuthenticated()) {
         setScreen('playlists');
       }
     };
     void init();
-  }, [initialParams, setScreen, showError]);
+  }, [initialParams, setScreen, setLoadingMsg, showError]);
 
   // ── Playlist selection ────────────────────────────────────────
 
@@ -164,23 +194,15 @@ export default function App() {
     );
   }, []);
 
-  const handleLogout = useCallback(() => {
-    stopSong();
-    socket.disconnect();
-    void logout();
-    setSelectedPlaylists([]);
-    setScreen('login');
-  }, [stopSong, setScreen]);
-
-  // ── Create / Join Room ────────────────────────────────────────
+  // ── Create / Join / Leave Room ────────────────────────────────
 
   const handleCreateRoom = useCallback(() => {
     const name = hostName.trim() || 'Host';
     if (!socket.connected) socket.connect();
-    socket.emit('create_room', { hostName: name, rounds, audioMode });
-    setLobbyState({ roomCode: '', players: [], rounds, audioMode, status: 'lobby' });
+    socket.emit('create_room', { hostName: name, rounds, audioMode, turnLimit });
+    setLobbyState({ roomCode: '', players: [], rounds, audioMode, turnLimit, status: 'lobby' });
     setScreen('lobby');
-  }, [hostName, rounds, audioMode, setLobbyState, setScreen]);
+  }, [hostName, rounds, audioMode, turnLimit, setLobbyState, setScreen]);
 
   const handleJoinRoom = useCallback((code: string, name: string) => {
     if (!socket.connected) socket.connect();
@@ -188,64 +210,95 @@ export default function App() {
     socket.emit('join_room', { roomCode: code, playerName: name, playerToken });
   }, []);
 
+  /** Leaves for good: the server drops us from the lobby (or closes it, for the host). */
+  const leaveRoom = useCallback(() => {
+    // socket.io buffers emits while offline; a late leave_room would hit the next room we join.
+    if (socket.connected) socket.emit('leave_room');
+    clearStoredRoom();
+    stopAudio();
+    socket.disconnect();
+    resetRoom();
+  }, [resetRoom]);
+
+  const handleLeave = useCallback(() => {
+    leaveRoom();
+    setScreen(isHost ? 'menu' : 'login');
+  }, [isHost, leaveRoom, setScreen]);
+
+  const handleLogout = useCallback(() => {
+    leaveRoom();
+    void logout();
+    setSelectedPlaylists([]);
+    setScreen('login');
+  }, [leaveRoom, setScreen]);
+
   // ── Lobby settings (host) ─────────────────────────────────────
 
-  const handleAudioModeChange = useCallback(
-    (mode: AudioMode) => {
-      setAudioMode(mode);
-      setLobbyState((prev) => (prev ? { ...prev, audioMode: mode } : prev));
-      socket.emit('update_settings', { rounds, audioMode: mode });
+  const updateSettings = useCallback(
+    (patch: Partial<Settings>) => {
+      const next: Settings = { rounds, audioMode, turnLimit, ...patch };
+      setRounds(next.rounds);
+      setAudioMode(next.audioMode);
+      setTurnLimit(next.turnLimit);
+      setLobbyState((prev) => (prev ? { ...prev, ...next } : prev));
+      socket.emit('update_settings', next);
     },
-    [rounds, setAudioMode, setLobbyState]
-  );
-
-  const handleRoundsChange = useCallback(
-    (r: number) => {
-      setRounds(r);
-      setLobbyState((prev) => (prev ? { ...prev, rounds: r } : prev));
-      socket.emit('update_settings', { rounds: r, audioMode });
-    },
-    [audioMode, setRounds, setLobbyState]
+    [rounds, audioMode, turnLimit, setRounds, setAudioMode, setTurnLimit, setLobbyState]
   );
 
   // ── Start Game ────────────────────────────────────────────────
 
   const handleStartGame = useCallback(async () => {
+    const load = new AbortController();
+    setSongLoad(load);
     setLoadingMsg('Songs werden geladen…');
     setScreen('loading');
     socket.emit('start_loading');
 
-    try {
-      const playerCount = lobbyState?.players.length ?? 1;
-      const songsNeeded = Math.ceil(playerCount * (rounds + 1) * 1.5);
-      const songs = await loadSongsFromPlaylists(
-        selectedPlaylists.map((p) => p.id),
-        songsNeeded
-      );
+    const playerCount = lobbyState?.players.filter((p) => p.isConnected).length ?? 1;
+    const songsNeeded = Math.ceil(playerCount * (rounds + 1) * 1.5);
+    const songs = await loadSongsFromPlaylists(
+      selectedPlaylists.map((p) => p.id),
+      songsNeeded,
+      getPlayedSongIds(),
+      load.signal
+    );
+    if (load.signal.aborted) return;
+    setSongLoad(null);
 
-      if (songs.length < playerCount + 3) {
-        socket.emit('cancel_loading');
-        setLoadingMsg('Nicht genug Songs. Bitte andere Playlisten wählen.');
-        await new Promise((r) => setTimeout(r, 2000));
-        setScreen('lobby');
-        return;
-      }
-
-      socket.emit('start_game', { songs, rounds, audioMode });
-    } catch {
+    // Matches the server's minimum: a starting card plus at least one turn per player.
+    if (songs.length < Math.max(playerCount + 3, playerCount * 2)) {
       socket.emit('cancel_loading');
-      setLoadingMsg('Fehler beim Laden der Songs. Bitte erneut versuchen.');
-      await new Promise((r) => setTimeout(r, 2500));
+      setLoadingMsg('Nicht genug Songs gefunden. Bitte andere Playlisten wählen.');
+      await sleep(2000);
       setScreen('lobby');
+      return;
     }
-  }, [lobbyState, selectedPlaylists, rounds, audioMode, setLoadingMsg, setScreen]);
+
+    socket.emit('start_game', { songs, rounds, audioMode });
+  }, [
+    lobbyState,
+    selectedPlaylists,
+    rounds,
+    audioMode,
+    getPlayedSongIds,
+    setLoadingMsg,
+    setScreen,
+  ]);
+
+  const handleCancelLoading = useCallback(() => {
+    songLoad?.abort();
+    setSongLoad(null);
+    socket.emit('cancel_loading');
+    setScreen('lobby');
+  }, [songLoad, setScreen]);
 
   // ── Game actions ──────────────────────────────────────────────
 
   const handlePlace = useCallback(() => {
-    if (slot === null || !gameState) return;
-    socket.emit('place_song', { position: slot });
-  }, [slot, gameState]);
+    if (slot === null || placing) return;
+    placeSong(slot);
+  }, [slot, placing, placeSong]);
 
   const handleKick = useCallback((playerId: string) => {
     socket.emit('kick_player', { playerId });
@@ -254,13 +307,6 @@ export default function App() {
   const handleSkipPlayer = useCallback(() => {
     socket.emit('skip_player');
   }, []);
-
-  const handleLeave = useCallback(() => {
-    stopAudio();
-    socket.disconnect();
-    resetRoom();
-    setScreen('menu');
-  }, [resetRoom, setScreen]);
 
   const handleRestart = useCallback(() => {
     stopSong();
@@ -319,6 +365,8 @@ export default function App() {
           setRounds={setRounds}
           audioMode={audioMode}
           setAudioMode={setAudioMode}
+          turnLimit={turnLimit}
+          setTurnLimit={setTurnLimit}
           onCreateRoom={handleCreateRoom}
           onChangePlaylists={() => {
             setPlaylistReturnTarget('menu');
@@ -327,7 +375,9 @@ export default function App() {
         />
       )}
 
-      {screen === 'loading' && <LoadingScreen message={loadingMsg} />}
+      {screen === 'loading' && (
+        <LoadingScreen message={loadingMsg} onCancel={songLoad ? handleCancelLoading : undefined} />
+      )}
 
       {screen === 'lobby' && lobbyState && (
         <LobbyScreen
@@ -339,8 +389,9 @@ export default function App() {
           onStart={() => void handleStartGame()}
           onKick={handleKick}
           onLeave={handleLeave}
-          onAudioModeChange={handleAudioModeChange}
-          onRoundsChange={handleRoundsChange}
+          onAudioModeChange={(mode) => updateSettings({ audioMode: mode })}
+          onRoundsChange={(r) => updateSettings({ rounds: r })}
+          onTurnLimitChange={(s) => updateSettings({ turnLimit: s })}
           onChangePlaylists={() => {
             setPlaylistReturnTarget('lobby');
             setScreen('playlists');
@@ -354,6 +405,7 @@ export default function App() {
           roomCode={roomCode}
           isHost={isHost}
           gameState={gameState}
+          turnEndsAt={turnEndsAt}
           currentSong={currentSong}
           revealedSong={revealedSong}
           feedback={feedback}
@@ -363,6 +415,7 @@ export default function App() {
           volume={volume}
           slot={slot}
           setSlot={setSlot}
+          placing={placing}
           onToggleAudio={toggle}
           onVolumeChange={changeVolume}
           onPlace={handlePlace}

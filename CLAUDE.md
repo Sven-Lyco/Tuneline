@@ -121,31 +121,39 @@ Tuneline/
 - **Server ist Source of Truth** — alle Spielzustände liegen im Server-Memory (RoomManager)
 - **Room-Code**: 6 Zeichen alphanumerisch (z.B. `6ER2T5`), 2h TTL
 - **Spieler-Token**: 48-Zeichen-Token für Reconnect-Fähigkeit ohne erneuten Join — gespeichert in `sessionStorage` (wird bei Tab-Schließen geleert)
+  - `rejoin_room` (nur Token, legt nie Spieler an) läuft automatisch beim Socket-Reconnect und beim Neuladen der Seite; schlägt er fehl → `rejoin_failed` → Start-Screen
+  - Bewusstes Verlassen (`leave_room`, Kick, Raum geschlossen) löscht den gespeicherten Token
 - **Anti-Cheat**: `SongMeta` (ohne Jahr) wird an aktiven Spieler gesendet; Jahr erst nach Platzierung via `placement_result`
 - **Audio-Modus**: `'all'` (jeder hört auf eigenem Gerät) oder `'host-only'` (nur Host-Gerät)
 - **Spotify-Token bleibt beim Server**: Host ruft `/api/songs` auf → Server fetcht via Spotify+iTunes → Client empfängt `SongFull[]` und übergibt sie via `start_game` an den Server
 - Server validiert Song-Daten (Pflichtfelder, Jahr zwischen 1900–2100)
-- Socket-Events rate-limitiert (15 Events/Sekunde pro Socket)
+- Socket-Events rate-limitiert (15 Events/Sekunde pro Socket); max. 5 offene Räume pro IP, 1 pro Socket
+- **Alles nur im Speicher**: Ein Server-Neustart/Deploy beendet alle Spiele und Spotify-Logins. Bei `SIGTERM` bekommen Clients `server_restarting` → Deploys außerhalb von Spielzeiten
 
 ### Socket.io Events (Überblick)
 
 ```text
-Client → Server: create_room, join_room, start_loading, cancel_loading, start_game,
-                  update_settings, place_song, skip_player, kick_player,
-                  return_to_lobby, send_reaction
-Server → Client: room_created, room_joined, room_updated, game_loading,
-                  game_loading_cancelled, game_started, turn_started,
-                  placement_result, game_over,
-                  game_paused, game_resumed, player_disconnected,
-                  player_reconnected, player_kicked, error, reaction_received
+Client → Server: create_room, join_room, rejoin_room, leave_room, start_loading,
+                  cancel_loading, start_game, update_settings, place_song,
+                  skip_player, kick_player, return_to_lobby, send_reaction
+Server → Client: room_created, room_joined, rejoin_failed, room_updated, room_closed,
+                  game_loading, game_loading_cancelled, game_started, turn_started,
+                  placement_result, game_over, game_paused, game_resumed,
+                  game_state_updated, player_disconnected, player_reconnected,
+                  player_kicked, server_restarting, error, reaction_received
 ```
 
 ## Spiellogik
 
 - **Server** (`game.ts`): `startGame()` verteilt Startsongs, `placeSong()` prüft Platzierung und gibt `correct`/`gameOver` zurück; `rooms.ts` orchestriert via `RoomManager`
 - **Client** (`App.tsx`): verwaltet Socket-State, leitet Events an Screens weiter — nicht verändern ohne Rückfrage
-- Gameover-Bedingung: `currentSongIndex >= deck.length || (currentPlayerIndex === 0 && round > rounds)`
-- Songs ohne iTunes-Preview werden server-seitig in `loadSongs()` herausgefiltert (garantiert Ton für jeden Song)
+- Gameover-Bedingung (`isGameOver` in `game.ts`): nur an Rundengrenzen (`currentPlayerIndex === 0`), wenn `round > rounds` oder der Stapel keine volle Runde mehr hergibt; mitten in der Runde nur, wenn gar kein Song mehr da ist
+- `startGame()` begrenzt `rounds` auf das, was der Stapel für alle hergibt (Client zeigt dem Host dann einen Hinweis)
+- **Pause** (`pausedPlayerId`): nur wenn der Host oder der Spieler am Zug offline ist. Andere Disconnects → `game_state_updated` (Spieler erscheint „offline“). Kommt der Host nicht binnen 2 Min. zurück → Spielende
+- Übersprungene, beim Start offline gewesene und spät beitretende Spieler werden per `seatPlayer()` wieder in die Reihenfolge aufgenommen (ohne Karten: Startkarte vom Stapel, sonst Zuschauer bis zur nächsten Partie)
+- **Zeitlimit pro Zug** (`turnLimit`: 0/30/60/90 s): Server-Timer in `RoomManager.syncTurnTimer`, läuft nicht während Pausen; Ablauf zählt als falsch (`placement_result.timedOut`)
+- Songs ohne passende iTunes-Preview (gleicher Interpret **und** Titel) werden server-seitig in `loadSongs()` herausgefiltert; Compilations/Re-Releases werden ignoriert (Album-Jahr ≠ Song-Jahr)
+- „Nochmal spielen“: Client schickt bereits gespielte Song-IDs als `excludeIds` an `/api/songs`, die nur als Reserve genutzt werden
 - Bei Punktgleichstand am Ende: `ResultScreen` zeigt "Unentschieden!" statt arbiträrem Sieger
 - Server trackt `lastCorrectSong` pro Spieler → `winnerLastSong` wird mit `game_over` gesendet und in ResultScreen hervorgehoben
 - Lautstärke-Regler im GameScreen (pro Gerät), gespeichert in localStorage
@@ -165,7 +173,7 @@ Server → Client: room_created, room_joined, room_updated, game_loading,
 
 ## Geplante Features (Backlog)
 
-- **Weitere Spielmodi**: Team-Modus, Zeitlimit pro Zug
+- **Weitere Spielmodi**: Team-Modus
 - **Soundeffekte** bei richtigem/falschem Platzieren
 
 ## Scripts

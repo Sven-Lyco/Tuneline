@@ -292,5 +292,6 @@ export async function loadSongs(
     result.push(...enriched.filter((s): s is SongFull => s !== null));
   }
 
-  return result;
+  // The last batch can overshoot into reserve songs; fresh ones come first, so trim from the end.
+  return result.slice(0, target);
 }

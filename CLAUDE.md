@@ -39,9 +39,11 @@ Tuneline/
       api/
         spotify.ts          Server-API-Wrapper: /api/auth/*, /api/playlists, /api/songs
       utils/
-        shuffle.ts          shuffle<T>()
+        shuffle.ts          sortByYear<T>()
         audio.ts            playAudio, stopAudio, toggleAudio, getVolume, setVolume
                             (iTunes Preview via HTMLAudioElement; Lautstärke in localStorage)
+        roomStorage.ts      Sitzplatz in sessionStorage (Reload) + lastRoom in localStorage (Zurück-Button)
+        tabPresence.ts      BroadcastChannel: hält ein anderer Tab diesen Platz? (Duplikat-Schutz)
       hooks/
         useGameAudio.ts     playing, volume, startSong, stopSong, toggle, changeVolume
         useSocketEvents.ts  alle Socket-Events + abgeleiteter State (screen, gameState …)
@@ -57,12 +59,15 @@ Tuneline/
         PlaylistBadge.tsx   Playlist-Cover + Name Badge
         Reactions.tsx       Emoji-Reaktionen während des Spiels
         RoomCodeCopy.tsx    Raum-Code Anzeige mit Copy-Button
+        ResumeBanner.tsx    „Zurück ins Spiel“ nach geschlossenem Tab
+        TurnLimitPicker.tsx Zeitlimit-Auswahl (Aus/30/60/90 s)
         game/
           GameHeader.tsx    Header-Leiste (Runde, Spieler-Chips, Raum-Code)
           SongCard.tsx      Vinyl + Song-Info + Audio-Controls + Wave
           MyTimeline.tsx    Eigene Timeline mit DropZones
           OtherPlayers.tsx  Mini-Panels der anderen Spieler
           DisconnectOverlay.tsx  Overlay bei Verbindungsverlust
+          TurnTimer.tsx     Countdown für das Zeitlimit
       screens/
         LoginScreen.tsx     Spotify-Login + Gast-Join-Button
         HelpScreen.tsx      Spielanleitung (Host + Spieler Tabs)
@@ -83,7 +88,8 @@ Tuneline/
 
   server/                   ← Express + Socket.io Server
     src/
-      index.ts              HTTP-Server, Socket.io-Setup, CORS, Rate-Limiting, Auth/Spotify-Routes
+      index.ts              Einstieg: Env laden, Server starten (listen), Prozess-Signale
+      app.ts                createTunelineServer(): Express-Routen, Socket.io-Handler, Rate-Limiting (ohne listen → testbar)
       rooms.ts              RoomManager: create, join, kick, cleanup (2h TTL)
       game.ts               Spiellogik: startGame, placeSong, skipPlayer, returnToLobby
       types.ts              Interne Server-Typen + Konstanten (Room, InternalPlayer, MAX_*)
@@ -178,6 +184,14 @@ Server → Client: room_created, room_joined, rejoin_failed, session_replaced, r
 - **Weitere Spielmodi**: Team-Modus
 - **Soundeffekte** bei richtigem/falschem Platzieren
 
+## Tests
+
+- **Vitest** in beiden Workspaces, Testdateien liegen als `*.test.ts(x)` neben dem Code
+- **Server** (`server/vitest.config.mts`): Unit-Tests für Spiellogik, `RoomManager` (Timer mit `vi.useFakeTimers()`), Preview, Spotify (`fetch` gemockt), Sessions; Integrationstests starten echte Server über `createTunelineServer()` auf Port 0 (`src/test/server.ts`, `socket.io-client`)
+- **Client** (`client/vite.config.js`, Block `test`): jsdom + Testing Library; `src/test/setup.ts` mockt `src/socket.ts` global durch `src/test/fakeSocket.ts` (`serverEmit()` simuliert Server-Events, `emittedPayloads()` prüft Emits)
+- **Coverage-Schwelle 80 %** (Statements, Branches, Functions, Lines) je Workspace — `npm run coverage` bricht darunter ab
+- **Pre-Commit-Hook** führt nach lint-staged `npm test` aus (~13 s); **CI** führt `npm run coverage` aus
+
 ## Scripts
 
 ```bash
@@ -187,6 +201,8 @@ npm run dev:client   # nur Vite Dev-Server → http://[::1]:5174
 npm run dev:server   # nur Express/Socket.io → http://[::1]:3001
 npm run build        # baut client + server für Production
 npm run typecheck    # tsc --noEmit für client + server
+npm test             # Vitest für server + client
+npm run coverage     # wie test, mit 80-%-Coverage-Schwelle
 
 # Im jeweiligen Unterordner
 npm run lint         # ESLint (client)

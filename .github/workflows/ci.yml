@@ -8,7 +8,7 @@ on:
 
 jobs:
   check:
-    name: Prettier, ESLint & Typecheck
+    name: Prettier, ESLint, Typecheck & Tests
     runs-on: ubuntu-latest
 
     steps:
@@ -30,3 +30,7 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+      # Fails below 80 % statements/branches/functions/lines (thresholds in the Vitest configs)
+      - name: Tests & Coverage
+        run: npm run coverage

@@ -1,10 +1,11 @@
 import { useState } from 'react';
+import { inviteUrl } from '../utils/invite';
 
 export function useRoomCodeCopy(roomCode: string) {
   const [copied, setCopied] = useState(false);
 
   const copyCode = () => {
-    const url = `${window.location.origin}/?room=${roomCode}`;
+    const url = inviteUrl(roomCode);
     if (navigator.clipboard) {
       void navigator.clipboard.writeText(url);
     } else {

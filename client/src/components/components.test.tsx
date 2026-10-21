@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { AppTitle, AppSubtitle } from './AppTitle';
 import { AudioModePicker } from './AudioModePicker';
 import { Confetti } from './Confetti';
 import { DropZone } from './DropZone';
 import { ErrorBoundary } from './ErrorBoundary';
 import { GlobalStyles } from './GlobalStyles';
+import { InviteQr } from './InviteQr';
 import { Label } from './Label';
 import { LinkButton } from './LinkButton';
 import { PillButton } from './PillButton';
@@ -188,6 +189,42 @@ describe('RoomCodeCopy', () => {
     expect(screen.getByText('✓')).toBeInTheDocument();
     fireEvent.click(screen.getByText('ROOM02'));
     expect(screen.getByText('✓ Kopiert')).toBeInTheDocument();
+  });
+});
+
+describe('InviteQr', () => {
+  const dialog = () => screen.queryByRole('dialog', { name: 'QR-Code zum Beitreten' });
+
+  it('shows the invite link as a QR code', () => {
+    render(<InviteQr roomCode="ROOM01" />);
+    expect(dialog()).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('QR-Code zeigen'));
+    expect(within(dialog()!).getByText('ROOM01')).toBeInTheDocument();
+    // The SVG's title is the encoded link, the same one the copy button copies.
+    expect(
+      within(dialog()!).getByTitle(`${window.location.origin}/?room=ROOM01`)
+    ).toBeInTheDocument();
+  });
+
+  it('closes via ✕, Escape or a tap next to it, but not on the code itself', () => {
+    render(<InviteQr roomCode="ROOM01" variant="badge" />);
+    const open = () => fireEvent.click(screen.getByTitle('QR-Code zum Beitreten'));
+
+    open();
+    fireEvent.click(screen.getByLabelText('Schließen'));
+    expect(dialog()).not.toBeInTheDocument();
+
+    open();
+    fireEvent.keyDown(window, { key: 'Enter' });
+    expect(dialog()).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(dialog()).not.toBeInTheDocument();
+
+    open();
+    fireEvent.click(dialog()!);
+    expect(dialog()).toBeInTheDocument();
+    fireEvent.click(dialog()!.parentElement!);
+    expect(dialog()).not.toBeInTheDocument();
   });
 });
 

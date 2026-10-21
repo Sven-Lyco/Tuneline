@@ -2,6 +2,7 @@ import styled from '@emotion/styled';
 import type { RoomPlayer } from '@tuneline/shared';
 import { getPlayerColor } from '../../constants';
 import { RoomCodeCopy } from '../RoomCodeCopy';
+import { InviteQr } from '../InviteQr';
 import { PlayerChip } from '../PlayerChip';
 
 interface GameHeaderProps {
@@ -85,6 +86,7 @@ export function GameHeader({
         RUNDE {round}/{rounds}
       </RoundBadge>
       <RoomCodeCopy roomCode={roomCode} variant="badge" />
+      <InviteQr roomCode={roomCode} variant="badge" />
       <PlayerBadges>
         {players.map((p, i) => {
           const isActive = p.id === currentPlayerId;

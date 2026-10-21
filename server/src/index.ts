@@ -307,7 +307,6 @@ function onDisconnect(socketId: string, io: IoServer) {
   const info = rooms.handleDisconnect(socketId);
   if (!info) return;
 
-  io.to(info.roomCode).emit('player_disconnected', { playerId: info.playerId });
   logger.info(
     { roomCode: info.roomCode, playerId: info.playerId, isHost: info.isHost },
     'player_disconnected'
@@ -374,14 +373,24 @@ io.on('connection', (socket) => {
   /** Puts a freshly joined or reconnected socket into the room and syncs everyone. */
   const finishJoin = (
     code: string,
-    joined: { playerId: string; playerToken: string },
+    joined: { playerId: string; playerToken: string; replacedSocketId?: string },
     wasPaused: boolean
   ) => {
+    // The player was still active in another tab/device: tell that one it's over.
+    if (joined.replacedSocketId) {
+      io.to(joined.replacedSocketId).emit('session_replaced');
+      io.sockets.sockets.get(joined.replacedSocketId)?.disconnect(true);
+    }
+
     socket.join(code);
     const lobby = rooms.getLobbyState(code);
     if (!lobby) return;
 
-    socket.emit('room_joined', { ...joined, room: lobby });
+    socket.emit('room_joined', {
+      playerId: joined.playerId,
+      playerToken: joined.playerToken,
+      room: lobby,
+    });
 
     if (lobby.status === 'playing') {
       if (wasPaused) {
@@ -393,7 +402,6 @@ io.on('connection', (socket) => {
         const gameState = rooms.getGameState(code);
         if (gameState) socket.to(code).emit('game_state_updated', { gameState });
       }
-      io.to(code).emit('player_reconnected', { playerId: joined.playerId });
     } else if (lobby.status === 'finished') {
       emitGameOver(io, code, null, false, '', socket.id);
     } else {

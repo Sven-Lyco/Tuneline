@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import styled from '@emotion/styled';
 import type { Feedback } from '../types';
-import type { GameStateForClient, SongFull, SongMeta } from '@tuneline/shared';
+import type { GameStateForClient, SongFull } from '@tuneline/shared';
 import { getPlayerColor } from '../constants';
 import { sortByYear } from '../utils/shuffle';
 import { GameHeader } from '../components/game/GameHeader';
@@ -17,7 +17,6 @@ interface GameScreenProps {
   isHost: boolean;
   gameState: GameStateForClient;
   turnEndsAt: number | null;
-  currentSong: SongMeta;
   revealedSong: SongFull | null;
   feedback: Feedback;
   revealed: boolean;
@@ -107,7 +106,6 @@ export function GameScreen({
   isHost,
   gameState,
   turnEndsAt,
-  currentSong,
   revealedSong,
   feedback,
   revealed,
@@ -170,7 +168,6 @@ export function GameScreen({
         <SongCard
           hasAudio={hasAudio}
           turnEndsAt={turnEndsAt}
-          currentSong={currentSong}
           revealedSong={revealedSong}
           revealed={revealed}
           feedback={feedback}

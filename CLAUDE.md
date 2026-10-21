@@ -120,10 +120,12 @@ Tuneline/
 
 - **Server ist Source of Truth** — alle Spielzustände liegen im Server-Memory (RoomManager)
 - **Room-Code**: 6 Zeichen alphanumerisch (z.B. `6ER2T5`), 2h TTL
-- **Spieler-Token**: 48-Zeichen-Token für Reconnect-Fähigkeit ohne erneuten Join — gespeichert in `sessionStorage` (wird bei Tab-Schließen geleert)
-  - `rejoin_room` (nur Token, legt nie Spieler an) läuft automatisch beim Socket-Reconnect und beim Neuladen der Seite; schlägt er fehl → `rejoin_failed` → Start-Screen
-  - Bewusstes Verlassen (`leave_room`, Kick, Raum geschlossen) löscht den gespeicherten Token
-- **Anti-Cheat**: `SongMeta` (ohne Jahr) wird an aktiven Spieler gesendet; Jahr erst nach Platzierung via `placement_result`
+- **Spieler-Token**: 48-Zeichen-Token für Reconnect-Fähigkeit ohne erneuten Join (`client/src/utils/roomStorage.ts`)
+  - `sessionStorage` (pro Tab): `rejoin_room` (nur Token, legt nie Spieler an) läuft automatisch beim Socket-Reconnect und beim Neuladen; schlägt er fehl → `rejoin_failed` → Start-Screen
+  - `localStorage` (`lastRoom`, max. 2 h): nach Tab-Schließen bietet `ResumeBanner` „Zurück ins Spiel“ an — nur per Klick, nie automatisch
+  - Duplizierter Tab (kopiert sessionStorage): `utils/tabPresence.ts` fragt per `BroadcastChannel`, ob ein anderer Tab den Platz hält → Duplikat startet ohne Spieler. Übernimmt trotzdem ein Socket einen verbundenen Spieler, bekommt der alte `session_replaced` und wird getrennt
+  - Bewusstes Verlassen (`leave_room` in Lobby/Ergebnis, Kick, Raum geschlossen) löscht beide Einträge
+- **Anti-Cheat / kein Vorsagen**: Während eines Zugs geht nur `SongMeta = { preview }` an alle Clients; Titel, Interpret, Cover und Jahr erst mit `placement_result.song`/`game_over`
 - **Audio-Modus**: `'all'` (jeder hört auf eigenem Gerät) oder `'host-only'` (nur Host-Gerät)
 - **Spotify-Token bleibt beim Server**: Host ruft `/api/songs` auf → Server fetcht via Spotify+iTunes → Client empfängt `SongFull[]` und übergibt sie via `start_game` an den Server
 - Server validiert Song-Daten (Pflichtfelder, Jahr zwischen 1900–2100)
@@ -136,11 +138,11 @@ Tuneline/
 Client → Server: create_room, join_room, rejoin_room, leave_room, start_loading,
                   cancel_loading, start_game, update_settings, place_song,
                   skip_player, kick_player, return_to_lobby, send_reaction
-Server → Client: room_created, room_joined, rejoin_failed, room_updated, room_closed,
-                  game_loading, game_loading_cancelled, game_started, turn_started,
+Server → Client: room_created, room_joined, rejoin_failed, session_replaced, room_updated,
+                  room_closed, game_loading, game_loading_cancelled, game_started,
                   placement_result, game_over, game_paused, game_resumed,
-                  game_state_updated, player_disconnected, player_reconnected,
-                  player_kicked, server_restarting, error, reaction_received
+                  game_state_updated, player_kicked, server_restarting, error,
+                  reaction_received
 ```
 
 ## Spiellogik

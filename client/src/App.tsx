@@ -7,8 +7,17 @@ import { isAuthenticated, loadSongsFromPlaylists, logout } from './api/spotify';
 import { stopAudio } from './utils/audio';
 import { socket } from './socket';
 import { useGameAudio } from './hooks/useGameAudio';
-import { clearStoredRoom, useSocketEvents } from './hooks/useSocketEvents';
+import { useSocketEvents } from './hooks/useSocketEvents';
+import {
+  clearSessionRoom,
+  clearStoredRoom,
+  discardLastRoom,
+  readLastRoom,
+  type LastRoom,
+} from './utils/roomStorage';
+import { isSeatActiveElsewhere } from './utils/tabPresence';
 import { GlobalStyles } from './components/GlobalStyles';
+import { ResumeBanner } from './components/ResumeBanner';
 import { LoginScreen } from './screens/LoginScreen';
 import { JoinScreen } from './screens/JoinScreen';
 import { PlaylistScreen } from './screens/PlaylistScreen';
@@ -95,6 +104,9 @@ function loadStoredPlaylists(): SpotifyPlaylist[] {
 
 type Settings = { rounds: number; audioMode: AudioMode; turnLimit: number };
 
+/** Screens where a tab without a room may offer to go back to the last one. */
+const RESUME_SCREENS = new Set(['login', 'playlists', 'menu', 'join']);
+
 // ── App ─────────────────────────────────────────────────────────
 
 export default function App() {
@@ -152,6 +164,17 @@ export default function App() {
 
   // ── Auth init ─────────────────────────────────────────────────
 
+  /** Takes a stored seat back (reload or "back to game"); the socket hook routes on the answer. */
+  const rejoin = useCallback(
+    (code: string, playerToken: string) => {
+      setLoadingMsg('Verbinde mit dem Raum…');
+      setScreen('loading');
+      if (!socket.connected) socket.connect();
+      socket.emit('rejoin_room', { roomCode: code, playerToken });
+    },
+    [setLoadingMsg, setScreen]
+  );
+
   // Read once: StrictMode runs the init effect twice and the first run strips the query string.
   const [initialParams] = useState(() => new URLSearchParams(window.location.search));
 
@@ -166,23 +189,59 @@ export default function App() {
 
       if (authenticated) {
         setScreen('playlists');
-      } else if (authError) {
+        return;
+      }
+      if (authError) {
         showError('Spotify-Login fehlgeschlagen. Bitte erneut versuchen.');
-      } else if (storedRoom && storedToken && (!room || room === storedRoom)) {
-        // Reloaded (or reopened the link) mid-session: go straight back into the room.
-        setLoadingMsg('Verbinde mit dem Raum…');
-        setScreen('loading');
-        if (!socket.connected) socket.connect();
-        socket.emit('rejoin_room', { roomCode: storedRoom, playerToken: storedToken });
-      } else if (room) {
+        return;
+      }
+      if (storedRoom && storedToken && (!room || room === storedRoom)) {
+        // A duplicated tab copies sessionStorage — the original keeps the seat, this one starts fresh.
+        if (!(await isSeatActiveElsewhere(storedToken))) {
+          rejoin(storedRoom, storedToken);
+          return;
+        }
+        clearSessionRoom();
+      }
+      if (room) {
         setJoinCode(room);
         setScreen('join');
-      } else if (await isAuthenticated()) {
-        setScreen('playlists');
+        return;
       }
+      setScreen((await isAuthenticated()) ? 'playlists' : 'login');
     };
     void init();
-  }, [initialParams, setScreen, setLoadingMsg, showError]);
+  }, [initialParams, rejoin, setScreen, showError]);
+
+  // ── Back to the last room after the tab was closed ────────────
+
+  const [freeSeatToken, setFreeSeatToken] = useState<string | null>(null);
+  const resumeCandidate = !roomCode && RESUME_SCREENS.has(screen) ? readLastRoom() : null;
+  const candidateToken = resumeCandidate?.playerToken ?? null;
+
+  useEffect(() => {
+    if (!candidateToken) return;
+    let cancelled = false;
+    // Offering a seat another open tab still plays would let this tab steal it.
+    void isSeatActiveElsewhere(candidateToken).then((active) => {
+      if (!cancelled) setFreeSeatToken(active ? null : candidateToken);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [candidateToken]);
+
+  const resumable = resumeCandidate && freeSeatToken === candidateToken ? resumeCandidate : null;
+
+  const handleResume = useCallback(
+    (last: LastRoom) => rejoin(last.roomCode, last.playerToken),
+    [rejoin]
+  );
+
+  const handleDismissResume = useCallback(() => {
+    discardLastRoom();
+    setFreeSeatToken(null);
+  }, []);
 
   // ── Playlist selection ────────────────────────────────────────
 
@@ -406,7 +465,6 @@ export default function App() {
           isHost={isHost}
           gameState={gameState}
           turnEndsAt={turnEndsAt}
-          currentSong={currentSong}
           revealedSong={revealedSong}
           feedback={feedback}
           revealed={revealed}
@@ -433,6 +491,15 @@ export default function App() {
           lastPlayerId={result.lastPlayerId}
           winnerLastSong={result.winnerLastSong}
           onRestart={handleRestart}
+          onLeave={handleLeave}
+        />
+      )}
+
+      {resumable && (
+        <ResumeBanner
+          room={resumable}
+          onResume={() => handleResume(resumable)}
+          onDismiss={handleDismissResume}
         />
       )}
 

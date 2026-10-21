@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import styled from '@emotion/styled';
-import type { SongFull, SongMeta } from '@tuneline/shared';
+import type { SongFull } from '@tuneline/shared';
 import type { Feedback } from '../../types';
 import { Vinyl } from '../Vinyl';
 import { Wave } from '../Wave';
@@ -10,7 +10,6 @@ interface SongCardProps {
   /** False in host-only mode on guest devices: no local audio to control. */
   hasAudio: boolean;
   turnEndsAt: number | null;
-  currentSong: SongMeta;
   revealedSong: SongFull | null;
   revealed: boolean;
   feedback: Feedback;
@@ -98,12 +97,9 @@ const SongTitle = styled.div`
   text-overflow: ellipsis;
   white-space: nowrap;
   margin-bottom: 0.2rem;
-  transition: filter 0.3s;
 
-  &[data-blurred='true'] {
-    filter: blur(10px);
-    transition: none;
-    user-select: none;
+  &[data-hidden='true'] {
+    color: #4a4a6a;
   }
 
   @media (max-width: 480px) {
@@ -115,12 +111,9 @@ const SongArtist = styled.div`
   font-size: 1.05rem;
   color: #7a7a8e;
   margin-bottom: 0.6rem;
-  transition: filter 0.3s;
 
-  &[data-blurred='true'] {
-    filter: blur(8px);
-    transition: none;
-    user-select: none;
+  &[data-hidden='true'] {
+    color: #4a4a6a;
   }
 
   @media (max-width: 480px) {
@@ -255,7 +248,6 @@ function feedbackText(
 export function SongCard({
   hasAudio,
   turnEndsAt,
-  currentSong,
   revealedSong,
   revealed,
   feedback,
@@ -270,7 +262,8 @@ export function SongCard({
   onVolumeChange,
 }: SongCardProps) {
   const vinylSize = useMemo(() => (window.matchMedia('(max-width: 480px)').matches ? 80 : 120), []);
-  const displayYear = revealed && revealedSong ? revealedSong.year : null;
+  // Nobody learns anything about the song before it's placed — otherwise others could call it out.
+  const shown = revealed ? revealedSong : null;
 
   return (
     <SongArea>
@@ -280,13 +273,13 @@ export function SongCard({
       <Card>
         <CardAccent />
         <CardBody>
-          <Vinyl spinning={playing} cover={currentSong.cover} size={vinylSize} />
+          <Vinyl spinning={playing} cover={shown?.cover ?? null} size={vinylSize} />
           <SongInfo>
-            <SongTitle data-blurred={String(isMyTurn && !revealed)}>{currentSong.title}</SongTitle>
-            <SongArtist data-blurred={String(isMyTurn && !revealed)}>
-              {currentSong.artist}
-            </SongArtist>
-            {displayYear !== null && <RevealedYear>{displayYear}</RevealedYear>}
+            <SongTitle data-hidden={String(!shown)}>
+              {shown ? shown.title : 'Welcher Song ist das?'}
+            </SongTitle>
+            <SongArtist data-hidden={String(!shown)}>{shown ? shown.artist : '???'}</SongArtist>
+            {shown && <RevealedYear>{shown.year}</RevealedYear>}
             {!revealed && !hasAudio && <NoAudioHint>🔈 Die Musik läuft beim Host</NoAudioHint>}
             {!revealed && hasAudio && (
               <AudioControls>

@@ -12,6 +12,12 @@ import type { Feedback, GameResult, Screen } from '../types';
 import { socket } from '../socket';
 import { STORAGE_KEYS } from '../constants';
 import { isAuthenticated } from '../api/spotify';
+import {
+  clearSessionRoom,
+  clearStoredRoom,
+  saveLastRoom,
+  storeSessionRoom,
+} from '../utils/roomStorage';
 
 function shouldPlay(audioMode: AudioMode, isHost: boolean): boolean {
   return audioMode === 'all' || isHost;
@@ -20,12 +26,6 @@ function shouldPlay(audioMode: AudioMode, isHost: boolean): boolean {
 function toFeedback(correct: boolean, timedOut: boolean): Feedback {
   if (correct) return 'ok';
   return timedOut ? 'timeout' : 'no';
-}
-
-/** Forget the room so neither a reload nor a reconnect tries to rejoin it. */
-export function clearStoredRoom(): void {
-  sessionStorage.removeItem(STORAGE_KEYS.playerToken);
-  sessionStorage.removeItem(STORAGE_KEYS.roomCode);
 }
 
 type DisconnectedPlayer = { id: string; name: string; isHostDisconnected: boolean };
@@ -117,6 +117,15 @@ export function useSocketEvents({
     roundsRef.current = rounds;
   });
 
+  // Remember the seat beyond this tab, so closing it doesn't lose the game ("back to game" offer).
+  useEffect(() => {
+    const playerToken = sessionStorage.getItem(STORAGE_KEYS.playerToken);
+    const me = (gameState?.players ?? [])
+      .concat(lobbyState?.players ?? [])
+      .find((p) => p.id === myPlayerId);
+    if (roomCode && playerToken && me) saveLastRoom({ roomCode, playerToken, playerName: me.name });
+  }, [roomCode, myPlayerId, lobbyState, gameState]);
+
   const resetRoom = useCallback(() => {
     clearTimeout(revealTimerRef.current);
     revealTimerRef.current = undefined;
@@ -180,8 +189,10 @@ export function useSocketEvents({
     };
 
     // We're no longer in a room (closed, kicked, gone after a restart): back to a start screen.
-    const leaveRoom = (message: string) => {
-      clearStoredRoom();
+    // keepLastRoom: another tab now holds the seat and owns the saved room.
+    const leaveRoom = (message: string, keepLastRoom = false) => {
+      if (keepLastRoom) clearSessionRoom();
+      else clearStoredRoom();
       stopSong();
       resetRoom();
       socket.disconnect();
@@ -202,8 +213,7 @@ export function useSocketEvents({
       setRoomCode(rc);
       setMyPlayerId(playerId);
       setIsHost(true);
-      sessionStorage.setItem(STORAGE_KEYS.playerToken, playerToken);
-      sessionStorage.setItem(STORAGE_KEYS.roomCode, rc);
+      storeSessionRoom(rc, playerToken);
     });
 
     socket.on('room_joined', ({ playerId, playerToken, room }) => {
@@ -214,8 +224,7 @@ export function useSocketEvents({
       setAudioMode(room.audioMode);
       setRounds(room.rounds);
       setTurnLimit(room.turnLimit);
-      sessionStorage.setItem(STORAGE_KEYS.playerToken, playerToken);
-      sessionStorage.setItem(STORAGE_KEYS.roomCode, room.roomCode);
+      storeSessionRoom(room.roomCode, playerToken);
       // 'playing' and 'finished' are followed by game_resumed/game_paused/game_over
       if (room.status === 'lobby') {
         setScreen('lobby');
@@ -225,6 +234,9 @@ export function useSocketEvents({
     socket.on('rejoin_failed', () => leaveRoom('Der Raum existiert nicht mehr.'));
     socket.on('room_closed', () => leaveRoom('Der Host hat den Raum geschlossen.'));
     socket.on('player_kicked', () => leaveRoom('Du wurdest aus dem Raum entfernt.'));
+    socket.on('session_replaced', () =>
+      leaveRoom('Du spielst jetzt in einem anderen Tab weiter.', true)
+    );
     socket.on('server_restarting', () =>
       showError('Der Server startet neu – laufende Spiele gehen dabei leider verloren.')
     );
@@ -360,6 +372,7 @@ export function useSocketEvents({
       socket.off('rejoin_failed');
       socket.off('room_closed');
       socket.off('player_kicked');
+      socket.off('session_replaced');
       socket.off('server_restarting');
       socket.off('room_updated');
       socket.off('game_loading');

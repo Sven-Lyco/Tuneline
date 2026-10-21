@@ -130,6 +130,8 @@ export class RoomManager {
     const player = [...room.players.values()].find((p) => p.token === playerToken);
     if (!player) return null;
 
+    const replacedSocketId =
+      player.isConnected && player.socketId !== socketId ? player.socketId : undefined;
     this.unmapSocket(room, player.socketId);
     player.socketId = socketId;
     player.isConnected = true;
@@ -139,7 +141,7 @@ export class RoomManager {
     game.seatPlayer(room, player);
     this.syncTurnTimer(room);
     this.scheduleCleanup(room);
-    return { ok: true, playerId: player.id, playerToken };
+    return { ok: true, playerId: player.id, playerToken, replacedSocketId };
   }
 
   getPlayerForSocket(socketId: string): { id: string; name: string } | null {
@@ -263,12 +265,15 @@ export class RoomManager {
     return result ?? { ok: false, error: 'Raum nicht gefunden.' };
   }
 
-  /** Leaving the lobby removes the player; the host leaving closes the room. */
+  /**
+   * Leaving the lobby or the result screen removes the player; the host leaving closes
+   * the room. Mid-game there's no leave button, so a leave there is just a disconnect.
+   */
   leaveRoom(socketId: string): LeaveResult | null {
     const roomCode = this.socketToRoom.get(socketId);
     const room = roomCode ? this.rooms.get(roomCode) : undefined;
     const player = room ? this.getPlayer(socketId, room) : null;
-    if (!room || !player || room.status !== 'lobby') return null;
+    if (!room || !player || room.status === 'playing') return null;
 
     if (player.isHost) {
       this.deleteRoom(room);
@@ -468,10 +473,8 @@ export class RoomManager {
     const room = this.rooms.get(roomCode);
     if (!room) return null;
     const song = room.deck[room.currentSongIndex];
-    if (!song) return null;
-    // Strip year — must not be sent to active player before placement
-    const { year: _year, ...preview } = song;
-    return preview;
+    // Only the audio — everything else would let players call out the answer.
+    return song ? { preview: song.preview } : null;
   }
 
   getPlayers(roomCode: string): RoomPlayer[] | null {

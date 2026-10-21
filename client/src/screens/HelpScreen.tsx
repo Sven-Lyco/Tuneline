@@ -438,7 +438,8 @@ function PlayerTab() {
             <StepTitle>Song anhören</StepTitle>
             <StepDesc>
               Wenn du dran bist, wird ein 30-Sekunden-Preview gespielt. Titel, Interpret und das
-              Jahr sind verborgen. Rate, aus welchem Jahr der Song stammt.
+              Jahr sind für alle verborgen, bis der Song platziert ist. Rate, aus welchem Jahr der
+              Song stammt.
             </StepDesc>
           </StepText>
         </StepHeader>

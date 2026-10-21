@@ -73,7 +73,8 @@ export type CreateRoomResult =
   | { ok: false; error: string };
 
 export type JoinResult =
-  | { ok: true; playerId: string; playerToken: string }
+  /** replacedSocketId: the player was still connected elsewhere and has been taken over. */
+  | { ok: true; playerId: string; playerToken: string; replacedSocketId?: string }
   | { ok: false; error: string };
 
 export type TurnResult = {

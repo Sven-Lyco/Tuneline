@@ -20,17 +20,20 @@ export const TURN_LIMITS = [0, 30, 60, 90] as const;
 
 // ─── Song types ─────────────────────────────────────────────────────────────
 
-/** Song metadata without the release year — safe to send to the active player */
+/**
+ * All players get during a turn: the audio. Title, artist, cover and year would let
+ * someone call out the answer, so they're only sent with the reveal (SongFull).
+ */
 export interface SongMeta {
+  preview: string | null;
+}
+
+/** Full song — only revealed after placement */
+export interface SongFull extends SongMeta {
   id: string;
   title: string;
   artist: string;
   cover: string | null;
-  preview: string | null;
-}
-
-/** Full song including year — only revealed after placement */
-export interface SongFull extends SongMeta {
   year: number;
 }
 
@@ -117,10 +120,6 @@ export interface ServerToClientEvents {
     gameState: GameStateForClient;
     currentSong: SongMeta;
   }) => void;
-  turn_started: (data: {
-    currentSong: SongMeta;
-    currentPlayerId: string;
-  }) => void;
   placement_result: (data: {
     correct: boolean;
     timedOut: boolean;
@@ -149,10 +148,10 @@ export interface ServerToClientEvents {
   /** Player list/connectivity changed without affecting the current turn. */
   game_state_updated: (data: { gameState: GameStateForClient }) => void;
   rejoin_failed: () => void;
+  /** Another tab/device took over this player; this socket is closed right after. */
+  session_replaced: () => void;
   room_closed: () => void;
   server_restarting: () => void;
-  player_disconnected: (data: { playerId: string }) => void;
-  player_reconnected: (data: { playerId: string }) => void;
   player_kicked: (data: { playerId: string }) => void;
   game_loading: () => void;
   game_loading_cancelled: () => void;

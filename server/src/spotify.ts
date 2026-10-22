@@ -393,7 +393,10 @@ export async function loadSongs(
         if (!match) return null;
         // Spotify dates a song by its album, so a reissue or best-of shows a later year.
         const year = match.originalYear !== null && match.originalYear < track.year ? match.originalYear : track.year;
-        if (year !== track.year) corrected.add(track.id);
+        if (year !== track.year) {
+          corrected.add(track.id);
+          logger.debug({ artist: track.artist, title: track.title, spotifyYear: track.year, year }, 'year_corrected');
+        }
         const { id, title, artist, cover } = track;
         return { id, title, artist, year, cover, preview: match.preview };
       })

@@ -1,5 +1,5 @@
 import { logger } from './logger.js';
-import { baseTitle, normalize, versionOf } from './versions.js';
+import { baseTitle, isCompilationAlbum, normalize, versionOf } from './versions.js';
 
 interface ItunesTrack {
   previewUrl?: string | null;
@@ -22,14 +22,15 @@ interface Candidate {
   // iTunes gives a plain year as January 1st, and compilations carry made-up ones ("1966-01-01"
   // for a 1982 song); only a full date is trusted once there is one.
   exactDate: boolean;
+  compilation: boolean; // a best-of or reissue: fine to play, but its date says little
   durationMs: number; // 0 = unknown
 }
 
 export interface PreviewMatch {
   preview: string;
   /**
-   * Earliest year iTunes knows the song from. iTunes keeps the original date on best-ofs and
-   * reissues, where Spotify gives the album's date. null = unknown.
+   * Earliest year of the song's releases on iTunes, best-ofs and reissues left out (their dates
+   * are unreliable). Spotify dates a song by the album it's on. null = unknown.
    */
   originalYear: number | null;
 }
@@ -58,6 +59,7 @@ function candidates(results: ItunesTrack[], artist: string, title: string): Cand
         remaster: version === 'remaster',
         year: parseInt(r.releaseDate ?? '', 10) || 0,
         exactDate: !!r.releaseDate && !/^\d{4}-01-01/.test(r.releaseDate),
+        compilation: isCompilationAlbum(r.collectionName ?? ''),
         durationMs: r.trackTimeMillis ?? 0,
       },
     ];
@@ -77,7 +79,8 @@ function pickBest(found: Candidate[], durationMs: number): PreviewMatch | null {
   const [best] = [...fitting].sort(
     (a, b) => Number(a.remaster) - Number(b.remaster) || off(a) - off(b) || oldest(a) - oldest(b),
   );
-  const dated = fitting.filter((c) => c.year >= 1900);
+  // Without a dated original release there is no year; Spotify's then stands.
+  const dated = fitting.filter((c) => c.year >= 1900 && !c.compilation);
   const trusted = dated.some((c) => c.exactDate) ? dated.filter((c) => c.exactDate) : dated;
   const years = trusted.map((c) => c.year);
   return { preview: best.previewUrl, originalYear: years.length > 0 ? Math.min(...years) : null };

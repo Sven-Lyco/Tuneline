@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { baseTitle, normalize, songKey, versionOf } from './versions.js';
+import { baseTitle, isCompilationAlbum, normalize, songKey, versionOf } from './versions.js';
 
 describe('versionOf', () => {
   it('treats plain titles, edits and features as the original', () => {
@@ -58,6 +58,27 @@ describe('versionOf', () => {
       ['Take On Me', 'Hunting High & Low (Remastered)'],
     ]) {
       expect(versionOf(title, album), title).toBe('remaster');
+    }
+  });
+});
+
+describe('isCompilationAlbum', () => {
+  it('spots best-ofs and reissues by their name (real iTunes album names)', () => {
+    for (const album of [
+      'Anthology',
+      'Gold: Commodores',
+      'The Definitive Collection: The Commodores',
+      "Motown: The Complete No. 1's",
+      'Elv1s: 30 #1 Hits',
+      'Pop Music: The Modern Era 1976-1999',
+      'Tutti Frutti - Best of Peter Kraus',
+      'Seine großen Erfolge',
+      'A Night At The Opera (Deluxe Edition)',
+    ]) {
+      expect(isCompilationAlbum(album), album).toBe(true);
+    }
+    for (const album of ['Nightshift', 'Thriller', 'From Elvis In Memphis', 'Rumours', 'Hunting High and Low', 'Fearless']) {
+      expect(isCompilationAlbum(album), album).toBe(false);
     }
   });
 });

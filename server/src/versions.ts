@@ -43,6 +43,16 @@ const VARIANT_ALBUM =
 // No \b at the end: "Remastered2009", "Remasterizado" and "Re-Mastered" count too.
 const REMASTER = /\bre-?master/i;
 
+// Best-ofs, compilations and reissues. iTunes dates a song on them by the release or by another
+// track ("Nightshift" on five Commodores best-ofs: 1977-03-01, the song is from 1985).
+const COMPILATION_ALBUM =
+  /\b(?:greatest|best of|very best|essentials?|hits|gold|platinum|ultimate|definitive|anthology|collection|masters|number (?:ones|1'?s)|no\.? ?1'?s?|anniversary|deluxe|expanded|remaster(?:ed)?|erfolge|schlager)\b|#1|\b(?:19|20)\d{2}\s*[-–]\s*(?:19|20)?\d{2}\b/i;
+
+/** An album name that sounds like a best-of or reissue: its dates don't tell the song's year. */
+export function isCompilationAlbum(album: string): boolean {
+  return COMPILATION_ALBUM.test(album);
+}
+
 /**
  * - `original`: the song as first released.
  * - `remaster`: the same recording, re-released (often with the re-release's year).

@@ -111,9 +111,10 @@ describe('findPreview', () => {
       release('Elvis Presley', 'Suspicious Minds (Film Edit)', 'ELVIS (Original Motion Picture Soundtrack)', '2022-06-24', 377),
       release('Elvis Presley', 'Suspicious Minds', 'MEMPHIS', '2024-08-09', 206),
       release('Elvis Presley', 'Suspicious Minds (Live)', 'Elvis: As Recorded at Madison Square Garden', '1972-06-18', 261),
+      release('Elvis Presley', 'Suspicious Minds', 'From Elvis In Memphis', '1969-08-26', 263),
     ]);
     expect(await findPreview('Elvis Presley', 'Suspicious Minds', 263_000)).toEqual({
-      preview: 'https://audio/Elv1s: 30 #1 Hits/Suspicious Minds',
+      preview: 'https://audio/From Elvis In Memphis/Suspicious Minds',
       originalYear: 1969,
     });
 
@@ -148,6 +149,27 @@ describe('findPreview', () => {
     const b = artist();
     itunes([release(b, 'Song', 'Later', '1999-01-01', 200), release(b, 'Song', 'First', '1990-01-01', 200)]);
     expect(await preview(b, 'Song', 200)).toBe('https://audio/First/Song');
+  });
+
+  it("leaves best-ofs out of the year: they carry other tracks' dates (real iTunes results)", async () => {
+    itunes([
+      release('The Commodores', 'Nightshift', 'Nightshift', '1985-01-01', 303),
+      release('The Commodores', 'Nightshift (Single Version)', "Motown: The Complete No. 1's", '1985-01-31', 261),
+      release('The Commodores', 'Nightshift (12-Inch Club Mix)', '20th Century Masters - The Millennium Collection', '2002-01-01', 423),
+      release('The Commodores', 'Nightshift', 'Anthology', '1977-03-01', 304),
+      release('The Commodores', 'Nightshift', 'The Definitive Collection: The Commodores', '1977-03-01', 303),
+      release('The Commodores', 'Nightshift', 'Gold: Commodores', '1977-03-01', 304),
+    ]);
+    // The best-of can still provide the preview; it's the same recording.
+    expect(await findPreview('Commodores', 'Nightshift', 304_000)).toEqual({
+      preview: 'https://audio/Anthology/Nightshift',
+      originalYear: 1985,
+    });
+
+    // Only best-ofs: no year from iTunes, Spotify's stands.
+    const a = artist();
+    itunes([release(a, 'Evergreen', 'Greatest Hits', '1960-05-01', 180)]);
+    expect((await findPreview(a, 'Evergreen', 180_000))?.originalYear).toBeNull();
   });
 
   it('trusts full release dates over January 1st placeholders from compilations (real iTunes results)', async () => {

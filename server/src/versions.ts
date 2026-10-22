@@ -33,9 +33,10 @@ function versionPart(title: string): string {
   return [...(title.match(BRACKETS) ?? []), dash >= 0 ? title.slice(dash + 3) : ''].join(' ');
 }
 
-// Another recording than the original. "Radio Edit", "Single Version" or "feat. …" are fine.
+// Another recording than the original. "Radio Edit", "Single Version" or "feat. …" are fine, and
+// so is a "7" Mix" or "Radio Mix": that's the single as released ("What Is Love (7" Mix)").
 const VARIANT =
-  /\b(?:re-?mix(?:es|ed)?|(?<!original )mix|live|unplugged|acoustic|instrumental|a ?capp?ella|karaoke|re-?record(?:ed|ing)?|taylor['’]?s version|demo|slowed|sped[ -]up|screwed|chopped|nightcore|extended|club|dub|symphonic|orchestral|piano|cover|tribute|originally performed|lullaby)\b/i;
+  /\b(?:re-?mix(?:es|ed)?|(?<!(?:original|radio|single|album|main|mono|stereo|7"|7”|7''|7 ?inch|7-inch) )mix|live|unplugged|acoustic|instrumental|a ?capp?ella|karaoke|re-?record(?:ed|ing)?|taylor['’]?s version|demo|slowed|sped[ -]up|screwed|chopped|nightcore|extended|club|dub|symphonic|orchestral|piano|cover|tribute|originally performed|lullaby)\b/i;
 // Albums that only hold such recordings, even when the track title doesn't say so.
 const VARIANT_ALBUM =
   /\b(?:karaoke|screwed|chopped|tribute|lullab(?:y|ies)|remix(?:es|ed)|re-?recorded|taylor['’]?s version|unplugged|instrumentals)\b/i;

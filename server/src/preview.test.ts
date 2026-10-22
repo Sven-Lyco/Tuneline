@@ -150,6 +150,20 @@ describe('findPreview', () => {
     expect(await preview(b, 'Song', 200)).toBe('https://audio/First/Song');
   });
 
+  it('trusts full release dates over January 1st placeholders from compilations (real iTunes results)', async () => {
+    itunes([
+      release('Michael Jackson', 'Billie Jean', 'Thriller', '1982-11-29', 293),
+      release('Michael Jackson', 'Billie Jean', 'Pop Music: The Modern Era 1976-1999', '1966-01-01', 293),
+      release('Michael Jackson', 'Billie Jean (Single Version)', 'Number Ones', '1982-11-30', 294),
+    ]);
+    expect((await findPreview('Michael Jackson', 'Billie Jean', 294_000))?.originalYear).toBe(1982);
+
+    // With only plain years, the earliest one still counts.
+    const a = artist();
+    itunes([release(a, 'Oldie', 'Best Of', '1999-01-01', 180), release(a, 'Oldie', 'Album', '1964-01-01', 180)]);
+    expect((await findPreview(a, 'Oldie', 180_000))?.originalYear).toBe(1964);
+  });
+
   it('drops recordings of a clearly different length, and has no year without dates', async () => {
     const a = artist();
     itunes([release(a, 'Slow Jam', 'Album', '2000-01-01', 380)]);

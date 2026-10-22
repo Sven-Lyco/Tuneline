@@ -9,6 +9,8 @@ describe('versionOf', () => {
       'Shout - Radio Edit',
       'Help! - Single Version',
       'Levels - Original Mix',
+      'What Is Love - 7" Mix',
+      'Mr. Vain - Radio Mix',
       'Let It Go - From "Frozen"',
       'Live and Let Die',
       'Cover Me',
@@ -22,6 +24,8 @@ describe('versionOf', () => {
     for (const title of [
       'Cheerleader - Felix Jaehn Remix Radio Edit',
       'Take On Me (1985 12" Mix)',
+      'What Is Love (Club Mix)',
+      'Come Together - 2019 Mix',
       'Bohemian Rhapsody - Live at Wembley Stadium',
       'Love Story (Taylor’s Version)',
       "Love Story (Taylor's Version)",

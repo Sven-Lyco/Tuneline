@@ -435,6 +435,14 @@ describe('leaving the room', () => {
     expect(emittedPayloads('leave_room')).toHaveLength(1);
   });
 
+  it('explains a connection refused for too many connections, ignores other connect errors', () => {
+    inGame();
+    serverEmit('connect_error', new Error('xhr poll error'));
+    expect(showError).not.toHaveBeenCalled();
+    serverEmit('connect_error', new Error('too_many_connections'));
+    expect(showError).toHaveBeenCalledWith(expect.stringContaining('Zu viele Verbindungen'));
+  });
+
   it('warns before a server restart and resets on request', () => {
     const { result } = inGame();
     serverEmit('server_restarting');

@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Request, Response } from 'express';
-import { findPreview, previewHandler } from './preview.js';
+import { findPreview } from './preview.js';
 
 type Track = { previewUrl: string | null; trackName: string; artistName: string };
 
@@ -93,25 +92,5 @@ describe('findPreview', () => {
     const calls = fetchMock.mock.calls.length;
     await findPreview(first, 'Oldest');
     expect(fetchMock.mock.calls.length).toBe(calls + 1);
-  });
-});
-
-describe('previewHandler', () => {
-  function call(query: Record<string, string>) {
-    const res = { status: vi.fn(), json: vi.fn() };
-    res.status.mockReturnValue(res);
-    return previewHandler({ query } as unknown as Request, res as unknown as Response).then(() => res);
-  }
-
-  it('validates the query', async () => {
-    expect((await call({ artist: 'A' })).status).toHaveBeenCalledWith(400);
-    expect((await call({ artist: 'A', title: 'x'.repeat(201) })).status).toHaveBeenCalledWith(400);
-  });
-
-  it('answers with the preview url', async () => {
-    const a = artist();
-    itunes([track(a, 'Song')]);
-    const res = await call({ artist: a, title: 'Song' });
-    expect(res.json).toHaveBeenCalledWith({ previewUrl: 'https://audio/Song' });
   });
 });

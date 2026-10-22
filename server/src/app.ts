@@ -6,12 +6,17 @@ import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import type { ClientToServerEvents, ServerToClientEvents, SongsResponse } from '@tuneline/shared';
-import type { TurnResult } from './types.js';
+import {
+  FAILED_JOIN_WINDOW_MS,
+  MAX_FAILED_JOINS,
+  MAX_SOCKETS_PER_IP,
+  type TurnResult,
+} from './types.js';
+import { AttemptLimiter, ConnectionCounter } from './limits.js';
 import { REACTION_EMOJIS } from '@tuneline/shared';
 import { join } from 'path';
 
 import { RoomManager } from './rooms.js';
-import { previewHandler } from './preview.js';
 import { httpLogger, logger } from './logger.js';
 import {
   SESSION_COOKIE,
@@ -27,15 +32,58 @@ export interface TunelineServerOptions {
   frontendOrigin: string;
   /** Serves the built client and marks cookies secure. */
   isProd: boolean;
+  /** Where the built client lives (tests point this at a temp folder). */
+  clientDist?: string;
+}
+
+/**
+ * Content-Security-Policy for the built client (in dev Vite serves the page, so it doesn't apply).
+ * Every external source the browser loads is listed here — add new ones (fonts, CDNs) here too.
+ * No upgrade-insecure-requests: HSTS already enforces HTTPS, and a local production run uses http.
+ */
+export function cspDirectives(frontendOrigin: string) {
+  return {
+    defaultSrc: ["'self'"],
+    scriptSrc: ["'self'"],
+    scriptSrcAttr: ["'none'"],
+    // Emotion injects <style> tags at runtime and the app sets style attributes.
+    styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+    fontSrc: ['https://fonts.gstatic.com'],
+    // Song covers (i.scdn.co) and playlist covers (mosaic.scdn.co, image-cdn-*.spotifycdn.com).
+    imgSrc: ["'self'", 'data:', 'https://*.scdn.co', 'https://*.spotifycdn.com'],
+    mediaSrc: ['https://audio-ssl.itunes.apple.com'],
+    connectSrc: ["'self'", ...socketOrigins(frontendOrigin)],
+    manifestSrc: ["'self'"],
+    objectSrc: ["'none'"],
+    baseUri: ["'self'"],
+    formAction: ["'self'"],
+    frameAncestors: ["'none'"],
+  };
+}
+
+/** The frontend origin and its WebSocket twin for Socket.io (Safari doesn't match ws: via 'self'). */
+function socketOrigins(frontendOrigin: string): string[] {
+  try {
+    const url = new URL(frontendOrigin);
+    // CSP can't express IPv6 literals like [::1]; 'self' covers the local setup.
+    if (url.hostname.startsWith('[')) return [];
+    return [url.origin, `${url.protocol === 'https:' ? 'wss' : 'ws'}://${url.host}`];
+  } catch {
+    return [];
+  }
 }
 
 /** Builds the HTTP + Socket.io server without listening, so tests can run it on any port. */
-export function createTunelineServer({ frontendOrigin, isProd }: TunelineServerOptions) {
+export function createTunelineServer({
+  frontendOrigin,
+  isProd,
+  clientDist = join(__dirname, '../../client/dist'),
+}: TunelineServerOptions) {
   const app = express();
   const httpServer = createServer(app);
 
   app.set('trust proxy', 1); // Trust Coolify's reverse proxy for correct client IPs
-  app.use(helmet({ contentSecurityPolicy: false }));
+  app.use(helmet({ contentSecurityPolicy: { useDefaults: false, directives: cspDirectives(frontendOrigin) } }));
   app.use(compression());
   app.use(cookieParser());
   app.use(express.json());
@@ -48,6 +96,8 @@ export function createTunelineServer({ frontendOrigin, isProd }: TunelineServerO
       origin: frontendOrigin,
       methods: ['GET', 'POST'],
     },
+    // The largest valid message is start_game: MAX_SONGS songs of at most ~1 KB each.
+    maxHttpBufferSize: 640 * 1024,
   });
 
   // Per-IP rate limiting for HTTP endpoints
@@ -200,16 +250,17 @@ export function createTunelineServer({ frontendOrigin, isProd }: TunelineServerO
     res.json({ songs, unavailablePlaylists } satisfies SongsResponse);
   });
 
-  app.get('/api/preview', previewHandler);
-
-  // Serve built client in production
+  // Serve built client in production. The client only uses "/" (state lives in the app and
+  // in ?room=), so there is no catch-all: unknown paths — mostly scanners probing for /.env,
+  // /wp-admin and the like — get a plain 404 instead of the app with a misleading 200.
   if (isProd) {
-    const clientDist = join(__dirname, '../../client/dist');
     app.use(express.static(clientDist));
-    app.get('/{*splat}', (_req, res) => {
-      res.sendFile(join(clientDist, 'index.html'));
-    });
   }
+
+  app.use((req, res) => {
+    if (req.path.startsWith('/api/')) res.status(404).json({ error: 'Not found' });
+    else res.status(404).type('text/plain').send('Not found');
+  });
 
   const rooms = new RoomManager({
     onHostTimeout: (roomCode) => {
@@ -349,6 +400,24 @@ export function createTunelineServer({ frontendOrigin, isProd }: TunelineServerO
 
   // ── Socket.io event handlers ──────────────────────────────────────────────
 
+  // A whole party on one Wi-Fi shares an IP, so the cap is generous; it stops one machine from
+  // opening thousands of sockets. Refused here, the client gets connect_error 'too_many_connections'.
+  const socketsPerIp = new ConnectionCounter(MAX_SOCKETS_PER_IP);
+  io.use((socket, next) => {
+    const ip = clientIp(socket.handshake);
+    if (!socketsPerIp.tryAdd(ip)) {
+      logger.warn({ ip }, 'too_many_connections');
+      next(new Error('too_many_connections'));
+      return;
+    }
+    socket.once('disconnect', () => socketsPerIp.remove(ip));
+    next();
+  });
+
+  // Unknown room codes and tokens per IP: stops guessing room codes to crash other games.
+  const failedJoins = new AttemptLimiter(MAX_FAILED_JOINS, FAILED_JOIN_WINDOW_MS);
+  const TOO_MANY_FAILED_JOINS = 'Zu viele fehlgeschlagene Beitrittsversuche. Bitte warte ein paar Minuten.';
+
   io.on('connection', (socket) => {
     const isLimited = makeRateLimiter();
     logger.debug({ socketId: socket.id }, 'socket_connect');
@@ -430,10 +499,17 @@ export function createTunelineServer({ frontendOrigin, isProd }: TunelineServerO
       if (typeof roomCode !== 'string' || typeof playerName !== 'string') return;
 
       const code = roomCode.toUpperCase().trim();
+      const ip = clientIp(socket.handshake);
+      if (failedJoins.isBlocked(ip)) {
+        socket.emit('error', { message: TOO_MANY_FAILED_JOINS });
+        return;
+      }
       const wasPaused = rooms.getPausedPlayer(code) !== null;
       const result = rooms.joinRoom(socket.id, code, playerName, playerToken);
 
       if (!result.ok) {
+        // Only an unknown code counts as guessing — not a full room or a taken name.
+        if (!rooms.getLobbyState(code)) failedJoins.recordFailure(ip);
         logger.warn({ roomCode: code, playerName, error: result.error }, 'join_room_denied');
         socket.emit('error', { message: result.error });
         return;
@@ -453,9 +529,15 @@ export function createTunelineServer({ frontendOrigin, isProd }: TunelineServerO
       }
 
       const code = roomCode.toUpperCase().trim();
+      const ip = clientIp(socket.handshake);
+      if (failedJoins.isBlocked(ip)) {
+        socket.emit('rejoin_failed');
+        return;
+      }
       const wasPaused = rooms.getPausedPlayer(code) !== null;
       const result = rooms.rejoinRoom(socket.id, code, playerToken);
       if (!result.ok) {
+        failedJoins.recordFailure(ip);
         socket.emit('rejoin_failed');
         logger.info({ roomCode: code }, 'rejoin_failed');
         return;

@@ -6,7 +6,13 @@ import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import type { ClientToServerEvents, ServerToClientEvents, SongsResponse } from '@tuneline/shared';
-import type { TurnResult } from './types.js';
+import {
+  FAILED_JOIN_WINDOW_MS,
+  MAX_FAILED_JOINS,
+  MAX_SOCKETS_PER_IP,
+  type TurnResult,
+} from './types.js';
+import { AttemptLimiter, ConnectionCounter } from './limits.js';
 import { REACTION_EMOJIS } from '@tuneline/shared';
 import { join } from 'path';
 
@@ -90,6 +96,8 @@ export function createTunelineServer({
       origin: frontendOrigin,
       methods: ['GET', 'POST'],
     },
+    // The largest valid message is start_game: MAX_SONGS songs of at most ~1 KB each.
+    maxHttpBufferSize: 640 * 1024,
   });
 
   // Per-IP rate limiting for HTTP endpoints
@@ -392,6 +400,24 @@ export function createTunelineServer({
 
   // ── Socket.io event handlers ──────────────────────────────────────────────
 
+  // A whole party on one Wi-Fi shares an IP, so the cap is generous; it stops one machine from
+  // opening thousands of sockets. Refused here, the client gets connect_error 'too_many_connections'.
+  const socketsPerIp = new ConnectionCounter(MAX_SOCKETS_PER_IP);
+  io.use((socket, next) => {
+    const ip = clientIp(socket.handshake);
+    if (!socketsPerIp.tryAdd(ip)) {
+      logger.warn({ ip }, 'too_many_connections');
+      next(new Error('too_many_connections'));
+      return;
+    }
+    socket.once('disconnect', () => socketsPerIp.remove(ip));
+    next();
+  });
+
+  // Unknown room codes and tokens per IP: stops guessing room codes to crash other games.
+  const failedJoins = new AttemptLimiter(MAX_FAILED_JOINS, FAILED_JOIN_WINDOW_MS);
+  const TOO_MANY_FAILED_JOINS = 'Zu viele fehlgeschlagene Beitrittsversuche. Bitte warte ein paar Minuten.';
+
   io.on('connection', (socket) => {
     const isLimited = makeRateLimiter();
     logger.debug({ socketId: socket.id }, 'socket_connect');
@@ -473,10 +499,17 @@ export function createTunelineServer({
       if (typeof roomCode !== 'string' || typeof playerName !== 'string') return;
 
       const code = roomCode.toUpperCase().trim();
+      const ip = clientIp(socket.handshake);
+      if (failedJoins.isBlocked(ip)) {
+        socket.emit('error', { message: TOO_MANY_FAILED_JOINS });
+        return;
+      }
       const wasPaused = rooms.getPausedPlayer(code) !== null;
       const result = rooms.joinRoom(socket.id, code, playerName, playerToken);
 
       if (!result.ok) {
+        // Only an unknown code counts as guessing — not a full room or a taken name.
+        if (!rooms.getLobbyState(code)) failedJoins.recordFailure(ip);
         logger.warn({ roomCode: code, playerName, error: result.error }, 'join_room_denied');
         socket.emit('error', { message: result.error });
         return;
@@ -496,9 +529,15 @@ export function createTunelineServer({
       }
 
       const code = roomCode.toUpperCase().trim();
+      const ip = clientIp(socket.handshake);
+      if (failedJoins.isBlocked(ip)) {
+        socket.emit('rejoin_failed');
+        return;
+      }
       const wasPaused = rooms.getPausedPlayer(code) !== null;
       const result = rooms.rejoinRoom(socket.id, code, playerToken);
       if (!result.ok) {
+        failedJoins.recordFailure(ip);
         socket.emit('rejoin_failed');
         logger.info({ roomCode: code }, 'rejoin_failed');
         return;

@@ -319,3 +319,57 @@ describe('game', () => {
     expect(await gone).toBe(true);
   });
 });
+
+describe('abuse limits', () => {
+  it('refuses more than MAX_SOCKETS_PER_IP connections from one IP until one closes', async () => {
+    const sockets = await Promise.all(Array.from({ length: 30 }, () => server.connect('10.9.9.9')));
+    await expect(server.connect('10.9.9.9')).rejects.toThrow('too_many_connections');
+    // Other IPs are unaffected.
+    await expect(server.connect('10.9.9.10')).resolves.toBeDefined();
+
+    sockets[0].disconnect();
+    await sleep(100);
+    await expect(server.connect('10.9.9.9')).resolves.toBeDefined();
+  });
+
+  it('pauses joining for an IP after MAX_FAILED_JOINS unknown room codes', async () => {
+    const host = await createRoom('Host', {}, '10.8.8.1');
+    // Spread over sockets: each one is limited to 15 events per second.
+    const guessers = await Promise.all([0, 1].map(() => server.connect('10.8.8.2')));
+    for (let i = 0; i < 20; i++) {
+      const s = guessers[i % 2];
+      const answer = waitFor(s, 'error');
+      s.emit('join_room', { roomCode: `ZZ${String(i).padStart(4, '0')}`, playerName: 'Guess' });
+      expect(await answer).toEqual({ message: 'Raum nicht gefunden.' });
+    }
+
+    // Now even the right code is refused for that IP …
+    const late = await server.connect('10.8.8.2');
+    const refused = waitFor(late, 'error');
+    late.emit('join_room', { roomCode: host.roomCode, playerName: 'Late' });
+    expect((await refused).message).toMatch(/Zu viele fehlgeschlagene Beitrittsversuche/);
+    const noRejoin = waitFor(late, 'rejoin_failed');
+    late.emit('rejoin_room', { roomCode: host.roomCode, playerToken: host.playerToken });
+    expect(await noRejoin).toBe(true);
+
+    // … while other IPs still get in.
+    const other = await server.connect('10.8.8.3');
+    const joined = waitFor(other, 'room_joined');
+    other.emit('join_room', { roomCode: host.roomCode, playerName: 'Anna' });
+    expect(await joined).not.toBeNull();
+  });
+
+  it('counts failed rejoins as guesses', async () => {
+    const host = await createRoom('Host', {}, '10.7.7.1');
+    const s = await server.connect('10.7.7.2');
+    for (let i = 0; i < 20; i++) {
+      const failed = waitFor(s, 'rejoin_failed');
+      s.emit('rejoin_room', { roomCode: host.roomCode, playerToken: `wrong-${i}` });
+      expect(await failed).toBe(true);
+      if (i % 10 === 9) await sleep(1000); // stay under 15 events per second
+    }
+    const blocked = waitFor(s, 'error');
+    s.emit('join_room', { roomCode: host.roomCode, playerName: 'Ben' });
+    expect((await blocked).message).toMatch(/Zu viele fehlgeschlagene Beitrittsversuche/);
+  });
+});

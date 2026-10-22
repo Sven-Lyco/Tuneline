@@ -275,6 +275,12 @@ export function useSocketEvents({
     socket.on('server_restarting', () =>
       showError('Der Server startet neu – laufende Spiele gehen dabei leider verloren.')
     );
+    // The server caps connections per network (MAX_SOCKETS_PER_IP); it doesn't retry by itself.
+    socket.on('connect_error', (err) => {
+      if (err.message === 'too_many_connections') {
+        showError('Zu viele Verbindungen aus deinem Netzwerk – bitte kurz warten.');
+      }
+    });
 
     socket.on('room_updated', ({ room }) => {
       setLobbyState(room);
@@ -412,6 +418,7 @@ export function useSocketEvents({
       socket.off('player_kicked');
       socket.off('session_replaced');
       socket.off('server_restarting');
+      socket.off('connect_error');
       socket.off('room_updated');
       socket.off('game_loading');
       socket.off('game_loading_cancelled');

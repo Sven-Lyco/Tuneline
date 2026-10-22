@@ -12,6 +12,11 @@ export const MAX_ROOMS = 500;
 export const MAX_ROOMS_PER_IP = 5;
 export const MAX_FIELD_LENGTH = 200;
 export const MAX_SONGS = 500;
+/** Simultaneous Socket.io connections per IP — a whole party on one Wi-Fi shares an IP. */
+export const MAX_SOCKETS_PER_IP = 30;
+/** Joins with an unknown room code or token per IP before joining pauses (room-code guessing). */
+export const MAX_FAILED_JOINS = 20;
+export const FAILED_JOIN_WINDOW_MS = 10 * 60 * 1000;
 const DEFAULT_ROUNDS = 5;
 const MAX_ROUNDS = 20;
 

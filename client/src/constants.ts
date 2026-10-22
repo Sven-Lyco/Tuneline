@@ -23,4 +23,5 @@ export const STORAGE_KEYS = {
   lastRoom: 'tuneline_last_room',
   selectedPlaylists: 'tuneline_selected_playlists',
   volume: 'tuneline_volume',
+  playedSongs: 'tuneline_played_songs',
 } as const;

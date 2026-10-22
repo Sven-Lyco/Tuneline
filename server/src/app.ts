@@ -228,7 +228,7 @@ export function createTunelineServer({
       if (!res.writableFinished) abort.abort();
     });
 
-    const { songs, unavailablePlaylists, previewStats } = await loadSongs(
+    const { songs, unavailablePlaylists, previewStats, yearsCorrected, duplicatesRemoved } = await loadSongs(
       token,
       playlistIds,
       target,
@@ -244,6 +244,8 @@ export function createTunelineServer({
         // Measures whether loading hits iTunes' ~20 requests/min before adding a throttle.
         itunesLookups: previewStats.lookups,
         itunesFailed: previewStats.failed,
+        yearsCorrected,
+        duplicatesRemoved,
       },
       'songs_loaded',
     );

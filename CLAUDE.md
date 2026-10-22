@@ -43,6 +43,7 @@ Tuneline/
         audio.ts            playAudio, stopAudio, toggleAudio, getVolume, setVolume
                             (iTunes Preview via HTMLAudioElement; Lautstärke in localStorage)
         roomStorage.ts      Sitzplatz in sessionStorage (Reload) + lastRoom in localStorage (Zurück-Button)
+        playedSongs.ts      Gespielte Song-IDs in localStorage (max. 1000, 24 h) → excludeIds auch im nächsten Raum
         spotifyMessages.ts  Texte, wenn Spotify Playlists oder Songs verweigert
         tabPresence.ts      BroadcastChannel: hält ein anderer Tab diesen Platz? (Duplikat-Schutz)
       hooks/
@@ -97,7 +98,8 @@ Tuneline/
       types.ts              Interne Server-Typen + Konstanten (Room, InternalPlayer, MAX_*)
       auth.ts               Session-Management (httpOnly Cookies, in-memory Map, 7 Tage TTL)
       spotify.ts            PKCE OAuth server-seitig, Token-Refresh, Playlist/Track-Laden
-      preview.ts            iTunes Preview-Suche + in-memory Cache (nur serverseitig, kein HTTP-Endpunkt)
+      preview.ts            iTunes Preview-Suche (Originalaufnahme + Originaljahr) + in-memory Cache (nur serverseitig, kein HTTP-Endpunkt)
+      versions.ts           Versionen erkennen (Original / Remaster / Remix, Live …), songKey() für Duplikate
       limits.ts             ConnectionCounter, AttemptLimiter (Socket-Verbindungen und Fehlversuche pro IP)
       logger.ts             pino-Logger
       utils.ts              shuffle<T>(), generateCode()
@@ -140,8 +142,8 @@ Tuneline/
 - Client-IDs ab 11.02.2026 bekommen Songs nur aus eigenen/kollaborativen Playlists; Spotify-eigene Playlists sind für Dev-Mode-Apps gesperrt
 - `server/src/spotify.ts` liest Songs über `/playlists/{id}/items` (max. 50 pro Seite, Song unter `item` oder `track`); wird die erste Seite abgelehnt, Rückfall auf das alte `/tracks` (Log: `playlist_items_fallback`)
 - Spotify-Fehler gehen mit Grund an den Client: `/api/playlists` → `not_allowlisted` (403) / `quota` (429) / `unavailable` (502); `/api/songs` → `SongsResponse.unavailablePlaylists` mit `not_owned` / `spotify_owned` / `quota` / `unavailable` (Texte in `client/src/utils/spotifyMessages.ts`)
-- iTunes Search API: offiziell ca. 20 Anfragen/Minute pro IP (gilt für die Server-IP); `songs_loaded` loggt `itunesLookups`/`itunesFailed` — im Test (Okt. 2026) 40 Suchen in ~5 s ohne Fehler, daher noch keine Drosselung
-- Hintergrund mit Quellen (Quota, Playlist-Zugriff, Developer Policy, iTunes-Bedingungen, Stand Oktober 2026): `docs/research/spotify-itunes-api-regeln.md`, Rohnotizen in `docs/research/notes/`
+- iTunes Search API: offiziell ca. 20 Anfragen/Minute pro IP (gilt für die Server-IP); `songs_loaded` loggt `itunesLookups`/`itunesFailed` (außerdem `yearsCorrected`, `duplicatesRemoved`) — Tests (Okt. 2026): 40 Suchen in ~5 s ohne Fehler, aber ~70 in ~1 min → 403/429 und Sperre > 30 min (Nachfragen verlängert sie). `loadSongs()` bricht deshalb nach 5 gescheiterten Suchen ab (`MAX_ITUNES_FAILURES`); eine echte Drosselung fehlt noch
+- Hintergrund mit Quellen (Quota, Playlist-Zugriff, Developer Policy, iTunes-Bedingungen, Spotify-Wiedergabe statt iTunes, Stand Oktober 2026): `docs/research/spotify-itunes-api-regeln.md`, Rohnotizen in `docs/research/notes/`
 
 ## Multiplayer-Architektur
 
@@ -184,8 +186,11 @@ Server → Client: room_created, room_joined, rejoin_failed, session_replaced, r
 - **Pause** (`pausedPlayerId`): nur wenn der Host oder der Spieler am Zug offline ist. Andere Disconnects → `game_state_updated` (Spieler erscheint „offline“). Kommt der Host nicht binnen 2 Min. zurück → Spielende
 - Übersprungene, beim Start offline gewesene und spät beitretende Spieler werden per `seatPlayer()` wieder in die Reihenfolge aufgenommen (ohne Karten: Startkarte vom Stapel, sonst Zuschauer bis zur nächsten Partie)
 - **Zeitlimit pro Zug** (`turnLimit`: 0/30/60/90 s): Server-Timer in `RoomManager.syncTurnTimer`, läuft nicht während Pausen; Ablauf zählt als falsch (`placement_result.timedOut`)
-- Songs ohne passende iTunes-Preview (gleicher Interpret **und** Titel) werden server-seitig in `loadSongs()` herausgefiltert; Compilations/Re-Releases werden ignoriert (Album-Jahr ≠ Song-Jahr)
-- „Nochmal spielen“: Client schickt bereits gespielte Song-IDs als `excludeIds` an `/api/songs`, die nur als Reserve genutzt werden
+- **Nur Originalversionen** (`server/src/versions.ts`): Versionshinweise zählen nur in Klammern bzw. nach „ - “ („Live and Let Die“ bleibt). Spotify-Tracks, die Remix, Live, Acoustic, Instrumental, re-recorded/„Taylor's Version“, Karaoke, Sped up … oder Remaster sind, fliegen in `parseTrack()` raus, ebenso Compilations, Neuauflage-Alben (Deluxe, Greatest Hits …) und Alben wie „Screwed & Chopped“/„MTV Unplugged“. „Radio Edit“, „Single Version“, „feat.“, „7\" Mix“/„Radio Mix“/„Original Mix“ gelten als Original
+- **iTunes-Preview** (`findPreview`, 25 Treffer): gleicher Interpret und `baseTitle`, keine Variante, Länge höchstens 40 % neben der Spotify-Länge; Original vor Remaster, dann nächste Länge, dann ältestes Datum. Ohne passende Preview fällt der Song raus
+- **Jahr** = früheres von Spotify-Albumjahr und iTunes-Originaljahr. Für das iTunes-Jahr zählen keine Best-ofs/Reissues (`isCompilationAlbum`: Hits, Gold, Anthology, Collection, No. 1's, Jahresspannen …), weil sie fremde Daten tragen („Nightshift“ auf Commodores-Best-ofs: 1977 statt 1985). Daten auf den 1. Januar sind oft Platzhalter und zählen nur, wenn es kein genaues Datum gibt. Kennt iTunes kein Original, bleibt das Spotify-Jahr (lieber zu wenig korrigieren als falsch; z. B. bleibt „Sugar Baby“ auf Spotifys 1989 statt 1958)
+- **Duplikate**: ein Song pro Partie über alle Playlists und Versionen — gleiche Spotify-ID, gleiche ISRC, gleicher `songKey` (Interpret + Titel ohne Zusätze) oder gleiche Preview-URL
+- „Nochmal spielen“ und neue Räume: Der Host-Client schickt gespielte Song-IDs (`utils/playedSongs.ts`, localStorage, 24 h) als `excludeIds` an `/api/songs`; der Server nutzt sie – samt anderer Versionen desselben Songs – nur als Reserve
 - Bei Punktgleichstand am Ende: `ResultScreen` zeigt "Unentschieden!" statt arbiträrem Sieger
 - Server trackt `lastCorrectSong` pro Spieler → `winnerLastSong` wird mit `game_over` gesendet und in ResultScreen hervorgehoben
 - Lautstärke-Regler im GameScreen (pro Gerät), gespeichert in localStorage

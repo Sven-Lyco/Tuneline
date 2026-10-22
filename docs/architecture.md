@@ -28,8 +28,8 @@ flowchart LR
 
   H -- "Playlist-IDs, excludeIds" --> API
   API -- "Token aus der Session" --> SP
-  API -- "Interpret und Titel" --> IT
-  API -- "SongFull[], nur Songs mit passender Preview" --> H
+  API -- "Interpret, Titel, Länge" --> IT
+  API -- "SongFull[]: nur Originalversionen mit Preview, Jahr ggf. von iTunes, ohne Doppelte" --> H
   H -- "start_game mit den Songs" --> RM
   RM -- "während des Zugs: nur die Preview-URL" --> C
   RM -- "placement_result und game_over: kompletter Song" --> C

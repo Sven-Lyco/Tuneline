@@ -45,7 +45,7 @@ http://[::1]:5174/api/auth/callback
 - At most **5 Spotify users** can use the app. Add everyone who should be able to host under **Settings → User Management** (name and the e-mail address of their Spotify account). Hosts who aren't on the list can log in but get no playlists. Players who join via room code never log in to Spotify.
 - Apps created since February 2026 only get the songs of playlists the host **owns or collaborates on**. Spotify-owned playlists (editorial lists, Discover Weekly, Daily Mix …) can't be loaded by any Development Mode app — copy their songs into a playlist of your own instead.
 
-Audio previews come from the iTunes Search API, which Apple limits to roughly **20 requests per minute** per IP — here, the server's. Songs without a matching preview are skipped.
+Audio previews come from the iTunes Search API, which Apple limits to roughly **20 requests per minute** per IP — here, the server's. Only original recordings make it into the game: remixes, live takes, re-recordings and remasters are skipped, as are songs without a preview of the original. The year is the earliest original release Spotify or iTunes knows (best-ofs and reissues don't count), so a reissue doesn't move a song into the wrong decade.
 
 ### 2. Configure the server
 

@@ -449,6 +449,20 @@ describe('leaving the room', () => {
     expect(showError).toHaveBeenCalledWith(expect.stringContaining('Server startet neu'));
     act(() => result.current.resetRoom());
     expect(result.current).toMatchObject({ roomCode: '', gameState: null, isHost: false });
-    expect(result.current.getPlayedSongIds()).toEqual([]);
+  });
+
+  it('keeps played songs beyond the room, also on the next visit of this device', () => {
+    const first = setup();
+    serverEmit('room_joined', { playerId: 'me', playerToken: 'tok', room: lobby() });
+    serverEmit('game_started', {
+      gameState: state({ players: [player('host', { timeline: [full(1970)] }), player('me')] }),
+      currentSong: clip(1),
+    });
+    act(() => first.result.current.resetRoom());
+    expect(first.result.current.getPlayedSongIds()).toEqual(['s1970']);
+    first.unmount();
+
+    const { result } = setup();
+    expect(result.current.getPlayedSongIds()).toEqual(['s1970']);
   });
 });

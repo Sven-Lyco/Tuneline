@@ -18,13 +18,11 @@ import {
   saveLastRoom,
   storeSessionRoom,
 } from '../utils/roomStorage';
+import { MAX_PLAYED_SONGS, readPlayedSongs, savePlayedSongs } from '../utils/playedSongs';
 
 function shouldPlay(audioMode: AudioMode, isHost: boolean): boolean {
   return audioMode === 'all' || isHost;
 }
-
-// Same cap as the server's /api/songs validation.
-const MAX_EXCLUDED_SONGS = 1000;
 
 function toFeedback(correct: boolean, timedOut: boolean): Feedback {
   if (correct) return 'ok';
@@ -116,7 +114,15 @@ export function useSocketEvents({
   const roundsRef = useRef(rounds);
   const revealTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const pendingPauseRef = useRef<PendingPause | null>(null);
-  const playedSongIdsRef = useRef(new Set<string>());
+  // Kept beyond the room (utils/playedSongs.ts), so the next room starts with other songs.
+  const [playedSongIds] = useState(() => new Set(readPlayedSongs()));
+  const rememberPlayed = useCallback(
+    (ids: string[]) => {
+      for (const id of ids) playedSongIds.add(id);
+      savePlayedSongs(playedSongIds);
+    },
+    [playedSongIds]
+  );
   useEffect(() => {
     isHostRef.current = isHost;
     roomCodeRef.current = roomCode;
@@ -137,7 +143,6 @@ export function useSocketEvents({
     clearTimeout(revealTimerRef.current);
     revealTimerRef.current = undefined;
     pendingPauseRef.current = null;
-    playedSongIdsRef.current = new Set();
     setRoomCode('');
     setMyPlayerId('');
     setIsHost(false);
@@ -175,8 +180,8 @@ export function useSocketEvents({
 
   // The server takes at most this many exclusions; the most recent songs matter most.
   const getPlayedSongIds = useCallback(
-    () => [...playedSongIdsRef.current].slice(-MAX_EXCLUDED_SONGS),
-    []
+    () => [...playedSongIds].slice(-MAX_PLAYED_SONGS),
+    [playedSongIds]
   );
 
   useEffect(() => {
@@ -305,7 +310,7 @@ export function useSocketEvents({
     socket.on('game_started', ({ gameState: gs, currentSong: cs }) => {
       pendingPauseRef.current = null;
       setDisconnectedPlayer(null);
-      for (const p of gs.players) for (const s of p.timeline) playedSongIdsRef.current.add(s.id);
+      rememberPlayed(gs.players.flatMap((p) => p.timeline.map((s) => s.id)));
       if (isHostRef.current && gs.rounds < roundsRef.current) {
         showError(`Nicht genug Songs für ${roundsRef.current} Runden – ihr spielt ${gs.rounds}.`);
       }
@@ -315,7 +320,7 @@ export function useSocketEvents({
     });
 
     socket.on('placement_result', ({ correct, timedOut, song, gameState: gs, nextSong }) => {
-      playedSongIdsRef.current.add(song.id);
+      rememberPlayed([song.id]);
       setLastPlacedPlayerId(gameStateRef.current?.currentPlayerId ?? null);
       setRevealedSong(song);
       setFeedback(toFeedback(correct, timedOut));
@@ -348,7 +353,7 @@ export function useSocketEvents({
         setPlacing(false);
         setDisconnectedPlayer(null);
         stopSong();
-        if (lastSong) playedSongIdsRef.current.add(lastSong.id);
+        if (lastSong) rememberPlayed([lastSong.id]);
         const resultData = {
           players,
           lastSong,
@@ -430,7 +435,7 @@ export function useSocketEvents({
       socket.off('game_state_updated');
       socket.off('error');
     };
-  }, [startSong, stopSong, showError, resetRoom, teardown]);
+  }, [startSong, stopSong, showError, resetRoom, teardown, rememberPlayed]);
 
   return {
     screen,

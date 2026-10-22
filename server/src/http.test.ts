@@ -5,7 +5,7 @@ import { startServer, type TestServer } from './test/server.js';
 const realFetch = globalThis.fetch;
 const external = vi.fn<(url: string, init?: RequestInit) => Promise<unknown>>();
 
-const json = (body: unknown, ok = true) => ({ ok, status: ok ? 200 : 500, json: async () => body });
+const json = (body: unknown, ok = true, status = ok ? 200 : 500) => ({ ok, status, json: async () => body });
 
 let server: TestServer;
 
@@ -106,6 +106,19 @@ describe('Spotify data routes', () => {
     expect(await res.json()).toEqual([{ id: 'p1', name: 'Rock', coverUrl: null, trackCount: 2, ownerName: 'Me' }]);
   });
 
+  it('passes on why Spotify refused the playlists', async () => {
+    for (const [spotifyStatus, status, error] of [
+      [403, 403, 'not_allowlisted'],
+      [429, 429, 'quota'],
+      [500, 502, 'unavailable'],
+    ] as const) {
+      external.mockResolvedValueOnce(json({}, false, spotifyStatus));
+      const res = await get('/api/playlists', { headers: { cookie: validSession() } });
+      expect(res.status).toBe(status);
+      expect(await res.json()).toEqual({ error });
+    }
+  });
+
   it('validates song requests', async () => {
     const cookie = validSession();
     const invalid = [
@@ -144,9 +157,12 @@ describe('Spotify data routes', () => {
       });
     });
     const res = await post('/api/songs', { playlistIds: ['p1'], target: 5, excludeIds: [] }, validSession());
-    expect(await res.json()).toEqual([
-      expect.objectContaining({ id: 't1', title: 'Dream On', year: 1973, preview: 'https://audio-ssl.itunes.apple.com/d' }),
-    ]);
+    expect(await res.json()).toEqual({
+      songs: [
+        expect.objectContaining({ id: 't1', title: 'Dream On', year: 1973, preview: 'https://audio-ssl.itunes.apple.com/d' }),
+      ],
+      unavailablePlaylists: [],
+    });
   });
 
   it('serves preview lookups', async () => {

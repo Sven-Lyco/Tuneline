@@ -12,9 +12,10 @@ vi.mock('./api/spotify', () => ({
   isAuthenticated: vi.fn(),
   loadSongsFromPlaylists: vi.fn(),
   logout: vi.fn(async () => {}),
-  getUserPlaylists: vi.fn(async () => [
-    { id: 'a', name: 'Playlist a', coverUrl: null, trackCount: 40, ownerName: 'Me' },
-  ]),
+  getUserPlaylists: vi.fn(async () => ({
+    playlists: [{ id: 'a', name: 'Playlist a', coverUrl: null, trackCount: 40, ownerName: 'Me' }],
+    problem: null,
+  })),
   redirectToSpotify: vi.fn(),
 }));
 vi.mock('./utils/tabPresence', () => ({ isSeatActiveElsewhere: vi.fn() }));
@@ -37,7 +38,7 @@ async function hostLobby() {
 beforeEach(() => {
   vi.mocked(isAuthenticated).mockResolvedValue(false);
   vi.mocked(isSeatActiveElsewhere).mockResolvedValue(false);
-  vi.mocked(loadSongsFromPlaylists).mockResolvedValue([]);
+  vi.mocked(loadSongsFromPlaylists).mockResolvedValue({ songs: [], unavailablePlaylists: [] });
 });
 
 describe('start screens', () => {
@@ -186,15 +187,31 @@ describe('coming back', () => {
 
 describe('starting a game', () => {
   it('loads songs without the played ones and starts', async () => {
-    vi.mocked(loadSongsFromPlaylists).mockResolvedValue(
-      Array.from({ length: 20 }, (_, i) => song(1960 + i))
-    );
+    vi.mocked(loadSongsFromPlaylists).mockResolvedValue({
+      songs: Array.from({ length: 20 }, (_, i) => song(1960 + i)),
+      unavailablePlaylists: [],
+    });
     await hostLobby();
     fireEvent.click(screen.getByText('Spiel starten →'));
     expect(emittedPayloads('start_loading')).toHaveLength(1);
     await waitFor(() => expect(emittedPayloads('start_game')).toHaveLength(1));
     expect(loadSongsFromPlaylists).toHaveBeenCalledWith(['a'], 18, [], expect.any(AbortSignal));
     expect(emittedPayloads('start_game')[0]).toMatchObject({ rounds: 5, audioMode: 'all' });
+  });
+
+  it('starts with the other playlists but says which one Spotify refused', async () => {
+    vi.mocked(loadSongsFromPlaylists).mockResolvedValue({
+      songs: Array.from({ length: 20 }, (_, i) => song(1960 + i)),
+      unavailablePlaylists: [{ id: 'a', problem: 'spotify_owned' }],
+    });
+    await hostLobby();
+    fireEvent.click(screen.getByText('Spiel starten →'));
+    await waitFor(() => expect(emittedPayloads('start_game')).toHaveLength(1));
+    expect(
+      screen.getByText(
+        'Nicht geladen: „Playlist a“ – Playlisten von Spotify selbst sind für Tuneline gesperrt.'
+      )
+    ).toBeInTheDocument();
   });
 
   it('goes back to the lobby when there are too few songs', async () => {
@@ -207,10 +224,27 @@ describe('starting a game', () => {
     expect(await screen.findByText('Spiel starten →', {}, { timeout: 3000 })).toBeInTheDocument();
   });
 
+  it('shows why there were too few songs when Spotify refused the playlist', async () => {
+    vi.mocked(loadSongsFromPlaylists).mockResolvedValue({
+      songs: [],
+      unavailablePlaylists: [{ id: 'a', problem: 'not_owned' }],
+    });
+    await hostLobby();
+    fireEvent.click(screen.getByText('Spiel starten →'));
+    expect(
+      await screen.findByText(
+        'Nicht geladen: „Playlist a“ – Spotify gibt nur Songs aus eigenen oder gemeinsamen Playlisten frei.'
+      )
+    ).toBeInTheDocument();
+    expect(emittedPayloads('cancel_loading')).toHaveLength(1);
+  });
+
   it('lets the host cancel while songs load', async () => {
     vi.mocked(loadSongsFromPlaylists).mockImplementation(
       (_ids, _target, _exclude, signal) =>
-        new Promise((resolve) => signal.addEventListener('abort', () => resolve([])))
+        new Promise((resolve) =>
+          signal.addEventListener('abort', () => resolve({ songs: [], unavailablePlaylists: [] }))
+        )
     );
     await hostLobby();
     fireEvent.click(screen.getByText('Spiel starten →'));

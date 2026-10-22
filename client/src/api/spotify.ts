@@ -1,4 +1,18 @@
-import type { SpotifyPlaylist, SongFull } from '@tuneline/shared';
+import type { SongsResponse, SpotifyPlaylist, SpotifyProblem } from '@tuneline/shared';
+
+/** Why the playlist list stayed empty: Spotify's reason, or an expired login (HTTP 401). */
+export type PlaylistsProblem = SpotifyProblem | 'logged_out';
+
+export interface PlaylistsResult {
+  playlists: SpotifyPlaylist[];
+  problem: PlaylistsProblem | null;
+}
+
+const SPOTIFY_PROBLEMS: readonly string[] = [
+  'not_allowlisted',
+  'quota',
+  'unavailable',
+] satisfies SpotifyProblem[];
 
 export async function redirectToSpotify(): Promise<void> {
   const res = await fetch('/api/auth/login');
@@ -20,13 +34,18 @@ export async function logout(): Promise<void> {
   await fetch('/api/auth/logout', { method: 'POST' });
 }
 
-export async function getUserPlaylists(): Promise<SpotifyPlaylist[]> {
+export async function getUserPlaylists(): Promise<PlaylistsResult> {
   try {
     const res = await fetch('/api/playlists');
-    if (!res.ok) return [];
-    return (await res.json()) as SpotifyPlaylist[];
+    if (res.ok) return { playlists: (await res.json()) as SpotifyPlaylist[], problem: null };
+    if (res.status === 401) return { playlists: [], problem: 'logged_out' };
+    const { error } = (await res.json().catch(() => ({}))) as { error?: string };
+    const problem = SPOTIFY_PROBLEMS.includes(error ?? '')
+      ? (error as SpotifyProblem)
+      : 'unavailable';
+    return { playlists: [], problem };
   } catch {
-    return [];
+    return { playlists: [], problem: 'unavailable' };
   }
 }
 
@@ -36,7 +55,8 @@ export async function loadSongsFromPlaylists(
   target: number,
   excludeIds: string[],
   signal: AbortSignal
-): Promise<SongFull[]> {
+): Promise<SongsResponse> {
+  const nothing: SongsResponse = { songs: [], unavailablePlaylists: [] };
   try {
     const res = await fetch('/api/songs', {
       method: 'POST',
@@ -44,9 +64,9 @@ export async function loadSongsFromPlaylists(
       body: JSON.stringify({ playlistIds, target, excludeIds }),
       signal,
     });
-    if (!res.ok) return [];
-    return (await res.json()) as SongFull[];
+    if (!res.ok) return nothing;
+    return (await res.json()) as SongsResponse;
   } catch {
-    return [];
+    return nothing;
   }
 }

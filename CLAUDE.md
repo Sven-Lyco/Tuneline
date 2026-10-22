@@ -43,6 +43,7 @@ Tuneline/
         audio.ts            playAudio, stopAudio, toggleAudio, getVolume, setVolume
                             (iTunes Preview via HTMLAudioElement; Lautstärke in localStorage)
         roomStorage.ts      Sitzplatz in sessionStorage (Reload) + lastRoom in localStorage (Zurück-Button)
+        spotifyMessages.ts  Texte, wenn Spotify Playlists oder Songs verweigert
         tabPresence.ts      BroadcastChannel: hält ein anderer Tab diesen Platz? (Duplikat-Schutz)
       hooks/
         useGameAudio.ts     playing, volume, startSong, stopSong, toggle, changeVolume
@@ -129,8 +130,10 @@ Tuneline/
 - PKCE-Flow läuft **server-seitig**: Verifier im Server-Memory, Token im Server (nie im Browser)
 - Session via httpOnly-Cookie (`tuneline_session`), Token nie an den Client weitergegeben
 - **Development Mode (Stand 2026):** App-Besitzer braucht Premium, max. 5 Spotify-Nutzer (Hosts) über die User-Management-Allowlist im Dashboard; Gäste loggen sich nie bei Spotify ein
-- Client-IDs ab 11.02.2026 bekommen Songs nur aus eigenen/kollaborativen Playlists über `/playlists/{id}/items` (max. 50 pro Seite); `server/src/spotify.ts` nutzt noch `/tracks` — läuft nur mit älteren Client-IDs, solange Spotify die Umstellung für Bestands-Apps aufschiebt. Spotify-eigene Playlists sind für Dev-Mode-Apps gesperrt
-- iTunes Search API: offiziell ca. 20 Anfragen/Minute pro IP (gilt für die Server-IP)
+- Client-IDs ab 11.02.2026 bekommen Songs nur aus eigenen/kollaborativen Playlists; Spotify-eigene Playlists sind für Dev-Mode-Apps gesperrt
+- `server/src/spotify.ts` liest Songs über `/playlists/{id}/items` (max. 50 pro Seite, Song unter `item` oder `track`); wird die erste Seite abgelehnt, Rückfall auf das alte `/tracks` (Log: `playlist_items_fallback`)
+- Spotify-Fehler gehen mit Grund an den Client: `/api/playlists` → `not_allowlisted` (403) / `quota` (429) / `unavailable` (502); `/api/songs` → `SongsResponse.unavailablePlaylists` mit `not_owned` / `spotify_owned` / `quota` / `unavailable` (Texte in `client/src/utils/spotifyMessages.ts`)
+- iTunes Search API: offiziell ca. 20 Anfragen/Minute pro IP (gilt für die Server-IP); `songs_loaded` loggt `itunesLookups`/`itunesFailed` — im Test (Okt. 2026) 40 Suchen in ~5 s ohne Fehler, daher noch keine Drosselung
 - Hintergrund mit Quellen (Quota, Playlist-Zugriff, Developer Policy, iTunes-Bedingungen, Stand Oktober 2026): `docs/research/spotify-itunes-api-regeln.md`, Rohnotizen in `docs/research/notes/`
 
 ## Multiplayer-Architektur

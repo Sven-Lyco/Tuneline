@@ -58,10 +58,24 @@ function cacheSet(key: string, value: string | null): void {
 
 // ── Exported function for internal server use (e.g. server-side song loading) ─
 
-export async function findPreview(artist: string, title: string): Promise<string | null> {
+/**
+ * iTunes searches that went out (cache misses) and how many failed. Apple allows roughly 20 per
+ * minute per IP; the failures show whether song loading runs into that limit.
+ */
+export interface PreviewStats {
+  lookups: number;
+  failed: number;
+}
+
+export async function findPreview(
+  artist: string,
+  title: string,
+  stats?: PreviewStats,
+): Promise<string | null> {
   const cacheKey = `${artist}|${title}`;
 
   if (cache.has(cacheKey)) return cache.get(cacheKey) ?? null;
+  if (stats) stats.lookups++;
 
   try {
     const query = encodeURIComponent(`${artist} ${title}`);
@@ -72,6 +86,7 @@ export async function findPreview(artist: string, title: string): Promise<string
 
     // Not cached: 403/429/5xx are transient (iTunes throttling), not "no preview".
     if (!response.ok) {
+      if (stats) stats.failed++;
       logger.warn({ artist, title, status: response.status }, 'itunes_fetch_error');
       return null;
     }
@@ -82,6 +97,7 @@ export async function findPreview(artist: string, title: string): Promise<string
     cacheSet(cacheKey, previewUrl);
     return previewUrl;
   } catch (err) {
+    if (stats) stats.failed++;
     logger.warn({ artist, title, err }, 'itunes_fetch_exception');
     return null;
   }

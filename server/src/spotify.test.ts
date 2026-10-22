@@ -2,16 +2,17 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { createSession, getSession } from './auth.js';
 
 vi.mock('./preview.js', () => ({
-  findPreview: vi.fn(async (_artist: string, title: string) =>
-    title.includes('NoPreview') ? null : `https://audio-ssl.itunes.apple.com/${encodeURIComponent(title)}`,
-  ),
+  findPreview: vi.fn(async (_artist: string, title: string, stats?: { lookups: number }) => {
+    if (stats) stats.lookups++;
+    return title.includes('NoPreview') ? null : `https://audio-ssl.itunes.apple.com/${encodeURIComponent(title)}`;
+  }),
 }));
 
 type SpotifyModule = typeof import('./spotify.js');
 let spotify: SpotifyModule;
 
 const fetchMock = vi.fn();
-const json = (body: unknown, ok = true) => ({ ok, status: ok ? 200 : 500, json: async () => body });
+const json = (body: unknown, ok = true, status = ok ? 200 : 500) => ({ ok, status, json: async () => body });
 
 interface TrackInput {
   id?: string;
@@ -40,14 +41,22 @@ const item = (t: TrackInput | null) =>
         },
       };
 
-/** Routes Spotify API calls to canned playlist pages keyed by path prefix. */
+/** `/items` for apps created since Feb 2026: the song under `item`, `track` only a boolean. */
+const newItem = (t: TrackInput) => ({ item: item(t).track, track: true });
+
+/** Routes Spotify API calls to canned pages keyed by path prefix; a number answers with that status. */
 function spotifyPages(pages: Record<string, unknown>) {
   fetchMock.mockImplementation(async (url: string) => {
     const path = url.replace('https://api.spotify.com/v1', '');
     const key = Object.keys(pages).find((k) => path.startsWith(k));
-    return key ? json(pages[key]) : json({}, false);
+    if (key === undefined) return json({}, false);
+    const page = pages[key];
+    return typeof page === 'number' ? json({}, false, page) : json(page);
   });
 }
+
+const requestedPaths = () =>
+  fetchMock.mock.calls.map(([url]) => String(url).replace('https://api.spotify.com/v1', ''));
 
 beforeAll(async () => {
   // spotify.ts starts its cleanup interval on import, so fake timers must be on first.
@@ -138,25 +147,38 @@ describe('getValidToken', () => {
 });
 
 describe('getUserPlaylists', () => {
-  it('maps playlists and tolerates missing covers', async () => {
+  it('maps playlists in the old and the new format and tolerates missing covers', async () => {
     fetchMock.mockResolvedValueOnce(
       json({
         items: [
           { id: 'p1', name: 'Rock', images: [{ url: 'https://img' }], tracks: { total: 3 }, owner: { display_name: 'Me' } },
-          { id: 'p2', name: 'Empty', images: [], tracks: { total: 0 }, owner: { display_name: 'Me' } },
+          { id: 'p2', name: 'Empty', images: null, items: { total: 0 }, owner: { display_name: 'Me' } },
+          { id: 'p3', name: 'New', images: [], items: { total: 7 }, owner: { display_name: 'Me' } },
         ],
       }),
     );
-    expect(await spotify.getUserPlaylists('token')).toEqual([
-      { id: 'p1', name: 'Rock', coverUrl: 'https://img', trackCount: 3, ownerName: 'Me' },
-      { id: 'p2', name: 'Empty', coverUrl: null, trackCount: 0, ownerName: 'Me' },
-    ]);
+    expect(await spotify.getUserPlaylists('token')).toEqual({
+      ok: true,
+      playlists: [
+        { id: 'p1', name: 'Rock', coverUrl: 'https://img', trackCount: 3, ownerName: 'Me' },
+        { id: 'p2', name: 'Empty', coverUrl: null, trackCount: 0, ownerName: 'Me' },
+        { id: 'p3', name: 'New', coverUrl: null, trackCount: 7, ownerName: 'Me' },
+      ],
+    });
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ headers: { Authorization: 'Bearer token' } });
   });
 
-  it('returns nothing when Spotify fails', async () => {
-    fetchMock.mockResolvedValueOnce(json({}, false));
-    expect(await spotify.getUserPlaylists('token')).toEqual([]);
+  it('says why Spotify refused the list', async () => {
+    const problemFor = async (answer: unknown) => {
+      fetchMock.mockReset();
+      if (answer instanceof Error) fetchMock.mockRejectedValueOnce(answer);
+      else fetchMock.mockResolvedValueOnce(answer);
+      return spotify.getUserPlaylists('token');
+    };
+    expect(await problemFor(json({}, false, 403))).toEqual({ ok: false, problem: 'not_allowlisted' });
+    expect(await problemFor(json({}, false, 429))).toEqual({ ok: false, problem: 'quota' });
+    expect(await problemFor(json({}, false, 500))).toEqual({ ok: false, problem: 'unavailable' });
+    expect(await problemFor(new Error('timeout'))).toEqual({ ok: false, problem: 'unavailable' });
   });
 });
 
@@ -181,28 +203,70 @@ describe('loadSongs', () => {
         next: null,
       },
     });
-    const result = await load(['p1'], 50);
-    expect(result.map((s) => [s.title, s.year])).toEqual(
+    const { songs, previewStats } = await load(['p1'], 50);
+    expect(songs.map((s) => [s.title, s.year])).toEqual(
       expect.arrayContaining([
         ['Classic', 1975],
         ['Live Take', 1980],
       ]),
     );
-    expect(result).toHaveLength(2);
-    expect(result.find((s) => s.title === 'Live Take')).toMatchObject({ artist: 'Unknown', cover: null });
+    expect(songs).toHaveLength(2);
+    expect(songs.find((s) => s.title === 'Live Take')).toMatchObject({ artist: 'Unknown', cover: null });
+    expect(previewStats.lookups).toBe(3); // Classic, NoPreview Song, Live Take
   });
 
-  it('follows pagination, dedupes across playlists and stops on errors', async () => {
+  it('follows pagination, dedupes across playlists and keeps songs when a later page fails', async () => {
     spotifyPages({
-      '/playlists/p1/tracks?fields': {
+      '/playlists/p1/items': {
         items: [item({ id: 'a', name: 'A' })],
         next: 'https://api.spotify.com/v1/playlists/p1/page2',
       },
-      '/playlists/p1/page2': { items: [item({ id: 'b', name: 'B' })], next: null },
+      '/playlists/p1/page2': { items: [item({ id: 'b', name: 'B' })], next: 'https://api.spotify.com/v1/gone' },
       '/playlists/p2/': { items: [item({ id: 'a', name: 'A' })], next: null },
     });
-    const result = await load(['p1', 'p2', 'broken'], 50);
-    expect(result.map((s) => s.id).sort()).toEqual(['a', 'b']);
+    const { songs, unavailablePlaylists } = await load(['p1', 'p2'], 50);
+    expect(songs.map((s) => s.id).sort()).toEqual(['a', 'b']);
+    expect(unavailablePlaylists).toEqual([]);
+  });
+
+  it('reads /items in pages of 50, with the song under item (new apps) or track (older apps)', async () => {
+    spotifyPages({
+      '/playlists/p1/items': { items: [newItem({ id: 'n', name: 'New' }), item({ id: 'o', name: 'Old' })], next: null },
+    });
+    const { songs } = await load(['p1'], 50);
+    expect(songs.map((s) => s.id).sort()).toEqual(['n', 'o']);
+    expect(requestedPaths()).toEqual(['/playlists/p1/items?limit=50']);
+  });
+
+  it('falls back to /tracks when an app gets no answer from /items', async () => {
+    spotifyPages({
+      '/playlists/p1/items': 404,
+      '/playlists/p1/tracks': { items: [item({ id: 'a', name: 'A' })], next: null },
+    });
+    const { songs, unavailablePlaylists } = await load(['p1'], 50);
+    expect(songs.map((s) => s.id)).toEqual(['a']);
+    expect(unavailablePlaylists).toEqual([]);
+    expect(requestedPaths()[1]).toMatch(/^\/playlists\/p1\/tracks\?fields=.*&limit=100$/);
+  });
+
+  it('says which playlists Spotify refused and why', async () => {
+    spotifyPages({
+      '/playlists/ok/': { items: [item({ id: 'a', name: 'A' })], next: null },
+      '/playlists/followed/': 403,
+      '/playlists/editorial/': 404,
+      '/playlists/busy/': 429,
+      '/playlists/down/': 503,
+    });
+    const { songs, unavailablePlaylists } = await load(['ok', 'followed', 'editorial', 'busy', 'down'], 50);
+    expect(songs.map((s) => s.id)).toEqual(['a']);
+    expect(unavailablePlaylists).toEqual([
+      { id: 'followed', problem: 'not_owned' },
+      { id: 'editorial', problem: 'spotify_owned' },
+      { id: 'busy', problem: 'quota' },
+      { id: 'down', problem: 'unavailable' },
+    ]);
+    // An exhausted quota isn't asked a second time via /tracks.
+    expect(requestedPaths().filter((p) => p.startsWith('/playlists/busy/'))).toHaveLength(1);
   });
 
   it('uses already played songs only as a reserve', async () => {
@@ -213,10 +277,10 @@ describe('loadSongs', () => {
       },
     });
     const fresh = await load(['p1'], 2, ['a', 'b']);
-    expect(fresh.map((s) => s.id).sort()).toEqual(['c', 'd']);
+    expect(fresh.songs.map((s) => s.id).sort()).toEqual(['c', 'd']);
 
     const withReserve = await load(['p1'], 10, ['a', 'b']);
-    expect(withReserve).toHaveLength(4);
+    expect(withReserve.songs).toHaveLength(4);
   });
 
   it('stops once the target is reached or the request is aborted', async () => {
@@ -226,10 +290,10 @@ describe('loadSongs', () => {
         next: null,
       },
     });
-    expect(await load(['p1'], 5)).toHaveLength(5);
+    expect((await load(['p1'], 5)).songs).toHaveLength(5);
 
     const aborted = new AbortController();
     aborted.abort();
-    expect(await load(['p1'], 5, [], aborted.signal)).toEqual([]);
+    expect((await load(['p1'], 5, [], aborted.signal)).songs).toEqual([]);
   });
 });

@@ -5,7 +5,7 @@ import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
-import type { ClientToServerEvents, ServerToClientEvents } from '@tuneline/shared';
+import type { ClientToServerEvents, ServerToClientEvents, SongsResponse } from '@tuneline/shared';
 import type { TurnResult } from './types.js';
 import { REACTION_EMOJIS } from '@tuneline/shared';
 import { join } from 'path';
@@ -129,9 +129,15 @@ export function createTunelineServer({ frontendOrigin, isProd }: TunelineServerO
       return;
     }
 
-    const playlists = await getUserPlaylists(token);
-    logger.debug({ count: playlists.length }, 'playlists_fetched');
-    res.json(playlists);
+    const result = await getUserPlaylists(token);
+    if (!result.ok) {
+      logger.warn({ problem: result.problem }, 'playlists_refused');
+      const status = { not_allowlisted: 403, quota: 429, unavailable: 502 }[result.problem];
+      res.status(status).json({ error: result.problem });
+      return;
+    }
+    logger.debug({ count: result.playlists.length }, 'playlists_fetched');
+    res.json(result.playlists);
   });
 
   app.post('/api/songs', async (req, res) => {
@@ -172,10 +178,26 @@ export function createTunelineServer({ frontendOrigin, isProd }: TunelineServerO
       if (!res.writableFinished) abort.abort();
     });
 
-    const songs = await loadSongs(token, playlistIds, target, new Set(excludeIds), abort.signal);
+    const { songs, unavailablePlaylists, previewStats } = await loadSongs(
+      token,
+      playlistIds,
+      target,
+      new Set(excludeIds),
+      abort.signal,
+    );
     if (abort.signal.aborted) return;
-    logger.info({ playlists: playlistIds.length, songs: songs.length }, 'songs_loaded');
-    res.json(songs);
+    logger.info(
+      {
+        playlists: playlistIds.length,
+        songs: songs.length,
+        unavailablePlaylists,
+        // Measures whether loading hits iTunes' ~20 requests/min before adding a throttle.
+        itunesLookups: previewStats.lookups,
+        itunesFailed: previewStats.failed,
+      },
+      'songs_loaded',
+    );
+    res.json({ songs, unavailablePlaylists } satisfies SongsResponse);
   });
 
   app.get('/api/preview', previewHandler);

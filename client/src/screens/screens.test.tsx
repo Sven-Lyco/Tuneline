@@ -14,7 +14,7 @@ import { getUserPlaylists, redirectToSpotify } from '../api/spotify';
 import { gameState, lobby, player, playlist, song } from '../test/data';
 
 vi.mock('../api/spotify', () => ({
-  getUserPlaylists: vi.fn(async () => []),
+  getUserPlaylists: vi.fn(async () => ({ playlists: [], problem: null })),
   redirectToSpotify: vi.fn(async () => {}),
 }));
 
@@ -72,10 +72,10 @@ describe('JoinScreen', () => {
 
 describe('PlaylistScreen', () => {
   it('loads playlists and lets the host pick some', async () => {
-    vi.mocked(getUserPlaylists).mockResolvedValueOnce([
-      playlist('a'),
-      playlist('b', { coverUrl: null }),
-    ]);
+    vi.mocked(getUserPlaylists).mockResolvedValueOnce({
+      playlists: [playlist('a'), playlist('b', { coverUrl: null })],
+      problem: null,
+    });
     const onToggle = vi.fn();
     const onConfirm = vi.fn();
     const onLogout = vi.fn();
@@ -106,6 +106,18 @@ describe('PlaylistScreen', () => {
     fireEvent.click(screen.getByText('Abmelden'));
     expect(onConfirm).toHaveBeenCalled();
     expect(onLogout).toHaveBeenCalled();
+  });
+
+  it('explains why Spotify gave no playlists', async () => {
+    vi.mocked(getUserPlaylists).mockResolvedValueOnce({
+      playlists: [],
+      problem: 'not_allowlisted',
+    });
+    render(
+      <PlaylistScreen selected={[]} onToggle={() => {}} onConfirm={() => {}} onLogout={() => {}} />
+    );
+    expect(await screen.findByRole('alert')).toHaveTextContent(/nicht freigeschaltet/);
+    expect(screen.queryByText('Keine Playlisten gefunden.')).not.toBeInTheDocument();
   });
 
   it('says so when there are no playlists', async () => {

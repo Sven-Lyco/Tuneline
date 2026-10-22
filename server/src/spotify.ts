@@ -10,6 +10,7 @@ import { type SessionData, getSession, updateSession } from './auth.js';
 import { logger } from './logger.js';
 import { type PreviewStats, findPreview } from './preview.js';
 import { shuffle } from './utils.js';
+import { songKey, versionOf } from './versions.js';
 
 const SCOPES = [
   'playlist-read-private',
@@ -196,6 +197,8 @@ export async function getUserPlaylists(token: string): Promise<PlaylistsResult> 
 interface SpotifyTrack {
   id: string;
   name: string;
+  duration_ms?: number;
+  external_ids?: { isrc?: string };
   artists: Array<{ name: string }>;
   album: {
     name: string;
@@ -216,7 +219,6 @@ interface SpotifyTracksResponse {
 }
 
 const YEAR_PATTERN = /[\s–-]+[\[(]?(?:remaster(?:ed)?|live|single version|anniversary|deluxe)?[\s]?\d{4}[\s]?(?:remaster(?:ed)?|version|edit|mix|anniversary)?[\])]?$/i;
-const REMASTER_PATTERN = /\bremaster(?:ed|ing)?\b/i;
 // Re-releases carry the reissue date, not the song's original year.
 const REISSUE_ALBUM_PATTERN =
   /\b(?:greatest hits|best of|very best|essential|anniversary|deluxe|expanded|remaster(?:ed)?|collection|anthology)\b/i;
@@ -225,16 +227,15 @@ function sanitizeTitle(raw: string): string {
   return raw.replace(YEAR_PATTERN, '').trim();
 }
 
-function isRemastered(rawTitle: string): boolean {
-  return REMASTER_PATTERN.test(rawTitle);
-}
-
 interface TrackData {
   id: string;
   title: string;
   artist: string;
   year: number;
   cover: string | null;
+  durationMs: number; // 0 = unknown
+  isrc: string | null; // the recording's ID: the same on a single, its album and best-ofs
+  key: string; // songKey(): the same for every version of the song
 }
 
 function parseTrack(entry: SpotifyTracksResponse['items'][number]): TrackData | null {
@@ -245,7 +246,8 @@ function parseTrack(entry: SpotifyTracksResponse['items'][number]): TrackData | 
         ? entry.track
         : null;
   if (!t?.id || !t.name) return null;
-  if (isRemastered(t.name)) return null;
+  // Remixes, live takes, re-recordings and remasters carry another sound or year than the original.
+  if (versionOf(t.name, t.album?.name) !== 'original') return null;
   if (t.album?.album_type === 'compilation' || REISSUE_ALBUM_PATTERN.test(t.album?.name ?? '')) {
     return null;
   }
@@ -253,12 +255,17 @@ function parseTrack(entry: SpotifyTracksResponse['items'][number]): TrackData | 
   const year = t.album?.release_date ? parseInt(t.album.release_date.split('-')[0], 10) : 0;
   if (year < 1900 || year > 2100) return null;
 
+  const title = sanitizeTitle(t.name);
+  const artist = t.artists?.[0]?.name ?? 'Unknown';
   return {
     id: t.id,
-    title: sanitizeTitle(t.name),
-    artist: t.artists?.[0]?.name ?? 'Unknown',
+    title,
+    artist,
     year,
     cover: t.album?.images?.[0]?.url ?? null,
+    durationMs: t.duration_ms ?? 0,
+    isrc: t.external_ids?.isrc ?? null,
+    key: songKey(artist, title),
   };
 }
 
@@ -279,7 +286,8 @@ async function getPlaylistTracks(
   playlistId: string,
 ): Promise<{ tracks: TrackData[]; problem: PlaylistProblem | null }> {
   const id = encodeURIComponent(playlistId);
-  const legacyFields = 'items(track(id,name,artists(name),album(name,album_type,release_date,images))),next';
+  const legacyFields =
+    'items(track(id,name,duration_ms,external_ids(isrc),artists(name),album(name,album_type,release_date,images))),next';
   let first = await spotifyFetch<SpotifyTracksResponse>(token, `/playlists/${id}/items?limit=50`);
   // A 429 means the app's quota is used up; asking again would only make it worse.
   if (!first.ok && first.status !== 429) {
@@ -316,6 +324,10 @@ async function getPlaylistTracks(
 
 export interface LoadSongsResult extends SongsResponse {
   previewStats: PreviewStats;
+  /** Songs whose year came from iTunes, because Spotify only knew a later release. */
+  yearsCorrected: number;
+  /** Other versions of a song already in the pile (other playlist, single vs. album …). */
+  duplicatesRemoved: number;
 }
 
 /** `excludeIds` (songs from earlier games) are only used once the fresh songs run out. */
@@ -331,39 +343,69 @@ export async function loadSongs(
     problem ? [{ id: playlistIds[i], problem }] : [],
   );
 
-  const seenIds = new Set<string>();
+  // A song comes once, whichever version or playlist it's in: same Spotify ID, same recording
+  // (ISRC) or same artist and title.
+  const seen = new Set<string>();
   const allTracks: TrackData[] = [];
+  let duplicatesRemoved = 0;
 
   for (const { tracks } of byPlaylist) {
     for (const track of shuffle(tracks)) {
-      if (!seenIds.has(track.id)) {
-        seenIds.add(track.id);
-        allTracks.push(track);
+      const ids = [track.id, track.key, ...(track.isrc ? [`isrc:${track.isrc}`] : [])];
+      if (ids.some((id) => seen.has(id))) {
+        duplicatesRemoved++;
+        continue;
       }
+      for (const id of ids) seen.add(id);
+      allTracks.push(track);
     }
   }
 
-  const shuffled = [
-    ...shuffle(allTracks.filter((t) => !excludeIds.has(t.id))),
-    ...shuffle(allTracks.filter((t) => excludeIds.has(t.id))),
-  ];
+  // Another version of a played song counts as played, too.
+  const playedKeys = new Set(
+    byPlaylist.flatMap(({ tracks }) => tracks.filter((t) => excludeIds.has(t.id)).map((t) => t.key)),
+  );
+  const played = (t: TrackData) => excludeIds.has(t.id) || playedKeys.has(t.key);
+  const shuffled = [...shuffle(allTracks.filter((t) => !played(t))), ...shuffle(allTracks.filter(played))];
 
   const BATCH = 10;
   const result: SongFull[] = [];
   const previewStats: PreviewStats = { lookups: 0, failed: 0 };
+  const previews = new Set<string>();
+  const corrected = new Set<string>();
 
   for (let i = 0; i < shuffled.length && result.length < target && !signal.aborted; i += BATCH) {
     const batch = shuffled.slice(i, i + BATCH);
     const enriched = await Promise.all(
-      batch.map(async (track): Promise<SongFull | null> => {
-        const preview = await findPreview(track.artist, track.title, previewStats);
-        if (!preview) return null;
-        return { ...track, preview };
+      batch.map(async (track): Promise<(SongFull & { preview: string }) | null> => {
+        const match = await findPreview(track.artist, track.title, track.durationMs, previewStats);
+        if (!match) return null;
+        // Spotify dates a song by its album, so a reissue or best-of shows a later year.
+        const year = match.originalYear !== null && match.originalYear < track.year ? match.originalYear : track.year;
+        if (year !== track.year) corrected.add(track.id);
+        const { id, title, artist, cover } = track;
+        return { id, title, artist, year, cover, preview: match.preview };
       })
     );
-    result.push(...enriched.filter((s): s is SongFull => s !== null));
+    for (const song of enriched) {
+      if (!song) continue;
+      // Same preview, same recording — under a title too different for songKey.
+      if (previews.has(song.preview)) {
+        duplicatesRemoved++;
+        continue;
+      }
+      previews.add(song.preview);
+      result.push(song);
+    }
   }
 
   // The last batch can overshoot into reserve songs; fresh ones come first, so trim from the end.
-  return { songs: result.slice(0, target), unavailablePlaylists, previewStats };
+  const songs = result.slice(0, target);
+  return {
+    songs,
+    unavailablePlaylists,
+    previewStats,
+    yearsCorrected: songs.filter((s) => corrected.has(s.id)).length,
+    duplicatesRemoved,
+  };
 }

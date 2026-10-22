@@ -1,10 +1,19 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSession, getSession } from './auth.js';
+import { findPreview } from './preview.js';
 
+/** Title → the year iTunes knows the song from (none: iTunes has no year). */
+const itunesYears = vi.hoisted(() => new Map<string, number>());
+
+// The preview URL depends on the title only, so two tracks with the same title share a preview.
 vi.mock('./preview.js', () => ({
-  findPreview: vi.fn(async (_artist: string, title: string, stats?: { lookups: number }) => {
+  findPreview: vi.fn(async (_artist: string, title: string, _durationMs: number, stats?: { lookups: number }) => {
     if (stats) stats.lookups++;
-    return title.includes('NoPreview') ? null : `https://audio-ssl.itunes.apple.com/${encodeURIComponent(title)}`;
+    if (title.includes('NoPreview')) return null;
+    return {
+      preview: `https://audio-ssl.itunes.apple.com/${encodeURIComponent(title)}`,
+      originalYear: itunesYears.get(title) ?? null,
+    };
   }),
 }));
 
@@ -22,6 +31,7 @@ interface TrackInput {
   albumType?: string;
   albumName?: string;
   images?: Array<{ url: string }>;
+  isrc?: string;
 }
 
 const item = (t: TrackInput | null) =>
@@ -31,6 +41,8 @@ const item = (t: TrackInput | null) =>
         track: {
           id: t.id ?? t.name,
           name: t.name,
+          duration_ms: 200_000,
+          external_ids: t.isrc ? { isrc: t.isrc } : {},
           artists: t.artists ?? [{ name: 'Band' }],
           album: {
             name: t.albumName ?? 'Album',
@@ -67,6 +79,7 @@ beforeAll(async () => {
 beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal('fetch', fetchMock);
+  itunesYears.clear();
 });
 
 afterEach(() => {
@@ -215,6 +228,66 @@ describe('loadSongs', () => {
     expect(previewStats.lookups).toBe(3); // Classic, NoPreview Song, Live Take
   });
 
+  it('drops remixes, live takes, re-recordings and remasters, but not titles that only sound like one', async () => {
+    spotifyPages({
+      '/playlists/p1/': {
+        items: [
+          item({ name: 'Cheerleader - Felix Jaehn Remix Radio Edit' }),
+          item({ name: "Love Story (Taylor's Version)" }),
+          item({ name: 'Bohemian Rhapsody - Live at Wembley Stadium' }),
+          item({ name: 'About a Girl', albumName: 'MTV Unplugged in New York' }),
+          item({ name: 'Gracias a la Vida - Remasterizado' }),
+          item({ name: 'Live and Let Die' }),
+          item({ name: 'Levels - Original Mix' }),
+        ],
+        next: null,
+      },
+    });
+    const { songs } = await load(['p1'], 50);
+    expect(songs.map((s) => s.title).sort()).toEqual(['Levels - Original Mix', 'Live and Let Die']);
+  });
+
+  it('counts a song once, whichever version or playlist it comes from', async () => {
+    spotifyPages({
+      '/playlists/p1/': {
+        items: [
+          item({ id: 'a', name: 'Suga Suga', artists: [{ name: 'Baby Bash' }], isrc: 'USA1' }),
+          item({ id: 'b', name: 'Other', isrc: 'USB2' }),
+        ],
+        next: null,
+      },
+      '/playlists/p2/': {
+        items: [
+          item({ id: 'c', name: 'Suga Suga - Radio Edit', artists: [{ name: 'Baby Bash' }] }), // same artist and title
+          item({ id: 'd', name: 'Renamed On A Best-Of', isrc: 'USB2' }), // same recording
+          item({ id: 'e', name: 'Other', artists: [{ name: 'Band & Friend' }] }), // same preview
+        ],
+        next: null,
+      },
+    });
+    const { songs, duplicatesRemoved } = await load(['p1', 'p2'], 50);
+    expect(songs.map((s) => s.title).sort()).toEqual(['Other', 'Suga Suga']);
+    expect(songs.map((s) => s.id)).toContain('a');
+    expect(duplicatesRemoved).toBe(3);
+  });
+
+  it('takes the year from iTunes when Spotify only knows a later release', async () => {
+    itunesYears.set('Classic Hit', 1969).set('New Song', 2005);
+    spotifyPages({
+      '/playlists/p1/': {
+        items: [item({ name: 'Classic Hit', release: '2009-03-01' }), item({ name: 'New Song', release: '2001-01-01' })],
+        next: null,
+      },
+    });
+    const { songs, yearsCorrected } = await load(['p1'], 50);
+    expect(Object.fromEntries(songs.map((s) => [s.title, s.year]))).toEqual({ 'Classic Hit': 1969, 'New Song': 2001 });
+    expect(yearsCorrected).toBe(1);
+    // iTunes gets Spotify's length to tell recordings apart.
+    expect(findPreview).toHaveBeenCalledWith('Band', 'Classic Hit', 200_000, expect.anything());
+    // Only the song fields reach the client.
+    expect(Object.keys(songs[0]).sort()).toEqual(['artist', 'cover', 'id', 'preview', 'title', 'year']);
+  });
+
   it('follows pagination, dedupes across playlists and keeps songs when a later page fails', async () => {
     spotifyPages({
       '/playlists/p1/items': {
@@ -281,6 +354,15 @@ describe('loadSongs', () => {
 
     const withReserve = await load(['p1'], 10, ['a', 'b']);
     expect(withReserve.songs).toHaveLength(4);
+  });
+
+  it('counts another version of a played song as played', async () => {
+    spotifyPages({
+      '/playlists/p1/': { items: [item({ id: 'a', name: 'A' }), item({ id: 'b', name: 'B' })], next: null },
+      '/playlists/p2/': { items: [item({ id: 'a2', name: 'A - Radio Edit' })], next: null },
+    });
+    const { songs } = await load(['p1', 'p2'], 1, ['a2']);
+    expect(songs.map((s) => s.id)).toEqual(['b']);
   });
 
   it('stops once the target is reached or the request is aborted', async () => {

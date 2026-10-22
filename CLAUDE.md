@@ -115,6 +115,12 @@ Tuneline/
   .claude/skills/
     tuneline-browser-test/  Projekt-Skill: Ende-zu-Ende-Tests in Chrome (Testsongs, Bots, Handy-Breite)
 
+  .github/
+    ISSUE_TEMPLATE/         Issue-Formulare (Bug, Feature, Frage); leere Issues aus, Sicherheit privat melden
+    pull_request_template.md  PR-Vorlage (Pflicht, siehe unten)
+    scripts/check-pr-description.mjs  prüft die PR-Beschreibung gegen die Vorlage
+    workflows/              ci.yml, pr-description.yml, osv-scan*.yml
+
   Dockerfile                Multi-stage: baut client + server, served von Express
   docker-compose.yml        Lokales Dev mit Docker (optional)
   server/.env.example       Alle Server-Env-Variablen dokumentiert
@@ -207,6 +213,7 @@ Server → Client: room_created, room_joined, rejoin_failed, session_replaced, r
 - **Client** (`client/vite.config.js`, Block `test`): jsdom + Testing Library; `src/test/setup.ts` mockt `src/socket.ts` global durch `src/test/fakeSocket.ts` (`serverEmit()` simuliert Server-Events, `emittedPayloads()` prüft Emits)
 - **Coverage-Schwelle 80 %** (Statements, Branches, Functions, Lines) je Workspace — `npm run coverage` bricht darunter ab
 - **Pre-Commit-Hook** führt nach lint-staged `npm test` aus (~13 s); **CI** führt `npm run coverage` aus
+- **PR-Beschreibungen** (auch eigene per `gh pr create --body`) folgen `.github/pull_request_template.md`: Abschnitte „What and why“, „Related issue“, „How was this tested“ ausgefüllt, mindestens ein „Type of change“ und alle „Checklist“-Punkte angehakt — sonst schlägt der Check „PR description“ fehl (Bots ausgenommen)
 - **Browser-Tests** (Mehrspieler-Szenarien, Reload, Handy-Breite) laufen über den Projekt-Skill `tuneline-browser-test` — ohne Spotify-Login, mit iTunes-Testsongs und Bot-Spielern
 
 ## Scripts

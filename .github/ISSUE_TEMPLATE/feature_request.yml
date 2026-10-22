@@ -1,0 +1,58 @@
+name: Feature request
+description: An idea that would make Tuneline better.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea! Please describe the problem first — there's often more than one way to solve it.
+
+        Good to know: Tuneline is a party game for friends. Spotify only allows a few hosts per app and restricts what apps may do with its data, so some ideas can't be built with Spotify (background in `docs/research/`).
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or motivation
+      description: What is hard, annoying or missing today? Who runs into it — the host, guests, everyone?
+      placeholder: When we play on one TV, the guests can't see whose turn it is from the sofa.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How should it work? Sketches and screenshots are welcome.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Gameplay and rules
+        - Lobby and rooms
+        - Game screen and timeline
+        - Spotify, playlists and songs
+        - Audio
+        - Phones and layout
+        - Accessibility
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I searched the existing issues and this hasn't been suggested yet.
+          required: true
+        - label: I'd like to implement this myself (optional — we'll discuss the approach in this issue first).

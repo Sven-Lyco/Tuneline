@@ -288,18 +288,40 @@ describe('loadSongs', () => {
     expect(Object.keys(songs[0]).sort()).toEqual(['artist', 'cover', 'id', 'preview', 'title', 'year']);
   });
 
-  it('follows pagination, dedupes across playlists and keeps songs when a later page fails', async () => {
+  it('reads every page, dedupes across playlists and keeps songs when a later page fails', async () => {
+    // More specific paths first: spotifyPages takes the first matching prefix.
     spotifyPages({
-      '/playlists/p1/items': {
-        items: [item({ id: 'a', name: 'A' })],
-        next: 'https://api.spotify.com/v1/playlists/p1/page2',
-      },
-      '/playlists/p1/page2': { items: [item({ id: 'b', name: 'B' })], next: 'https://api.spotify.com/v1/gone' },
-      '/playlists/p2/': { items: [item({ id: 'a', name: 'A' })], next: null },
+      '/playlists/p1/items?limit=50&offset=50': { items: [item({ id: 'b', name: 'B' })], total: 100 },
+      '/playlists/p1/': { items: [item({ id: 'a', name: 'A' })], total: 100 },
+      '/playlists/p2/': { items: [item({ id: 'a', name: 'A' })], total: 1 },
+      '/playlists/p3/items?limit=50&offset=50': 500,
+      '/playlists/p3/': { items: [item({ id: 'c', name: 'C' })], total: 100 },
     });
-    const { songs, unavailablePlaylists } = await load(['p1', 'p2'], 50);
-    expect(songs.map((s) => s.id).sort()).toEqual(['a', 'b']);
+    const { songs, unavailablePlaylists } = await load(['p1', 'p2', 'p3'], 50);
+    expect(songs.map((s) => s.id).sort()).toEqual(['a', 'b', 'c']);
     expect(unavailablePlaylists).toEqual([]);
+  });
+
+  it('reads a long playlist up to 300 songs, from random pages instead of always its start', async () => {
+    const total = 500;
+    fetchMock.mockImplementation(async (url: string) => {
+      const offset = Number(new URL(url).searchParams.get('offset') ?? 0);
+      const items = Array.from({ length: 50 }, (_, i) => item({ id: `t${offset + i}`, name: `T${offset + i}` }));
+      return json({ items, total });
+    });
+    const pagesRead = new Set<number>();
+    for (let run = 0; run < 20; run++) {
+      fetchMock.mockClear();
+      await load(['p1'], 1);
+      const offsets = requestedPaths().map((p) => Number(new URL(p, 'https://x').searchParams.get('offset') ?? 0));
+      // The first page plus five more make 300 songs.
+      expect(offsets).toHaveLength(6);
+      expect(offsets[0]).toBe(0);
+      expect(new Set(offsets).size).toBe(6);
+      for (const o of offsets) pagesRead.add(o);
+    }
+    // Over 20 loads, every page of the playlist was read at some point (the end included).
+    expect([...pagesRead].sort((a, b) => a - b)).toEqual(Array.from({ length: 10 }, (_, i) => i * 50));
   });
 
   it('reads /items in pages of 50, with the song under item (new apps) or track (older apps)', async () => {
@@ -320,6 +342,15 @@ describe('loadSongs', () => {
     expect(songs.map((s) => s.id)).toEqual(['a']);
     expect(unavailablePlaylists).toEqual([]);
     expect(requestedPaths()[1]).toMatch(/^\/playlists\/p1\/tracks\?fields=.*&limit=100$/);
+  });
+
+  it('pages /tracks by 100', async () => {
+    spotifyPages({
+      '/playlists/p1/items': 404,
+      '/playlists/p1/tracks': { items: [item({ id: 'a', name: 'A' })], total: 150 },
+    });
+    await load(['p1'], 50);
+    expect(requestedPaths()[2]).toMatch(/^\/playlists\/p1\/tracks\?fields=.*total.*&limit=100&offset=100$/);
   });
 
   it('says which playlists Spotify refused and why', async () => {

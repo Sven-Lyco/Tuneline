@@ -215,7 +215,7 @@ interface SpotifyTracksResponse {
     item?: SpotifyTrack | null;
     track?: SpotifyTrack | boolean | null;
   }>;
-  next: string | null;
+  total?: number;
 }
 
 const YEAR_PATTERN = /[\s–-]+[\[(]?(?:remaster(?:ed)?|live|single version|anniversary|deluxe)?[\s]?\d{4}[\s]?(?:remaster(?:ed)?|version|edit|mix|anniversary)?[\])]?$/i;
@@ -276,10 +276,16 @@ function playlistProblem(status: number): PlaylistProblem {
   return 'unavailable';
 }
 
+// Songs read per playlist: 6 pages of /items. Plenty for a game, and few requests to Spotify.
+const MAX_TRACKS = 300;
+
 /**
- * Reads up to 300 songs. `/items` (max. 50 per page) replaced `/tracks` in Feb 2026, and Spotify
- * only postponed switching off `/tracks` for older apps — so `/items` comes first, and a refused
- * first page falls back to `/tracks` for apps that don't know `/items` yet.
+ * Reads up to MAX_TRACKS songs. `/items` (max. 50 per page) replaced `/tracks` in Feb 2026, and
+ * Spotify only postponed switching off `/tracks` for older apps — so `/items` comes first, and a
+ * refused first page falls back to `/tracks` for apps that don't know `/items` yet.
+ *
+ * After the first page, the others are read in random order: a longer playlist would otherwise
+ * always give the same songs from its start, and never those from its end.
  */
 async function getPlaylistTracks(
   token: string,
@@ -287,34 +293,39 @@ async function getPlaylistTracks(
 ): Promise<{ tracks: TrackData[]; problem: PlaylistProblem | null }> {
   const id = encodeURIComponent(playlistId);
   const legacyFields =
-    'items(track(id,name,duration_ms,external_ids(isrc),artists(name),album(name,album_type,release_date,images))),next';
-  let first = await spotifyFetch<SpotifyTracksResponse>(token, `/playlists/${id}/items?limit=50`);
+    'items(track(id,name,duration_ms,external_ids(isrc),artists(name),album(name,album_type,release_date,images))),total';
+  let path = `/playlists/${id}/items?limit=50`;
+  let pageSize = 50;
+  let first = await spotifyFetch<SpotifyTracksResponse>(token, path);
   // A 429 means the app's quota is used up; asking again would only make it worse.
   if (!first.ok && first.status !== 429) {
-    const legacy = await spotifyFetch<SpotifyTracksResponse>(
-      token,
-      `/playlists/${id}/tracks?fields=${encodeURIComponent(legacyFields)}&limit=100`,
-    );
+    const legacyPath = `/playlists/${id}/tracks?fields=${encodeURIComponent(legacyFields)}&limit=100`;
+    const legacy = await spotifyFetch<SpotifyTracksResponse>(token, legacyPath);
     if (legacy.ok) {
       // Shows in the log whether this app still depends on /tracks.
       logger.info({ playlistId, itemsStatus: first.status }, 'playlist_items_fallback');
-      first = legacy;
+      [first, path, pageSize] = [legacy, legacyPath, 100];
     }
   }
   if (!first.ok) return { tracks: [], problem: playlistProblem(first.status) };
 
   const tracks: TrackData[] = [];
-  let page: SpotifyTracksResponse | null = first.data;
-  while (page?.items && tracks.length < 300) {
-    for (const entry of page.items) {
+  const read = (page: SpotifyTracksResponse) => {
+    for (const entry of page.items ?? []) {
       const track = parseTrack(entry);
       if (track) tracks.push(track);
     }
-    if (!page.next) break;
+  };
+  read(first.data);
+
+  const pages = Math.ceil((first.data.total ?? 0) / pageSize);
+  const offsets = shuffle(Array.from({ length: Math.max(pages - 1, 0) }, (_, i) => (i + 1) * pageSize));
+  for (const offset of offsets) {
+    if (tracks.length >= MAX_TRACKS) break;
+    const page = await spotifyFetch<SpotifyTracksResponse>(token, `${path}&offset=${offset}`);
     // A later page failing keeps the songs read so far.
-    const nextPath: string = page.next.replace('https://api.spotify.com/v1', '');
-    const next: SpotifyResult<SpotifyTracksResponse> = await spotifyFetch(token, nextPath);
-    page = next.ok ? next.data : null;
+    if (!page.ok) break;
+    read(page.data);
   }
 
   return { tracks, problem: null };

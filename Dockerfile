@@ -42,6 +42,9 @@ COPY --from=builder /app/server/dist ./server/dist
 ENV NODE_ENV=production
 ENV PORT=3001
 
+# Run unprivileged: the server only reads its files and logs to stdout.
+USER node
+
 EXPOSE 3001
 
 CMD ["node", "server/dist/index.js"]

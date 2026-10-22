@@ -1,4 +1,3 @@
-import type { Request, Response } from 'express';
 import { logger } from './logger.js';
 
 interface ItunesTrack {
@@ -101,23 +100,4 @@ export async function findPreview(
     logger.warn({ artist, title, err }, 'itunes_fetch_exception');
     return null;
   }
-}
-
-// ── HTTP handler for /api/preview ─────────────────────────────────────────────
-
-export async function previewHandler(req: Request, res: Response): Promise<void> {
-  const artist = String(req.query.artist ?? '').trim();
-  const title = String(req.query.title ?? '').trim();
-
-  if (!artist || !title) {
-    res.status(400).json({ error: 'Missing artist or title' });
-    return;
-  }
-
-  if (artist.length > 200 || title.length > 200) {
-    res.status(400).json({ error: 'Input too long' });
-    return;
-  }
-
-  res.json({ previewUrl: await findPreview(artist, title) });
 }

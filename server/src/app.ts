@@ -11,7 +11,6 @@ import { REACTION_EMOJIS } from '@tuneline/shared';
 import { join } from 'path';
 
 import { RoomManager } from './rooms.js';
-import { previewHandler } from './preview.js';
 import { httpLogger, logger } from './logger.js';
 import {
   SESSION_COOKIE,
@@ -27,10 +26,16 @@ export interface TunelineServerOptions {
   frontendOrigin: string;
   /** Serves the built client and marks cookies secure. */
   isProd: boolean;
+  /** Where the built client lives (tests point this at a temp folder). */
+  clientDist?: string;
 }
 
 /** Builds the HTTP + Socket.io server without listening, so tests can run it on any port. */
-export function createTunelineServer({ frontendOrigin, isProd }: TunelineServerOptions) {
+export function createTunelineServer({
+  frontendOrigin,
+  isProd,
+  clientDist = join(__dirname, '../../client/dist'),
+}: TunelineServerOptions) {
   const app = express();
   const httpServer = createServer(app);
 
@@ -200,16 +205,17 @@ export function createTunelineServer({ frontendOrigin, isProd }: TunelineServerO
     res.json({ songs, unavailablePlaylists } satisfies SongsResponse);
   });
 
-  app.get('/api/preview', previewHandler);
-
-  // Serve built client in production
+  // Serve built client in production. The client only uses "/" (state lives in the app and
+  // in ?room=), so there is no catch-all: unknown paths — mostly scanners probing for /.env,
+  // /wp-admin and the like — get a plain 404 instead of the app with a misleading 200.
   if (isProd) {
-    const clientDist = join(__dirname, '../../client/dist');
     app.use(express.static(clientDist));
-    app.get('/{*splat}', (_req, res) => {
-      res.sendFile(join(clientDist, 'index.html'));
-    });
   }
+
+  app.use((req, res) => {
+    if (req.path.startsWith('/api/')) res.status(404).json({ error: 'Not found' });
+    else res.status(404).type('text/plain').send('Not found');
+  });
 
   const rooms = new RoomManager({
     onHostTimeout: (roomCode) => {

@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createSession, getSession, SESSION_COOKIE } from './auth.js';
 import { startServer, type TestServer } from './test/server.js';
 
@@ -165,21 +168,42 @@ describe('Spotify data routes', () => {
     });
   });
 
-  it('serves preview lookups', async () => {
-    expect((await get('/api/preview?artist=A')).status).toBe(400);
-    external.mockResolvedValueOnce(json({ results: [] }));
-    expect(await (await get('/api/preview?artist=Nobody&title=Nothing')).json()).toEqual({ previewUrl: null });
+  it('has no public preview lookup (songs get their previews server-side)', async () => {
+    const res = await get('/api/preview?artist=Nobody&title=Nothing');
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'Not found' });
+    expect(external).not.toHaveBeenCalled();
   });
 });
 
 describe('production mode', () => {
-  it('serves the client app for unknown routes and marks cookies secure', async () => {
+  it('serves the built client at / and answers every other path with 404', async () => {
+    const dist = mkdtempSync(join(tmpdir(), 'tuneline-dist-'));
+    writeFileSync(join(dist, 'index.html'), '<!doctype html><title>Tuneline</title>');
+    const prod = await startServer({ isProd: true, clientDist: dist });
+    try {
+      const page = await realFetch(`${prod.url}/`);
+      expect(page.status).toBe(200);
+      expect(await page.text()).toContain('<title>Tuneline</title>');
+
+      // What scanners probe for gets a plain 404, not the app with a 200.
+      for (const path of ['/.env', '/wp-login.php', '/wp-admin', '/.git/config', '/some/route']) {
+        const res = await realFetch(`${prod.url}${path}`);
+        expect(res.status, path).toBe(404);
+        expect(await res.text()).toBe('Not found');
+      }
+      const api = await realFetch(`${prod.url}/api/nope`);
+      expect(api.status).toBe(404);
+      expect(await api.json()).toEqual({ error: 'Not found' });
+    } finally {
+      await prod.close();
+      rmSync(dist, { recursive: true, force: true });
+    }
+  });
+
+  it('marks cookies secure', async () => {
     const prod = await startServer({ isProd: true });
     try {
-      const page = await realFetch(`${prod.url}/some/client/route`);
-      // 200 with a built client, 404 when client/dist doesn't exist (e.g. in CI) — both hit the SPA fallback.
-      expect([200, 404]).toContain(page.status);
-
       const { authUrl } = await (await realFetch(`${prod.url}/api/auth/login`)).json();
       const state = new URL(authUrl).searchParams.get('state');
       external.mockResolvedValueOnce(json({ access_token: 'at', refresh_token: 'rt', expires_in: 3600 }));

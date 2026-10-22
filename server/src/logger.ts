@@ -37,7 +37,8 @@ export const httpLogger = pinoHttp<Request, Response>({
   },
   customLogLevel: (_req, res, err) => {
     if (err || res.statusCode >= 500) return 'error';
-    if (res.statusCode >= 400) return 'warn';
+    // 404s are mostly internet scanners probing for /.env, /wp-admin …: noise, not a warning.
+    if (res.statusCode >= 400 && res.statusCode !== 404) return 'warn';
     return 'info';
   },
   autoLogging: {

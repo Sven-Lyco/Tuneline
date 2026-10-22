@@ -195,6 +195,7 @@ Server → Client: room_created, room_joined, rejoin_failed, session_replaced, r
 - `Dockerfile` baut Client (Vite) + Server (tsup CJS) in einem Multi-Stage-Build
   - Builder-Stage: `NODE_ENV=development npm ci` (damit devDependencies nicht übersprungen werden)
   - `VITE_SERVER_URL` ist die einzige Build-Zeit-Variable → als `ARG` im Dockerfile, in Coolify als Build-Arg setzen
+  - `VITE_SERVER_URL` (Build) und `FRONTEND_ORIGIN` (Laufzeit) müssen dieselbe öffentliche Adresse der App sein — die CSP erlaubt Socket.io nur dorthin, sonst blockiert der Browser die Verbindung
   - `NODE_ENV` in Coolify auf **Runtime only** stellen (nicht Build-time), sonst überschreibt es das `development` im Dockerfile
 - Server serviert in Production das Client-Build als statische Dateien
 - Runtime-Env-Variablen in Coolify setzen: `PORT`, `FRONTEND_ORIGIN`, `NODE_ENV=production`, `SPOTIFY_CLIENT_ID`, `SPOTIFY_REDIRECT_URI`

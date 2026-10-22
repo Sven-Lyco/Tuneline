@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createSession, getSession, SESSION_COOKIE } from './auth.js';
 import { startServer, type TestServer } from './test/server.js';
+import { cspDirectives } from './app.js';
 
 const realFetch = globalThis.fetch;
 const external = vi.fn<(url: string, init?: RequestInit) => Promise<unknown>>();
@@ -199,6 +200,35 @@ describe('production mode', () => {
       await prod.close();
       rmSync(dist, { recursive: true, force: true });
     }
+  });
+
+  it('sends a Content-Security-Policy that only allows the sources the client uses', async () => {
+    const prod = await startServer({ isProd: true, frontendOrigin: 'https://tuneline.example' });
+    try {
+      const csp = (await realFetch(`${prod.url}/health`)).headers.get('content-security-policy') ?? '';
+      const directive = (name: string) => csp.split(';').map((d) => d.trim()).find((d) => d.startsWith(`${name} `));
+      expect(directive('default-src')).toBe("default-src 'self'");
+      expect(directive('script-src')).toBe("script-src 'self'");
+      expect(directive('media-src')).toBe('media-src https://audio-ssl.itunes.apple.com');
+      expect(directive('img-src')).toContain('https://*.scdn.co');
+      expect(directive('connect-src')).toBe(
+        "connect-src 'self' https://tuneline.example wss://tuneline.example",
+      );
+      expect(directive('frame-ancestors')).toBe("frame-ancestors 'none'");
+      expect(csp).not.toContain('upgrade-insecure-requests');
+    } finally {
+      await prod.close();
+    }
+  });
+
+  it('leaves IPv6 literals out of connect-src', () => {
+    expect(cspDirectives('http://[::1]:5174').connectSrc).toEqual(["'self'"]);
+    expect(cspDirectives('not a url').connectSrc).toEqual(["'self'"]);
+    expect(cspDirectives('http://localhost:5174').connectSrc).toEqual([
+      "'self'",
+      'http://localhost:5174',
+      'ws://localhost:5174',
+    ]);
   });
 
   it('marks cookies secure', async () => {

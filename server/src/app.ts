@@ -30,6 +30,43 @@ export interface TunelineServerOptions {
   clientDist?: string;
 }
 
+/**
+ * Content-Security-Policy for the built client (in dev Vite serves the page, so it doesn't apply).
+ * Every external source the browser loads is listed here — add new ones (fonts, CDNs) here too.
+ * No upgrade-insecure-requests: HSTS already enforces HTTPS, and a local production run uses http.
+ */
+export function cspDirectives(frontendOrigin: string) {
+  return {
+    defaultSrc: ["'self'"],
+    scriptSrc: ["'self'"],
+    scriptSrcAttr: ["'none'"],
+    // Emotion injects <style> tags at runtime and the app sets style attributes.
+    styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+    fontSrc: ['https://fonts.gstatic.com'],
+    // Song covers (i.scdn.co) and playlist covers (mosaic.scdn.co, image-cdn-*.spotifycdn.com).
+    imgSrc: ["'self'", 'data:', 'https://*.scdn.co', 'https://*.spotifycdn.com'],
+    mediaSrc: ['https://audio-ssl.itunes.apple.com'],
+    connectSrc: ["'self'", ...socketOrigins(frontendOrigin)],
+    manifestSrc: ["'self'"],
+    objectSrc: ["'none'"],
+    baseUri: ["'self'"],
+    formAction: ["'self'"],
+    frameAncestors: ["'none'"],
+  };
+}
+
+/** The frontend origin and its WebSocket twin for Socket.io (Safari doesn't match ws: via 'self'). */
+function socketOrigins(frontendOrigin: string): string[] {
+  try {
+    const url = new URL(frontendOrigin);
+    // CSP can't express IPv6 literals like [::1]; 'self' covers the local setup.
+    if (url.hostname.startsWith('[')) return [];
+    return [url.origin, `${url.protocol === 'https:' ? 'wss' : 'ws'}://${url.host}`];
+  } catch {
+    return [];
+  }
+}
+
 /** Builds the HTTP + Socket.io server without listening, so tests can run it on any port. */
 export function createTunelineServer({
   frontendOrigin,
@@ -40,7 +77,7 @@ export function createTunelineServer({
   const httpServer = createServer(app);
 
   app.set('trust proxy', 1); // Trust Coolify's reverse proxy for correct client IPs
-  app.use(helmet({ contentSecurityPolicy: false }));
+  app.use(helmet({ contentSecurityPolicy: { useDefaults: false, directives: cspDirectives(frontendOrigin) } }));
   app.use(compression());
   app.use(cookieParser());
   app.use(express.json());

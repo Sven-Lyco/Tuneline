@@ -71,7 +71,7 @@ const code = await __tl.createRoom({ audioMode: 'host-only', rounds: 1, turnLimi
 node .claude/skills/tuneline-browser-test/scripts/bots.mjs CODE 4 --songs "$SCRATCH/songs.json"
 ```
 
-Mit `run_in_background` starten, Ausgabe über die Output-Datei lesen, mit `TaskStop` beenden. Bots platzieren nach dem 3-s-Reveal selbst. Mit `--songs` platzieren sie richtig (Timelines wachsen), ohne zufällig. Weitere Optionen: `--names "Maximilian-Alexander,Bo"` (lange Namen für Layout-Tests), `--leave-after-game`.
+Mit `run_in_background` starten, Ausgabe über die Output-Datei lesen, mit `TaskStop` beenden. Bots platzieren nach dem 3-s-Reveal selbst. Mit `--songs` platzieren sie richtig (Timelines wachsen), ohne zufällig. Weitere Optionen: `--names "Maximilian-Alexander,Bo"` (lange Namen für Layout-Tests), `--leave-after-game`, `--think 4000` (Bedenkzeit pro Zug, Standard 1000 ms). Mit der Standard-Bedenkzeit beginnt schon 1 s nach Zugbeginn die nächste Auflösung — wer den Zustand *zu Beginn* eines Zugs messen will, erhöht sie.
 
 ## 5. Beobachten
 
@@ -93,6 +93,7 @@ Mit `run_in_background` starten, Ausgabe über die Output-Datei lesen, mit `Task
 | Platz übernehmen | Im zweiten Tab mit kopiertem Token `__tl.request('rejoin_room', { roomCode, playerToken }, 'room_joined')` | Alter Tab: „Du spielst jetzt in einem anderen Tab weiter.“ |
 | Ergebnis-Screen | `rounds: 1`, jeder platziert einmal (`__tl.place(0)`, beim Gast nach dem Reveal) | „Spiel beendet“; verlässt ein Gast den Raum, sieht der Host ihn als „verlassen“ |
 | Zeitlimit | `createRoom({ turnLimit: 30 })` | Countdown im Spiel; nach Ablauf zählt der Zug als falsch |
+| Zentrieren bei Zugbeginn | Lange Timelines per `bots.mjs --songs`, Host mit `__tl.autoPlay`; im iframe `Element.prototype.scrollTo` umhüllen und Ziel, Vorher- und Nachher-Wert protokollieren | Bei jedem Zugbeginn (nach der Auflösung) ein Aufruf je Scroller: eigene Timeline zur Mitte (nur im eigenen Zug), Panel und Chip des Spielers am Zug mittig, an den Rändern begrenzt. Positionen nachträglich messen ist unzuverlässig, weil schnelle Bots schon die nächste Auflösung starten |
 
 Host-Timeout (2 Minuten offline → Spielende) und Timer-Grenzfälle sind in `server/src/rooms.test.ts` mit Fake-Timern abgedeckt — dafür nicht im Browser warten.
 

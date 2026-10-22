@@ -333,6 +333,10 @@ async function getPlaylistTracks(
 
 // ── Song loading with iTunes enrichment ──────────────────────────────────────
 
+// Failed iTunes searches after which a load stops: iTunes is throttling this IP, and asking on
+// only keeps the block going. Too few songs now beats none for the next minutes.
+const MAX_ITUNES_FAILURES = 5;
+
 export interface LoadSongsResult extends SongsResponse {
   previewStats: PreviewStats;
   /** Songs whose year came from iTunes, because Spotify only knew a later release. */
@@ -385,7 +389,11 @@ export async function loadSongs(
   const previews = new Set<string>();
   const corrected = new Set<string>();
 
-  for (let i = 0; i < shuffled.length && result.length < target && !signal.aborted; i += BATCH) {
+  for (
+    let i = 0;
+    i < shuffled.length && result.length < target && !signal.aborted && previewStats.failed < MAX_ITUNES_FAILURES;
+    i += BATCH
+  ) {
     const batch = shuffled.slice(i, i + BATCH);
     const enriched = await Promise.all(
       batch.map(async (track): Promise<(SongFull & { preview: string }) | null> => {

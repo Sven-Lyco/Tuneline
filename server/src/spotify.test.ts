@@ -396,6 +396,27 @@ describe('loadSongs', () => {
     expect(songs.map((s) => s.id)).toEqual(['b']);
   });
 
+  it('stops asking iTunes once it keeps refusing', async () => {
+    vi.mocked(findPreview).mockImplementation(async (_artist, _title, _durationMs, stats) => {
+      if (stats) {
+        stats.lookups++;
+        stats.failed++;
+      }
+      return null;
+    });
+    spotifyPages({
+      '/playlists/p1/': {
+        items: Array.from({ length: 40 }, (_, i) => item({ id: `t${i}`, name: `T${i}` })),
+        next: null,
+      },
+    });
+    const { songs, previewStats } = await load(['p1'], 20);
+    expect(songs).toEqual([]);
+    // One batch of 10 went out; after its failures no further batch does.
+    expect(previewStats).toEqual({ lookups: 10, failed: 10 });
+    vi.mocked(findPreview).mockReset();
+  });
+
   it('stops once the target is reached or the request is aborted', async () => {
     spotifyPages({
       '/playlists/p1/': {

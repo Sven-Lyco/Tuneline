@@ -142,8 +142,8 @@ Tuneline/
 - Client-IDs ab 11.02.2026 bekommen Songs nur aus eigenen/kollaborativen Playlists; Spotify-eigene Playlists sind für Dev-Mode-Apps gesperrt
 - `server/src/spotify.ts` liest Songs über `/playlists/{id}/items` (max. 50 pro Seite, Song unter `item` oder `track`); wird die erste Seite abgelehnt, Rückfall auf das alte `/tracks` (Log: `playlist_items_fallback`)
 - Spotify-Fehler gehen mit Grund an den Client: `/api/playlists` → `not_allowlisted` (403) / `quota` (429) / `unavailable` (502); `/api/songs` → `SongsResponse.unavailablePlaylists` mit `not_owned` / `spotify_owned` / `quota` / `unavailable` (Texte in `client/src/utils/spotifyMessages.ts`)
-- iTunes Search API: offiziell ca. 20 Anfragen/Minute pro IP (gilt für die Server-IP); `songs_loaded` loggt `itunesLookups`/`itunesFailed` (außerdem `yearsCorrected`, `duplicatesRemoved`) — im Test (Okt. 2026) 40 Suchen in ~5 s ohne Fehler, daher noch keine Drosselung
-- Hintergrund mit Quellen (Quota, Playlist-Zugriff, Developer Policy, iTunes-Bedingungen, Stand Oktober 2026): `docs/research/spotify-itunes-api-regeln.md`, Rohnotizen in `docs/research/notes/`
+- iTunes Search API: offiziell ca. 20 Anfragen/Minute pro IP (gilt für die Server-IP); `songs_loaded` loggt `itunesLookups`/`itunesFailed` (außerdem `yearsCorrected`, `duplicatesRemoved`) — Tests (Okt. 2026): 40 Suchen in ~5 s ohne Fehler, aber ~70 in ~1 min → 403/429 und Sperre > 30 min (Nachfragen verlängert sie). `loadSongs()` bricht deshalb nach 5 gescheiterten Suchen ab (`MAX_ITUNES_FAILURES`); eine echte Drosselung fehlt noch
+- Hintergrund mit Quellen (Quota, Playlist-Zugriff, Developer Policy, iTunes-Bedingungen, Spotify-Wiedergabe statt iTunes, Stand Oktober 2026): `docs/research/spotify-itunes-api-regeln.md`, Rohnotizen in `docs/research/notes/`
 
 ## Multiplayer-Architektur
 

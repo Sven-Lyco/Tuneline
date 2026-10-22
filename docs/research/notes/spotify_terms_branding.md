@@ -306,3 +306,32 @@ Five changes matter:
 - Previous versions of the Terms and Policy (before v10) were not compared, so it is not confirmed which clauses are *new* as of May 2025. In particular, it is unclear whether the game ban or the AI clause existed earlier. Forum thread IDs suggest the game ban predates 2025.
 - The contents of the July 2026 changelog (beyond the Client ID increase) were not reviewed in detail. No Spotify developer-terms changes after July 2026 (Aug–Oct 2026) were found. Absence of evidence is not confirmation.
 - **Not legal advice.** Before any public or monetised launch, two questions need written confirmation from Spotify or a lawyer: (a) whether a non-streaming timeline game is covered by "Do not create a game", and (b) whether iTunes audio counts as "content from another service". Given the explicit wording, the realistic expectation is that both answers are "yes, prohibited".
+
+## Playing Spotify audio instead of iTunes previews (checked 22 Oct 2026)
+
+Question: could Tuneline play the playlist's own Spotify track (for example from second 30) instead of an iTunes preview, so the version always matches?
+
+### Takeaway
+
+Technically yes, through the Web Playback SDK in the host's browser or through the Player API controlling the host's Spotify app. Under the rules it is worse than today: as a Streaming SDA, Tuneline would have to show cover art and metadata during playback, which is exactly what the game hides. Every host would need Premium, and only the host's device would play. Short Spotify previews are no alternative, because new and Development Mode apps no longer get them.
+
+### Cited Findings
+
+- **Developer Policy, Section II, item 5 (fetched first-hand 22 Oct 2026):** "there shall be no playback of Spotify Content without showing relevant cover art and metadata in your SDA." Section III, item 2 still reads "Do not create a game, including trivia quizzes." Items 6 and 7 add "Do not synchronize any sound recordings with any visual media" and "Do not permit any device or system to segue, mix, re-mix, or overlap any Spotify Content with any other audio content". The page still says "Effective as of 15 May, 2025". — [Developer Policy](https://developer.spotify.com/policy)
+- **Web Playback SDK:** "The Web Playback SDK requires a Spotify Premium subscription"; "mobile only types of premium subscriptions are excluded". It is "supported by most web browsers (Chrome, Firefox, Safari and Microsoft Edge)" "in both mobile (Android and iOS) and Desktop". Troubleshooting: "iOS support has some limitations", "The playback does not start automatically after transfering playback", "The user must interact with the SDK events to play audio." — [Web Playback SDK](https://developer.spotify.com/documentation/web-playback-sdk)
+- **Player API, Start/Resume Playback:** "This API only works for users who have Spotify Premium." Scope `user-modify-playback-state`; body accepts `position_ms`; "The order of execution is not guaranteed when you use this API with other Player API endpoints." Without `device_id`, "the user's currently active device is the target." — [Start/Resume Playback](https://developer.spotify.com/documentation/web-api/reference/start-a-users-playback)
+- **February 2026 migration guide:** does not mention `/me/player`, playback transfer, the Web Playback SDK or the `streaming` scope; its removals cover library, playlist, batch, browse, other-user, search and field changes. "All Development Mode apps require the app owner to have an active Spotify Premium subscription." — [Migration Guide](https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide)
+- **Spotify blog, 27 Nov 2024 (fetched first-hand):** lists "30-second preview URLs" "in multi-get responses (`SimpleTrack` object)" among what new use cases can no longer access. Affected are new apps and existing apps in development mode without a pending extension request; apps with existing extended access "remain unaffected". — [Changes to the Web API](https://developer.spotify.com/blog/2024-11-27-changes-to-the-web-api)
+- **Community, 2025–2026:** developers still report `preview_url` as null for most tracks. — [Community: Previews not working](https://community.spotify.com/t5/Spotify-for-Developers/Previews-not-working/td-p/7274270)
+
+### Inferences
+
+- Hiding title and cover while a Spotify track plays would breach the metadata rule directly, on top of the game ban. Today the rule does not apply, because the audio comes from iTunes and Tuneline is not a Streaming SDA.
+- Guests never log in with Spotify, so with Spotify audio only the host's device could play; the "Alle hören" mode would go.
+- Controlling the host's Spotify app via the Player API shows title and cover on the host's phone, interrupts their own listening and adds every game song to their history and recommendations.
+- Mobile browsers are not a blocker (an earlier assumption in the chat was wrong), but iOS needs a tap to start playback.
+
+### Gaps
+
+- Not tested against a real Development Mode app: whether the SDK works for allowlisted non-owner users with Premium, and how the playback quota behaves.
+- No statement from Spotify on whether a game that shows title and cover only after the guess would satisfy "showing relevant cover art and metadata".

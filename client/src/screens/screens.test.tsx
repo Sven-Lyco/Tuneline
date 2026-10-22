@@ -267,6 +267,15 @@ describe('GameScreen', () => {
     expect(screen.getByText('Wird platziert…')).toBeDisabled();
   });
 
+  it('centres the timelines on a new turn only once the reveal is over', () => {
+    const scrollTo = vi.spyOn(Element.prototype, 'scrollTo');
+    const { rerender } = render(<GameScreen {...props({ revealed: true })} />);
+    expect(scrollTo).not.toHaveBeenCalled();
+    rerender(<GameScreen {...props({ revealed: false })} />);
+    expect(scrollTo).toHaveBeenCalled();
+    scrollTo.mockRestore();
+  });
+
   it('shows others whose turn it is, spectators a hint and pauses an overlay', () => {
     const { rerender } = render(
       <GameScreen {...props({ gameState: gameState({ currentPlayerId: 'host' }) })} />

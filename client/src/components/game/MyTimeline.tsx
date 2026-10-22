@@ -3,6 +3,7 @@ import type { SongFull } from '@tuneline/shared';
 import type { Feedback } from '../../types';
 import { DropZone } from '../DropZone';
 import { SongTile } from '../SongTile';
+import { useCenterScroll } from '../../hooks/useCenterScroll';
 
 interface MyTimelineProps {
   timeline: SongFull[];
@@ -12,6 +13,8 @@ interface MyTimelineProps {
   isMyTurn: boolean;
   feedback: Feedback;
   revealedSong: SongFull | null;
+  /** Changes at the start of each of my turns; the timeline then scrolls to its middle. */
+  centerKey: string | null;
 }
 
 const TimelineSection = styled.div`
@@ -52,13 +55,15 @@ export function MyTimeline({
   isMyTurn,
   feedback,
   revealedSong,
+  centerKey,
 }: MyTimelineProps) {
   const canSelect = isMyTurn && !revealed;
+  const areaRef = useCenterScroll(centerKey);
 
   return (
     <TimelineSection>
       <TimelineLabel>— Deine Timeline —</TimelineLabel>
-      <TimelineArea>
+      <TimelineArea ref={areaRef}>
         <TimelineInner>
           <DropZone
             active={slot === 0}

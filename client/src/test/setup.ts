@@ -21,6 +21,9 @@ Object.defineProperty(window, 'matchMedia', {
   }),
 });
 
+// jsdom has no Element.scrollTo either (useCenterScroll); tests spy on this no-op.
+Element.prototype.scrollTo = () => {};
+
 beforeEach(() => {
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
   vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});

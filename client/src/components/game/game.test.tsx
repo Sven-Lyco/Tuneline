@@ -129,6 +129,7 @@ describe('MyTimeline', () => {
         isMyTurn
         feedback={null}
         revealedSong={null}
+        centerKey={null}
       />
     );
     const zones = screen.getAllByLabelText('Song hier platzieren');
@@ -147,6 +148,7 @@ describe('MyTimeline', () => {
         isMyTurn
         feedback="ok"
         revealedSong={song(1990)}
+        centerKey={null}
       />
     );
     fireEvent.click(zones[1]);
@@ -161,7 +163,12 @@ describe('OtherPlayers', () => {
       player('Cleo', { isConnected: false }),
     ];
     render(
-      <OtherPlayers players={others} allPlayers={[player('me'), ...others]} currentPlayerId="Ben" />
+      <OtherPlayers
+        players={others}
+        allPlayers={[player('me'), ...others]}
+        currentPlayerId="Ben"
+        turnKey={null}
+      />
     );
     expect(screen.getByText('leer')).toBeInTheDocument();
     expect(screen.getByText('offline')).toBeInTheDocument();
@@ -180,11 +187,78 @@ describe('GameHeader', () => {
         round={2}
         rounds={5}
         myPlayerId="me"
+        turnKey={null}
       />
     );
     expect(screen.getByText('RUNDE 2/5')).toBeInTheDocument();
     expect(screen.getByText('ROOM01')).toBeInTheDocument();
     expect(screen.getByText('me (du) · offline')).toBeInTheDocument();
+  });
+});
+
+describe('centring on a new turn', () => {
+  const others = [player('Ben'), player('Cleo')];
+  const timelineProps: Omit<ComponentProps<typeof MyTimeline>, 'centerKey'> = {
+    timeline: [song(1970), song(1990)],
+    slot: null,
+    setSlot: () => {},
+    revealed: false,
+    isMyTurn: true,
+    feedback: null,
+    revealedSong: null,
+  };
+
+  it('scrolls my timeline once per turn key, never without one', () => {
+    const scrollTo = vi.spyOn(Element.prototype, 'scrollTo');
+    const { rerender } = render(<MyTimeline {...timelineProps} centerKey={null} />);
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    rerender(<MyTimeline {...timelineProps} centerKey="1:me" />);
+    rerender(<MyTimeline {...timelineProps} centerKey="1:me" slot={1} />);
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(scrollTo).toHaveBeenCalledWith({ left: 0, behavior: 'smooth' });
+
+    rerender(<MyTimeline {...timelineProps} centerKey="2:me" />);
+    expect(scrollTo).toHaveBeenCalledTimes(2);
+    scrollTo.mockRestore();
+  });
+
+  it('centres the panel of the player on turn, and nothing on my own turn', () => {
+    const scrollTo = vi.spyOn(Element.prototype, 'scrollTo');
+    const panels = (currentPlayerId: string, turnKey: string) => (
+      <OtherPlayers
+        players={others}
+        allPlayers={[player('me'), ...others]}
+        currentPlayerId={currentPlayerId}
+        turnKey={turnKey}
+      />
+    );
+    const { rerender } = render(panels('me', '1:me'));
+    expect(scrollTo).not.toHaveBeenCalled();
+    rerender(panels('Cleo', '1:Cleo'));
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    scrollTo.mockRestore();
+  });
+
+  it('jumps without animation when the system asks for reduced motion', () => {
+    const scrollTo = vi.spyOn(Element.prototype, 'scrollTo');
+    const matchMedia = vi
+      .spyOn(window, 'matchMedia')
+      .mockReturnValue({ matches: true } as MediaQueryList);
+    render(
+      <GameHeader
+        roomCode="ROOM01"
+        players={[player('me'), ...others]}
+        currentPlayerId="Ben"
+        round={1}
+        rounds={5}
+        myPlayerId="me"
+        turnKey="1:Ben"
+      />
+    );
+    expect(scrollTo).toHaveBeenCalledWith({ left: 0, behavior: 'auto' });
+    matchMedia.mockRestore();
+    scrollTo.mockRestore();
   });
 });
 

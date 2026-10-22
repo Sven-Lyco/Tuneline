@@ -152,6 +152,10 @@ export function GameScreen({
   const isReady = isMyTurn && slot !== null && !revealed && !placing;
 
   let placeLabel = 'Position wählen...';
+  // A turn starts for the eye once the reveal is over; gameState already names the next
+  // player during it. Timelines and chip rows centre on each new turn.
+  const turnKey = revealed ? null : `${gameState.round}:${gameState.currentPlayerId}`;
+
   if (!isMyTurn) placeLabel = `Warten auf ${activePlayer?.name ?? '?'}…`;
   else if (placing) placeLabel = 'Wird platziert…';
   else if (slot !== null) placeLabel = 'Hier platzieren ▶';
@@ -165,6 +169,7 @@ export function GameScreen({
         round={gameState.round}
         rounds={gameState.rounds}
         myPlayerId={myPlayerId}
+        turnKey={turnKey}
       />
 
       {isSpectator && (
@@ -199,6 +204,7 @@ export function GameScreen({
           isMyTurn={isMyTurn}
           feedback={feedback}
           revealedSong={revealedSong}
+          centerKey={isMyTurn ? turnKey : null}
         />
 
         {otherPlayers.length > 0 && (
@@ -206,6 +212,7 @@ export function GameScreen({
             players={otherPlayers}
             allPlayers={gameState.players}
             currentPlayerId={gameState.currentPlayerId}
+            turnKey={turnKey}
           />
         )}
 

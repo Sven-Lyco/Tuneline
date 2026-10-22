@@ -97,7 +97,8 @@ Tuneline/
       types.ts              Interne Server-Typen + Konstanten (Room, InternalPlayer, MAX_*)
       auth.ts               Session-Management (httpOnly Cookies, in-memory Map, 7 Tage TTL)
       spotify.ts            PKCE OAuth server-seitig, Token-Refresh, Playlist/Track-Laden
-      preview.ts            iTunes Preview-Suche + in-memory Cache
+      preview.ts            iTunes Preview-Suche + in-memory Cache (nur serverseitig, kein HTTP-Endpunkt)
+      limits.ts             ConnectionCounter, AttemptLimiter (Socket-Verbindungen und Fehlversuche pro IP)
       logger.ts             pino-Logger
       utils.ts              shuffle<T>(), generateCode()
     tsconfig.json
@@ -157,6 +158,7 @@ Tuneline/
 - **Spotify-Token bleibt beim Server**: Host ruft `/api/songs` auf → Server fetcht via Spotify+iTunes → Client empfängt `SongFull[]` und übergibt sie via `start_game` an den Server
 - Server validiert Song-Daten (Pflichtfelder, Jahr zwischen 1900–2100)
 - Socket-Events rate-limitiert (15 Events/Sekunde pro Socket); max. 5 offene Räume pro IP, 1 pro Socket
+- Missbrauchs-Limits (`server/src/limits.ts`, Konstanten in `types.ts`): max. 30 gleichzeitige Socket-Verbindungen pro IP (`connect_error` `too_many_connections`); nach 20 Beitritten mit unbekanntem Raum-Code bzw. Rejoins mit unbekanntem Raum/Token pro IP in 10 min ist Beitreten für diese IP gesperrt (gegen Raum-Code-Raten); Socket-Nachrichten max. 640 KB
 - **Alles nur im Speicher**: Ein Server-Neustart/Deploy beendet alle Spiele und Spotify-Logins. Bei `SIGTERM` bekommen Clients `server_restarting` → Deploys außerhalb von Spielzeiten
 
 ### Socket.io Events (Überblick)
@@ -198,7 +200,11 @@ Server → Client: room_created, room_joined, rejoin_failed, session_replaced, r
 - Runtime-Env-Variablen in Coolify setzen: `PORT`, `FRONTEND_ORIGIN`, `NODE_ENV=production`, `SPOTIFY_CLIENT_ID`, `SPOTIFY_REDIRECT_URI`
 - Health-Check: `GET /health` → `{ ok: true }`
 - `app.set('trust proxy', 1)` — nötig hinter Coolify-Nginx für Rate-Limiter
-- `helmet({ contentSecurityPolicy: false })` + `compression()` — CSP deaktiviert wegen Spotify/iTunes/Google Fonts
+- `helmet` mit **Content-Security-Policy** (`cspDirectives()` in `app.ts`): nur eigene Skripte, Emotion-Inline-Styles + Google Fonts, Cover von `*.scdn.co`/`*.spotifycdn.com`, Audio von `audio-ssl.itunes.apple.com`, Socket.io auf `FRONTEND_ORIGIN`. **Neue externe Quellen dort eintragen**, sonst blockiert der Browser sie (nur im Production-Build sichtbar, im Dev liefert Vite die Seite)
+- Keine SPA-Fallback-Route: der Client nutzt nur `/` (+ `?room=`), unbekannte Pfade → 404 (Scanner wie `/.env`, `/wp-admin` landen dort; 404 wird als `info` geloggt)
+- Kein öffentlicher iTunes-Endpunkt: Previews sucht nur `loadSongs()` serverseitig
+- Container läuft als User `node`, spielt beim Build Alpine-Sicherheitsupdates ein und enthält kein npm (`osv-scanner scan image <image>` lokal zum Prüfen)
+- `compression()` für Antworten
 - Sticky Sessions empfohlen bei mehreren Instanzen (Socket.io)
 
 ## Geplante Features (Backlog)

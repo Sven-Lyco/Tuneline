@@ -27,13 +27,20 @@ RUN npm run build -w @tuneline/server
 FROM node:22-alpine AS production
 WORKDIR /app
 
+# Security fixes for Alpine packages that are newer than the base image
+RUN apk upgrade --no-cache
+
 # Install only server runtime dependencies
 COPY package.json package-lock.json ./
 COPY shared/package.json ./shared/
 COPY client/package.json ./client/
 COPY server/package.json ./server/
 
-RUN npm ci --omit=dev
+# npm and corepack are only needed for the install; the running server never uses them,
+# so they (and their dependencies) don't ship. busybox wget stays for health checks.
+RUN npm ci --omit=dev && npm cache clean --force \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+     /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 
 # Copy build artifacts
 COPY --from=builder /app/client/dist ./client/dist

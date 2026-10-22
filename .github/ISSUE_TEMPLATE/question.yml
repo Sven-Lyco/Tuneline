@@ -1,0 +1,25 @@
+name: Question
+description: Ask about setting up, hosting or playing Tuneline.
+title: "[Question]: "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check the [README](https://github.com/Sven-Lyco/Tuneline#readme) first — most setup questions (Spotify app, redirect URI, `.env`) are answered there.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      description: What are you trying to do, and what have you tried so far?
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I read the README and searched the existing issues.
+          required: true

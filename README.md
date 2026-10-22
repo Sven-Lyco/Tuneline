@@ -103,6 +103,13 @@ Required environment variables (runtime):
 - Team mode, time limit per turn
 - Sound effects for correct/incorrect placements
 
+## Contributing
+
+Issues and pull requests use templates:
+
+- **Issues:** pick a form when you open one (bug report, feature request or question). Please report security problems privately via *Report a security vulnerability*, not as a public issue.
+- **Pull requests:** the description follows [`.github/pull_request_template.md`](.github/pull_request_template.md). The *PR description* check fails until the required sections are filled in and the checklist is ticked.
+
 ## License
 
 [MIT](LICENSE)

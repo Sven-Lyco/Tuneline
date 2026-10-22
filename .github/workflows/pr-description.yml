@@ -1,0 +1,24 @@
+name: PR description
+
+# Makes pull requests follow .github/pull_request_template.md (bots are skipped).
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  template:
+    name: Follows the PR template
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+
+      # Reads the description from the event file, never from an interpolated expression.
+      - name: Check the description
+        run: node .github/scripts/check-pr-description.mjs

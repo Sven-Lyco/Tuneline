@@ -1,0 +1,109 @@
+name: Bug report
+description: Something in Tuneline doesn't work as it should.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! The more precisely we can reproduce it, the faster it gets fixed.
+
+        **Security problems** (e.g. a way to cheat, take over someone's seat or read data you shouldn't) please don't report here — use *Report a security vulnerability* on the issue chooser instead.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the problem. Include error messages exactly as shown.
+      placeholder: After a guest reloaded the page, the game stayed paused for everyone.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Step by step, starting from the start screen. Mention how many players and which device did what.
+      placeholder: |
+        1. Host creates a room with 3 rounds and "Alle hören"
+        2. Two guests join on their phones
+        3. Guest 1 reloads the page while it's their turn
+        4. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      placeholder: The guest is back in the game and it continues.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where in the game?
+      options:
+        - Login / Spotify
+        - Playlist selection
+        - Lobby
+        - Loading songs
+        - Game – my turn
+        - Game – someone else's turn
+        - Result screen
+        - Reconnect / reload / closed tab
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: role
+    attributes:
+      label: Your role
+      options:
+        - Host
+        - Guest
+        - Both (seen on several devices)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: audio-mode
+    attributes:
+      label: Audio mode
+      options:
+        - Alle hören (everyone hears)
+        - Nur Host (host only)
+        - Not relevant / don't know
+
+  - type: input
+    id: device
+    attributes:
+      label: Device and browser
+      placeholder: iPhone 15, Safari 18 · Windows 11, Chrome 141
+    validations:
+      required: true
+
+  - type: input
+    id: instance
+    attributes:
+      label: Where did you play?
+      description: Which instance, or the commit if you run it locally.
+      placeholder: Local dev on commit abc1234 · self-hosted instance
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Screenshots, logs or console output
+      description: Drag screenshots in here. Browser console or server log lines help a lot.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I searched the existing issues and this hasn't been reported yet.
+          required: true
+        - label: I removed tokens, cookies, room codes and personal data from screenshots and logs.
+          required: true

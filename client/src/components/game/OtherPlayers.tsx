@@ -2,11 +2,14 @@ import styled from '@emotion/styled';
 import type { RoomPlayer } from '@tuneline/shared';
 import { getPlayerColor } from '../../constants';
 import { sortByYear } from '../../utils/shuffle';
+import { useCenterScroll } from '../../hooks/useCenterScroll';
 
 interface OtherPlayersProps {
   players: RoomPlayer[];
   allPlayers: RoomPlayer[];
   currentPlayerId: string;
+  /** Changes at the start of each turn; the panel of the player on turn then scrolls into the middle. */
+  turnKey: string | null;
 }
 
 const OthersSection = styled.div`
@@ -95,9 +98,11 @@ const MiniTile = styled.div`
   color: #ff2d78;
 `;
 
-export function OtherPlayers({ players, allPlayers, currentPlayerId }: OtherPlayersProps) {
+export function OtherPlayers({ players, allPlayers, currentPlayerId, turnKey }: OtherPlayersProps) {
+  const sectionRef = useCenterScroll(turnKey, '[data-active="true"]');
+
   return (
-    <OthersSection>
+    <OthersSection ref={sectionRef}>
       {players.map((p) => {
         const globalIdx = allPlayers.findIndex((gp) => gp.id === p.id);
         const color = getPlayerColor(globalIdx);
@@ -107,6 +112,7 @@ export function OtherPlayers({ players, allPlayers, currentPlayerId }: OtherPlay
             key={p.id}
             isActive={String(p.id === currentPlayerId)}
             borderColor={color}
+            data-active={String(p.id === currentPlayerId)}
             data-offline={String(!p.isConnected)}
           >
             <PlayerHeader>

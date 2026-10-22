@@ -4,6 +4,7 @@ import { getPlayerColor } from '../../constants';
 import { RoomCodeCopy } from '../RoomCodeCopy';
 import { InviteQr } from '../InviteQr';
 import { PlayerChip } from '../PlayerChip';
+import { useCenterScroll } from '../../hooks/useCenterScroll';
 
 interface GameHeaderProps {
   roomCode: string;
@@ -12,6 +13,8 @@ interface GameHeaderProps {
   round: number;
   rounds: number;
   myPlayerId: string;
+  /** Changes at the start of each turn; on phones the active chip then scrolls into the middle. */
+  turnKey: string | null;
 }
 
 const Header = styled.div`
@@ -78,7 +81,11 @@ export function GameHeader({
   round,
   rounds,
   myPlayerId,
+  turnKey,
 }: GameHeaderProps) {
+  // The chip row only scrolls on phones (see PlayerBadges); on wider screens this is a no-op.
+  const badgesRef = useCenterScroll(turnKey, '[data-active="true"]');
+
   return (
     <Header>
       <HeaderTitle>TUNELINE</HeaderTitle>
@@ -87,7 +94,7 @@ export function GameHeader({
       </RoundBadge>
       <RoomCodeCopy roomCode={roomCode} variant="badge" />
       <InviteQr roomCode={roomCode} variant="badge" />
-      <PlayerBadges>
+      <PlayerBadges ref={badgesRef}>
         {players.map((p, i) => {
           const isActive = p.id === currentPlayerId;
           return (

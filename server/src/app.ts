@@ -17,7 +17,7 @@ import { REACTION_EMOJIS } from '@tuneline/shared';
 import { join } from 'path';
 
 import { RoomManager } from './rooms.js';
-import { httpLogger, logger } from './logger.js';
+import { httpLogger, logger, shortIp } from './logger.js';
 import {
   SESSION_COOKIE,
   SESSION_MAX_AGE_MS,
@@ -330,7 +330,7 @@ export function createTunelineServer({
     if (result.gameOver) {
       emitGameOver(io, roomCode, result);
       const players = rooms.getPlayers(roomCode);
-      const scores = Object.fromEntries(players?.map((p) => [p.name, p.score]) ?? []);
+      const scores = Object.fromEntries(players?.map((p) => [p.id, p.score]) ?? []);
       logger.info({ roomCode, scores }, 'game_over');
       return;
     }
@@ -363,7 +363,7 @@ export function createTunelineServer({
         gameState,
         currentSong,
       });
-      logger.info({ roomCode, playerName: paused.name }, 'game_paused');
+      logger.info({ roomCode, playerId: paused.id }, 'game_paused');
     } else {
       io.to(target).emit('game_resumed', { gameState, currentSong });
       logger.info({ roomCode, currentPlayerId: gameState.currentPlayerId }, 'game_resumed');
@@ -406,7 +406,7 @@ export function createTunelineServer({
   io.use((socket, next) => {
     const ip = clientIp(socket.handshake);
     if (!socketsPerIp.tryAdd(ip)) {
-      logger.warn({ ip }, 'too_many_connections');
+      logger.warn({ ip: shortIp(ip) }, 'too_many_connections');
       next(new Error('too_many_connections'));
       return;
     }
@@ -453,7 +453,7 @@ export function createTunelineServer({
       socket.emit('room_created', { roomCode, playerId, playerToken });
       const lobby = rooms.getLobbyState(roomCode);
       if (lobby) io.to(roomCode).emit('room_updated', { room: lobby });
-      logger.info({ roomCode, hostName: hostName.trim(), playerId }, 'create_room');
+      logger.info({ roomCode, playerId }, 'create_room');
     });
 
     /** Puts a freshly joined or reconnected socket into the room and syncs everyone. */
@@ -510,14 +510,15 @@ export function createTunelineServer({
       if (!result.ok) {
         // Only an unknown code counts as guessing — not a full room or a taken name.
         if (!rooms.getLobbyState(code)) failedJoins.recordFailure(ip);
-        logger.warn({ roomCode: code, playerName, error: result.error }, 'join_room_denied');
+        // The message may quote the taken name; the log doesn't need it.
+        logger.warn({ roomCode: code, error: result.error.replace(/„[^“]*“/g, '„…“') }, 'join_room_denied');
         socket.emit('error', { message: result.error });
         return;
       }
 
       finishJoin(code, result, wasPaused);
       logger.info(
-        { roomCode: code, playerName: playerName.trim(), playerId: result.playerId },
+        { roomCode: code, playerId: result.playerId },
         'join_room'
       );
     });
@@ -700,7 +701,7 @@ export function createTunelineServer({
       const player = rooms.getPlayerForSocket(socket.id);
       if (!player) return;
       io.to(roomCode).emit('reaction_received', { playerId: player.id, playerName: player.name, emoji });
-      logger.debug({ roomCode, playerName: player.name, emoji }, 'send_reaction');
+      logger.debug({ roomCode, playerId: player.id, emoji }, 'send_reaction');
     });
 
     socket.on('disconnect', () => onDisconnect(socket.id, io));

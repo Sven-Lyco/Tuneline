@@ -215,6 +215,32 @@ describe('getUserPlaylists', () => {
   });
 });
 
+describe('getUserPlaylists pages', () => {
+  const playlist = (id: string) => ({ id, name: id, images: [], tracks: { total: 1 }, owner: { display_name: '' } });
+
+  it('reads further pages, up to 200 playlists, and keeps what it has when a page fails', async () => {
+    // Endless pages of 50: the reader stops after 4.
+    fetchMock.mockImplementation(async (url: string) => {
+      const offset = Number(new URL(url).searchParams.get('offset') ?? 0);
+      return json({
+        items: Array.from({ length: 50 }, (_, i) => playlist(`p${offset + i}`)),
+        next: `https://api.spotify.com/v1/me/playlists?offset=${offset + 50}&limit=50`,
+      });
+    });
+    const many = await spotify.getUserPlaylists('token');
+    expect(many.ok && many.playlists).toHaveLength(200);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(requestedPaths()[1]).toBe('/me/playlists?offset=50&limit=50');
+
+    fetchMock.mockReset();
+    fetchMock
+      .mockResolvedValueOnce(json({ items: [playlist('a')], next: 'https://api.spotify.com/v1/me/playlists?offset=50' }))
+      .mockResolvedValueOnce(json({}, false, 500));
+    const partial = await spotify.getUserPlaylists('token');
+    expect(partial.ok && partial.playlists.map((p) => p.id)).toEqual(['a']);
+  });
+});
+
 describe('Spotify rate limits (429 with Retry-After)', () => {
   const playlists = json({ items: [] });
   const limited = (seconds?: number) =>

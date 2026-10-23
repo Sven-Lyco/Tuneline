@@ -17,6 +17,21 @@ afterAll(() => {
 });
 
 describe('sessions', () => {
+  it('forgets the cached Spotify data of a deleted or expired session', async () => {
+    const cache = await import('./playlistCache.js');
+    const listed = [{ id: 'p1', snapshotId: 'v1', followed: false }];
+    const deleted = auth.createSession(data('d'));
+    cache.rememberPlaylists(deleted, listed);
+    auth.deleteSession(deleted);
+    expect(cache.listedPlaylist(deleted, 'p1')).toBeUndefined();
+
+    const expiring = auth.createSession(data('e'));
+    cache.rememberPlaylists(expiring, listed);
+    vi.advanceTimersByTime(auth.SESSION_MAX_AGE_MS + 1);
+    expect(auth.getSession(expiring)).toBeNull();
+    expect(cache.listedPlaylist(expiring, 'p1')).toBeUndefined();
+  });
+
   it('creates random ids and stores session data', () => {
     const a = auth.createSession(data('a'));
     const b = auth.createSession(data('b'));

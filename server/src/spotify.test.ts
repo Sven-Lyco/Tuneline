@@ -131,6 +131,14 @@ describe('OAuth', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('asks Spotify who logged in, to tell own playlists from followed ones', async () => {
+    fetchMock
+      .mockResolvedValueOnce(json({ access_token: 'at', refresh_token: 'rt', expires_in: 3600 }))
+      .mockResolvedValueOnce(json({ id: 'host-user' }));
+    expect(await spotify.exchangeCode('code', stateOf(spotify.getAuthUrl()))).toMatchObject({ userId: 'host-user' });
+    expect(requestedPaths()[1]).toBe('/me');
+  });
+
   it('defaults a missing refresh token to an empty string', async () => {
     fetchMock.mockResolvedValueOnce(json({ access_token: 'at', expires_in: 3600 }));
     expect(await spotify.exchangeCode('c', stateOf(spotify.getAuthUrl()))).toMatchObject({ refreshToken: '' });
@@ -155,6 +163,13 @@ describe('getValidToken', () => {
     fetchMock.mockResolvedValueOnce(json({ access_token: 'n', refresh_token: 'r2', expires_in: 3600 }));
     await spotify.getValidToken(rotated);
     expect(getSession(rotated)).toMatchObject({ refreshToken: 'r2' });
+  });
+
+  it('keeps the user id when refreshing', async () => {
+    const id = createSession({ accessToken: 'old', refreshToken: 'r', expiresAt: Date.now() - 1, userId: 'host-user' });
+    fetchMock.mockResolvedValueOnce(json({ access_token: 'new', expires_in: 3600 }));
+    await spotify.getValidToken(id);
+    expect(getSession(id)).toMatchObject({ accessToken: 'new', userId: 'host-user' });
   });
 
   it('gives up when the refresh fails', async () => {
@@ -475,5 +490,81 @@ describe('loadSongs', () => {
     const aborted = new AbortController();
     aborted.abort();
     expect((await load(['p1'], 5, [], aborted.signal)).songs).toEqual([]);
+  });
+});
+
+/** `/me/playlists` with the fields that tell snapshots and followed playlists apart. */
+const listing = (...playlists: Array<{ id: string; snapshot?: string; owner?: string; collaborative?: boolean }>) => ({
+  items: playlists.map((p) => ({
+    id: p.id,
+    name: p.id,
+    images: [],
+    items: { total: 1 },
+    owner: { id: p.owner ?? 'me', display_name: p.owner ?? 'me' },
+    collaborative: p.collaborative ?? false,
+    snapshot_id: p.snapshot ?? 'v1',
+  })),
+});
+
+describe('playlist cache', () => {
+  it('reads a playlist from Spotify once per session, snapshot and few hours', async () => {
+    const session = 'cache-session';
+    const pages = (snapshot: string) => ({
+      '/me/playlists': listing({ id: 'p1', snapshot }),
+      '/playlists/p1/items?limit=50&offset=50': { items: [item({ id: 'b', name: 'B' })], total: 100 },
+      '/playlists/p1/': { items: [item({ id: 'a', name: 'A' })], total: 100 },
+    });
+    const loadAs = (sessionId = session) =>
+      spotify.loadSongs('token', ['p1'], 50, new Set(), new AbortController().signal, sessionId);
+    const listAs = (sessionId = session) => spotify.getUserPlaylists('token', { sessionId, userId: 'me' });
+
+    spotifyPages(pages('v1'));
+    await listAs();
+    expect((await loadAs()).pageStats).toEqual({ fetched: 2, cached: 0 });
+    const again = await loadAs();
+    expect(again.pageStats).toEqual({ fetched: 0, cached: 2 });
+    expect(again.songs.map((s) => s.id).sort()).toEqual(['a', 'b']);
+
+    // Another session gets nothing from this one's cache (and caches nothing it didn't list).
+    expect((await loadAs('other-session')).pageStats).toEqual({ fetched: 2, cached: 0 });
+
+    // A changed playlist has a new snapshot: read again.
+    spotifyPages(pages('v2'));
+    await listAs();
+    expect((await loadAs()).pageStats).toEqual({ fetched: 2, cached: 0 });
+
+    // Six hours later the cache is gone.
+    vi.advanceTimersByTime(6 * 60 * 60 * 1000);
+    await listAs();
+    expect((await loadAs()).pageStats).toEqual({ fetched: 2, cached: 0 });
+  });
+});
+
+// Last in the file: once Spotify refuses a followed playlist, that holds for the whole module.
+describe('followed playlists', () => {
+  it('are offered until Spotify refuses one, then left out; own and collaborative ones stay', async () => {
+    const host = { sessionId: 'host-session', userId: 'me' };
+    const ids = async (who: { sessionId: string; userId?: string } = host) => {
+      const result = await spotify.getUserPlaylists('token', who);
+      return result.ok ? result.playlists.map((p) => p.id) : result;
+    };
+    const load = (id: string) =>
+      spotify.loadSongs('token', [id], 5, new Set(), new AbortController().signal, host.sessionId);
+    const playlists = listing(
+      { id: 'own' },
+      { id: 'shared', owner: 'friend', collaborative: true },
+      { id: 'followed', owner: 'hitster' },
+    );
+
+    spotifyPages({ '/me/playlists': playlists, '/playlists/': 403 });
+    expect(await ids()).toEqual(['own', 'shared', 'followed']);
+    // Spotify refusing the host's own playlist says nothing about followed ones.
+    await load('own');
+    expect(await ids()).toEqual(['own', 'shared', 'followed']);
+
+    await load('followed');
+    expect(await ids()).toEqual(['own', 'shared']);
+    // Without the host's user id there's no telling which ones are followed.
+    expect(await ids({ sessionId: 'unknown-user' })).toEqual(['own', 'shared', 'followed']);
   });
 });

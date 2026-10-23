@@ -385,7 +385,7 @@ export async function loadSongs(
 
   const BATCH = 10;
   const result: SongFull[] = [];
-  const previewStats: PreviewStats = { lookups: 0, failed: 0 };
+  const previewStats: PreviewStats = { lookups: 0, failed: 0, waitedMs: 0 };
   const previews = new Set<string>();
   const corrected = new Set<string>();
 
@@ -397,7 +397,7 @@ export async function loadSongs(
     const batch = shuffled.slice(i, i + BATCH);
     const enriched = await Promise.all(
       batch.map(async (track): Promise<(SongFull & { preview: string }) | null> => {
-        const match = await findPreview(track.artist, track.title, track.durationMs, previewStats);
+        const match = await findPreview(track.artist, track.title, track.durationMs, previewStats, signal);
         if (!match) return null;
         // Spotify dates a song by its album, so a reissue or best-of shows a later year.
         const year = match.originalYear !== null && match.originalYear < track.year ? match.originalYear : track.year;

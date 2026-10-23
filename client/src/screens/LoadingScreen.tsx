@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import styled from '@emotion/styled';
 import { AppTitle } from '../components/AppTitle';
 import { LinkButton } from '../components/LinkButton';
@@ -36,17 +37,33 @@ const Message = styled.div`
 
 const Hint = styled.div`
   margin-top: 0.5rem;
+  max-width: 22rem;
+  padding: 0 1rem;
+  text-align: center;
   font-size: 0.7rem;
   color: #555;
 `;
 
+// From here on a song load is most likely waiting for iTunes (about 20 searches a minute).
+const SLOW_AFTER_MS = 8000;
+
 export function LoadingScreen({ message, onCancel }: LoadingScreenProps) {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setSlow(true), SLOW_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <Screen>
       <AppTitle size="sm" animate={false} style={{ marginBottom: '1.5rem' }} />
       <Spinner />
       <Message>{message}</Message>
-      <Hint>Das kann ein paar Sekunden dauern...</Hint>
+      <Hint>
+        {slow
+          ? 'iTunes erlaubt nur wenige Suchen pro Minute – bei vielen Runden dauert das Laden ein paar Minuten.'
+          : 'Das kann ein paar Sekunden dauern...'}
+      </Hint>
       {onCancel && (
         <LinkButton style={{ marginTop: '1.5rem' }} onClick={onCancel}>
           Abbrechen

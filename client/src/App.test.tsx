@@ -200,7 +200,7 @@ describe('starting a game', () => {
     fireEvent.click(screen.getByText('Spiel starten →'));
     expect(emittedPayloads('start_loading')).toHaveLength(1);
     await waitFor(() => expect(emittedPayloads('start_game')).toHaveLength(1));
-    expect(loadSongsFromPlaylists).toHaveBeenCalledWith(['a'], 18, [], expect.any(AbortSignal));
+    expect(loadSongsFromPlaylists).toHaveBeenCalledWith(['a'], 15, [], expect.any(AbortSignal));
     expect(emittedPayloads('start_game')[0]).toMatchObject({ rounds: 5, audioMode: 'all' });
   });
 

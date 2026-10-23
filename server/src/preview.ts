@@ -1,3 +1,4 @@
+import { TokenBucket } from './limits.js';
 import { logger } from './logger.js';
 import { baseTitle, isCompilationAlbum, normalize, versionOf } from './versions.js';
 
@@ -99,26 +100,80 @@ function cacheSet(key: string, value: Candidate[]): void {
   cache.set(key, value);
 }
 
+// ── iTunes budget ────────────────────────────────────────────────────────────
+
+// Apple allows "approximately 20 calls per minute" per IP, and all hosts share the server's. A
+// burst of 40 kept small games instant in tests (Oct 2026); about 70 within a minute got the IP
+// blocked for over half an hour.
+const ITUNES_BURST = 40;
+const ITUNES_REFILL_MS = 3000;
+// After a block iTunes is left alone for a while: asking on only keeps the block going.
+const FIRST_COOLDOWN_MS = 2 * 60 * 1000;
+const MAX_COOLDOWN_MS = 30 * 60 * 1000;
+
+let budget = new TokenBucket(ITUNES_BURST, ITUNES_REFILL_MS);
+let blockedUntil = 0;
+let cooldownMs = FIRST_COOLDOWN_MS;
+
+/** A fresh budget and no block — for tests, which share this module's state. */
+export function resetItunesLimits(burst = ITUNES_BURST): void {
+  budget = new TokenBucket(burst, ITUNES_REFILL_MS);
+  blockedUntil = 0;
+  cooldownMs = FIRST_COOLDOWN_MS;
+}
+
+function isBlocked(): boolean {
+  return Date.now() < blockedUntil;
+}
+
+/** iTunes refused (403/429): pause, and pause longer if it happens again. */
+function block(): void {
+  // A whole batch fails at once; that's one block, not several.
+  if (isBlocked()) return;
+  blockedUntil = Date.now() + cooldownMs;
+  logger.warn({ cooldownMs }, 'itunes_throttled');
+  cooldownMs = Math.min(cooldownMs * 2, MAX_COOLDOWN_MS);
+}
+
 /**
- * iTunes searches that went out (cache misses) and how many failed. Apple allows roughly 20 per
- * minute per IP; the failures show whether song loading runs into that limit.
+ * iTunes searches that went out (cache misses), how many failed, and how long the budget made
+ * them wait. Failures show whether song loading still runs into Apple's limit.
  */
 export interface PreviewStats {
   lookups: number;
   failed: number;
+  waitedMs: number;
 }
 
-/** `durationMs`: the Spotify track's length (0 = unknown), to tell recordings apart. */
+/**
+ * `durationMs`: the Spotify track's length (0 = unknown), to tell recordings apart. `signal` ends
+ * the wait for the budget when the load is cancelled.
+ */
 export async function findPreview(
   artist: string,
   title: string,
   durationMs = 0,
   stats?: PreviewStats,
+  signal?: AbortSignal,
 ): Promise<PreviewMatch | null> {
   const cacheKey = `${artist}|${title}`;
 
   const cached = cache.get(cacheKey);
   if (cached) return pickBest(cached, durationMs);
+
+  if (!isBlocked()) {
+    try {
+      const waited = await budget.take(signal);
+      if (stats) stats.waitedMs += waited;
+    } catch {
+      return null; // the load was cancelled
+    }
+  }
+  // Blocked now, or while this search waited: fail without asking.
+  if (isBlocked()) {
+    if (stats) stats.failed++;
+    return null;
+  }
   if (stats) stats.lookups++;
 
   try {
@@ -132,9 +187,11 @@ export async function findPreview(
     // Not cached: 403/429/5xx are transient (iTunes throttling), not "no preview".
     if (!response.ok) {
       if (stats) stats.failed++;
+      if (response.status === 403 || response.status === 429) block();
       logger.warn({ artist, title, status: response.status }, 'itunes_fetch_error');
       return null;
     }
+    cooldownMs = FIRST_COOLDOWN_MS;
 
     const data = (await response.json()) as ItunesSearchResult;
     const found = candidates(data.results, artist, title);

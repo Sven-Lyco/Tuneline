@@ -239,6 +239,7 @@ export function createTunelineServer({
         // Measures whether loading hits iTunes' ~20 requests/min before adding a throttle.
         itunesLookups: previewStats.lookups,
         itunesFailed: previewStats.failed,
+        itunesWaitedMs: previewStats.waitedMs,
         yearsCorrected,
         duplicatesRemoved,
       },

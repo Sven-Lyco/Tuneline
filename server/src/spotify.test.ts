@@ -283,8 +283,8 @@ describe('loadSongs', () => {
     expect(previewsUnavailable).toBe(false);
     expect(Object.fromEntries(songs.map((s) => [s.title, s.year]))).toEqual({ 'Classic Hit': 1969, 'New Song': 2001 });
     expect(yearsCorrected).toBe(1);
-    // iTunes gets Spotify's length to tell recordings apart.
-    expect(findPreview).toHaveBeenCalledWith('Band', 'Classic Hit', 200_000, expect.anything());
+    // iTunes gets Spotify's length to tell recordings apart, and the load's signal to stop waiting.
+    expect(findPreview).toHaveBeenCalledWith('Band', 'Classic Hit', 200_000, expect.anything(), expect.any(AbortSignal));
     // Only the song fields reach the client.
     expect(Object.keys(songs[0]).sort()).toEqual(['artist', 'cover', 'id', 'preview', 'title', 'year']);
   });
@@ -414,7 +414,7 @@ describe('loadSongs', () => {
     const { songs, previewStats, previewsUnavailable } = await load(['p1'], 20);
     expect(songs).toEqual([]);
     // One batch of 10 went out; after its failures no further batch does.
-    expect(previewStats).toEqual({ lookups: 10, failed: 10 });
+    expect(previewStats).toEqual({ lookups: 10, failed: 10, waitedMs: 0 });
     // The client then says to wait, rather than to pick other playlists.
     expect(previewsUnavailable).toBe(true);
     vi.mocked(findPreview).mockReset();

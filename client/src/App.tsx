@@ -310,7 +310,9 @@ export default function App() {
     socket.emit('start_loading');
 
     const playerCount = lobbyState?.players.filter((p) => p.isConnected).length ?? 1;
-    const songsNeeded = Math.ceil(playerCount * (rounds + 1) * 1.5);
+    // A starting card plus one per round for everyone. The server only sends songs with a preview;
+    // the extra fifth is for players who join late and get a starting card from the pile.
+    const songsNeeded = Math.ceil(playerCount * (rounds + 1) * 1.2);
     const { songs, unavailablePlaylists, previewsUnavailable } = await loadSongsFromPlaylists(
       selectedPlaylists.map((p) => p.id),
       songsNeeded,

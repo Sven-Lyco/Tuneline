@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { LoginScreen } from './LoginScreen';
 import { HelpScreen } from './HelpScreen';
@@ -173,6 +173,15 @@ describe('LoadingScreen', () => {
     expect(onCancel).toHaveBeenCalled();
     rerender(<LoadingScreen message="Host lädt Songs…" />);
     expect(screen.queryByText('Abbrechen')).not.toBeInTheDocument();
+  });
+
+  it('explains after a while that iTunes slows loading down', () => {
+    vi.useFakeTimers();
+    render(<LoadingScreen message="Songs werden geladen…" />);
+    expect(screen.getByText('Das kann ein paar Sekunden dauern...')).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(8000));
+    expect(screen.getByText(/iTunes erlaubt nur wenige Suchen pro Minute/)).toBeInTheDocument();
+    vi.useRealTimers();
   });
 });
 

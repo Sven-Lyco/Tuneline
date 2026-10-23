@@ -11,6 +11,8 @@ export const logger = pino(
   IS_PROD || LEVEL === 'silent'
     ? {
         level: LEVEL,
+        // No pid and hostname on every line: the machine's name isn't the log's business.
+        base: undefined,
         formatters: {
           level: (label) => ({ level: label.toUpperCase() }),
         },

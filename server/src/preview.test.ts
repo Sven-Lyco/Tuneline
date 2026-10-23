@@ -283,6 +283,21 @@ describe('findPreview', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('forgets answers after 21 hours', async () => {
+    vi.useFakeTimers();
+    resetItunesLimits();
+    const a = artist();
+    itunes([track(a, 'Hit')]);
+    await findPreview(a, 'Hit');
+    vi.advanceTimersByTime(21 * 60 * 60 * 1000 - 1);
+    await findPreview(a, 'Hit');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(1);
+    itunes([track(a, 'Hit')]);
+    await findPreview(a, 'Hit');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('evicts the oldest entry once the cache is full', async () => {
     resetItunesLimits(Infinity);
     fetchMock.mockImplementation(async () => ({ ok: true, json: async () => ({ results: [] }) }));

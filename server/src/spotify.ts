@@ -11,6 +11,7 @@ import { logger } from './logger.js';
 import { type PreviewStats, findPreview } from './preview.js';
 import { shuffle } from './utils.js';
 import { songKey, versionOf } from './versions.js';
+import { type CachedPage, type PageCache, listedPlaylist, playlistPages, rememberPlaylists } from './playlistCache.js';
 
 const SCOPES = [
   'playlist-read-private',
@@ -91,11 +92,14 @@ export async function exchangeCode(code: string, state: string): Promise<Session
 
   if (!response.ok) return null;
   const data = await response.json() as { access_token: string; refresh_token: string; expires_in: number };
+  // Tells the host's own playlists from followed ones; without it nothing is filtered.
+  const me = await spotifyFetch<{ id?: string }>(data.access_token, '/me');
 
   return {
     accessToken: data.access_token,
     refreshToken: data.refresh_token ?? '',
     expiresAt: Date.now() + (data.expires_in - 60) * 1000,
+    userId: me.ok ? me.data.id : undefined,
   };
 }
 
@@ -120,6 +124,7 @@ async function refreshToken(session: SessionData): Promise<SessionData | null> {
     accessToken: data.access_token,
     refreshToken: data.refresh_token ?? session.refreshToken,
     expiresAt: Date.now() + (data.expires_in - 60) * 1000,
+    userId: session.userId,
   };
 }
 
@@ -143,12 +148,32 @@ export async function getValidToken(sessionId: string): Promise<string | null> {
 /** `status` 0 = no answer (network error or timeout). */
 type SpotifyResult<T> = { ok: true; data: T } | { ok: false; status: number };
 
-async function spotifyFetch<T>(token: string, path: string): Promise<SpotifyResult<T>> {
+// Spotify counts requests per app (since July 2026 per developer account), so a 429 with a long
+// Retry-After holds for every host: until then no request goes out, which would only prolong it.
+let spotifyBlockedUntil = 0;
+// A wait up to this long is sat out once; a longer one blocks.
+const MAX_RETRY_WAIT_MS = 5000;
+
+async function spotifyFetch<T>(token: string, path: string, retried = false): Promise<SpotifyResult<T>> {
+  if (Date.now() < spotifyBlockedUntil) return { ok: false, status: 429 };
   try {
     const response = await fetch(`https://api.spotify.com/v1${path}`, {
       headers: { Authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(10_000),
     });
+    if (response.status === 429) {
+      // Seconds; without the header (NaN/0) only this request fails.
+      const retryAfterMs = Number(response.headers.get('retry-after')) * 1000;
+      if (retryAfterMs > 0 && retryAfterMs <= MAX_RETRY_WAIT_MS && !retried) {
+        await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
+        return spotifyFetch<T>(token, path, true);
+      }
+      if (retryAfterMs > MAX_RETRY_WAIT_MS) {
+        spotifyBlockedUntil = Date.now() + retryAfterMs;
+        logger.warn({ retryAfterSeconds: retryAfterMs / 1000 }, 'spotify_rate_limited');
+      }
+      return { ok: false, status: 429 };
+    }
     if (!response.ok) return { ok: false, status: response.status };
     return { ok: true, data: (await response.json()) as T };
   } catch {
@@ -166,15 +191,42 @@ interface SpotifyPlaylistsResponse {
     // Apps created since Feb 2026 get the count under `items`, older ones under `tracks`.
     items?: { total: number };
     tracks?: { total: number };
-    owner: { display_name: string };
+    owner: { id?: string; display_name: string };
+    collaborative?: boolean;
+    snapshot_id?: string;
   }>;
+}
+
+// Set once Spotify refuses a playlist the host only follows: apps created since Feb 2026 can't read
+// those, and older ones only until Spotify ends their postponement. From then on followed playlists
+// aren't offered. In memory only, so after a restart it takes one refusal again.
+let followedPlaylistsRefused = false;
+
+function noteRefusedFollowedPlaylists(
+  sessionId: string,
+  refused: Array<{ id: string; problem: PlaylistProblem }>,
+): void {
+  if (followedPlaylistsRefused) return;
+  const followed = refused.find(
+    ({ id, problem }) => problem === 'not_owned' && listedPlaylist(sessionId, id)?.followed,
+  );
+  if (!followed) return;
+  followedPlaylistsRefused = true;
+  logger.warn({ playlistId: followed.id }, 'followed_playlists_refused');
 }
 
 export type PlaylistsResult =
   | { ok: true; playlists: SpotifyPlaylist[] }
   | { ok: false; problem: SpotifyProblem };
 
-export async function getUserPlaylists(token: string): Promise<PlaylistsResult> {
+/**
+ * `host` keeps the listing for the session: snapshots for the page cache, and which playlists are
+ * only followed (that needs the host's user id; without it none count as followed).
+ */
+export async function getUserPlaylists(
+  token: string,
+  host?: { sessionId: string; userId?: string },
+): Promise<PlaylistsResult> {
   const result = await spotifyFetch<SpotifyPlaylistsResponse>(token, '/me/playlists?limit=50');
   if (!result.ok) {
     // 403: the user isn't on the app's allowlist (Development Mode).
@@ -182,7 +234,17 @@ export async function getUserPlaylists(token: string): Promise<PlaylistsResult> 
     return { ok: false, problem };
   }
 
-  const playlists = (result.data.items ?? []).filter(Boolean).map((p) => ({
+  const items = (result.data.items ?? []).filter(Boolean);
+  const isFollowed = (p: SpotifyPlaylistsResponse['items'][number]) =>
+    !!host?.userId && p.owner?.id !== host.userId && !p.collaborative;
+  if (host) {
+    rememberPlaylists(
+      host.sessionId,
+      items.map((p) => ({ id: p.id, snapshotId: p.snapshot_id ?? null, followed: isFollowed(p) })),
+    );
+  }
+
+  const playlists = items.filter((p) => !(followedPlaylistsRefused && isFollowed(p))).map((p) => ({
     id: p.id,
     name: p.name,
     coverUrl: p.images?.[0]?.url ?? null,
@@ -279,28 +341,54 @@ function playlistProblem(status: number): PlaylistProblem {
 // Songs read per playlist: 6 pages of /items. Plenty for a game, and few requests to Spotify.
 const MAX_TRACKS = 300;
 
+/** Playlist pages read during one song load: from Spotify, or from this session's cache. */
+export interface PageStats {
+  fetched: number;
+  cached: number;
+}
+
 /**
  * Reads up to MAX_TRACKS songs. `/items` (max. 50 per page) replaced `/tracks` in Feb 2026, and
  * Spotify only postponed switching off `/tracks` for older apps — so `/items` comes first, and a
  * refused first page falls back to `/tracks` for apps that don't know `/items` yet.
  *
  * After the first page, the others are read in random order: a longer playlist would otherwise
- * always give the same songs from its start, and never those from its end.
+ * always give the same songs from its start, and never those from its end. Pages already read in
+ * this session, for the same snapshot of the playlist, come from the cache.
  */
 async function getPlaylistTracks(
   token: string,
   playlistId: string,
+  stats: PageStats,
+  cache: PageCache<TrackData> | null,
 ): Promise<{ tracks: TrackData[]; problem: PlaylistProblem | null }> {
+  const readPage = async (path: string): Promise<SpotifyResult<CachedPage<TrackData>>> => {
+    const cached = cache?.get(path);
+    if (cached) {
+      stats.cached++;
+      return { ok: true, data: cached };
+    }
+    stats.fetched++;
+    const result = await spotifyFetch<SpotifyTracksResponse>(token, path);
+    if (!result.ok) return result;
+    const page = {
+      items: (result.data.items ?? []).flatMap((entry) => parseTrack(entry) ?? []),
+      total: result.data.total ?? 0,
+    };
+    cache?.set(path, page);
+    return { ok: true, data: page };
+  };
+
   const id = encodeURIComponent(playlistId);
   const legacyFields =
     'items(track(id,name,duration_ms,external_ids(isrc),artists(name),album(name,album_type,release_date,images))),total';
   let path = `/playlists/${id}/items?limit=50`;
   let pageSize = 50;
-  let first = await spotifyFetch<SpotifyTracksResponse>(token, path);
+  let first = await readPage(path);
   // A 429 means the app's quota is used up; asking again would only make it worse.
   if (!first.ok && first.status !== 429) {
     const legacyPath = `/playlists/${id}/tracks?fields=${encodeURIComponent(legacyFields)}&limit=100`;
-    const legacy = await spotifyFetch<SpotifyTracksResponse>(token, legacyPath);
+    const legacy = await readPage(legacyPath);
     if (legacy.ok) {
       // Shows in the log whether this app still depends on /tracks.
       logger.info({ playlistId, itemsStatus: first.status }, 'playlist_items_fallback');
@@ -309,23 +397,15 @@ async function getPlaylistTracks(
   }
   if (!first.ok) return { tracks: [], problem: playlistProblem(first.status) };
 
-  const tracks: TrackData[] = [];
-  const read = (page: SpotifyTracksResponse) => {
-    for (const entry of page.items ?? []) {
-      const track = parseTrack(entry);
-      if (track) tracks.push(track);
-    }
-  };
-  read(first.data);
-
-  const pages = Math.ceil((first.data.total ?? 0) / pageSize);
-  const offsets = shuffle(Array.from({ length: Math.max(pages - 1, 0) }, (_, i) => (i + 1) * pageSize));
+  const tracks = [...first.data.items];
+  const pageCount = Math.ceil(first.data.total / pageSize);
+  const offsets = shuffle(Array.from({ length: Math.max(pageCount - 1, 0) }, (_, i) => (i + 1) * pageSize));
   for (const offset of offsets) {
     if (tracks.length >= MAX_TRACKS) break;
-    const page = await spotifyFetch<SpotifyTracksResponse>(token, `${path}&offset=${offset}`);
+    const page = await readPage(`${path}&offset=${offset}`);
     // A later page failing keeps the songs read so far.
     if (!page.ok) break;
-    read(page.data);
+    tracks.push(...page.data.items);
   }
 
   return { tracks, problem: null };
@@ -343,20 +423,31 @@ export interface LoadSongsResult extends SongsResponse {
   yearsCorrected: number;
   /** Other versions of a song already in the pile (other playlist, single vs. album …). */
   duplicatesRemoved: number;
+  pageStats: PageStats;
 }
 
-/** `excludeIds` (songs from earlier games) are only used once the fresh songs run out. */
+/**
+ * `excludeIds` (songs from earlier games) are only used once the fresh songs run out. `sessionId`
+ * gives the host's page cache and what their playlist listing said about each playlist.
+ */
 export async function loadSongs(
   token: string,
   playlistIds: string[],
   target: number,
   excludeIds: Set<string>,
   signal: AbortSignal,
+  sessionId?: string,
 ): Promise<LoadSongsResult> {
-  const byPlaylist = await Promise.all(playlistIds.map((id) => getPlaylistTracks(token, id)));
+  const pageStats: PageStats = { fetched: 0, cached: 0 };
+  const byPlaylist = await Promise.all(
+    playlistIds.map((id) =>
+      getPlaylistTracks(token, id, pageStats, sessionId ? playlistPages<TrackData>(sessionId, id) : null),
+    ),
+  );
   const unavailablePlaylists = byPlaylist.flatMap(({ problem }, i) =>
     problem ? [{ id: playlistIds[i], problem }] : [],
   );
+  if (sessionId) noteRefusedFollowedPlaylists(sessionId, unavailablePlaylists);
 
   // A song comes once, whichever version or playlist it's in: same Spotify ID, same recording
   // (ISRC) or same artist and title.
@@ -385,7 +476,7 @@ export async function loadSongs(
 
   const BATCH = 10;
   const result: SongFull[] = [];
-  const previewStats: PreviewStats = { lookups: 0, failed: 0 };
+  const previewStats: PreviewStats = { lookups: 0, failed: 0, waitedMs: 0 };
   const previews = new Set<string>();
   const corrected = new Set<string>();
 
@@ -397,7 +488,7 @@ export async function loadSongs(
     const batch = shuffled.slice(i, i + BATCH);
     const enriched = await Promise.all(
       batch.map(async (track): Promise<(SongFull & { preview: string }) | null> => {
-        const match = await findPreview(track.artist, track.title, track.durationMs, previewStats);
+        const match = await findPreview(track.artist, track.title, track.durationMs, previewStats, signal);
         if (!match) return null;
         // Spotify dates a song by its album, so a reissue or best-of shows a later year.
         const year = match.originalYear !== null && match.originalYear < track.year ? match.originalYear : track.year;
@@ -430,5 +521,6 @@ export async function loadSongs(
     yearsCorrected: songs.filter((s) => corrected.has(s.id)).length,
     duplicatesRemoved,
     previewsUnavailable: previewStats.failed >= MAX_ITUNES_FAILURES,
+    pageStats,
   };
 }

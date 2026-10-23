@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { findPreview } from './preview.js';
+import { findPreview, resetItunesLimits } from './preview.js';
 
 type Track = {
   previewUrl: string | null;
@@ -12,8 +12,8 @@ type Track = {
 
 const fetchMock = vi.fn();
 
-function itunes(results: Track[], ok = true) {
-  fetchMock.mockResolvedValueOnce({ ok, status: ok ? 200 : 429, json: async () => ({ results }) });
+function itunes(results: Track[], status = 200) {
+  fetchMock.mockResolvedValueOnce({ ok: status === 200, status, json: async () => ({ results }) });
 }
 
 const track = (
@@ -39,13 +39,17 @@ const preview = async (artist: string, title: string, seconds = 0) =>
 let n = 0;
 const artist = () => `Artist ${++n}`;
 
+const stats = () => ({ lookups: 0, failed: 0, waitedMs: 0 });
+
 beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal('fetch', fetchMock);
+  resetItunesLimits();
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe('findPreview', () => {
@@ -196,22 +200,91 @@ describe('findPreview', () => {
     expect(await findPreview(b, 'Undated', 200_000)).toEqual({ preview: 'https://audio/Undated', originalYear: null });
   });
 
-  it('caches answers but retries after throttling or network errors, and counts both', async () => {
+  it('caches answers but retries after server or network errors, and counts both', async () => {
     const a = artist();
-    const stats = { lookups: 0, failed: 0 };
-    itunes([], false);
-    expect(await findPreview(a, 'Hit', 0, stats)).toBeNull();
+    const counts = stats();
+    itunes([], 503);
+    expect(await findPreview(a, 'Hit', 0, counts)).toBeNull();
     fetchMock.mockRejectedValueOnce(new Error('offline'));
-    expect(await findPreview(a, 'Hit', 0, stats)).toBeNull();
+    expect(await findPreview(a, 'Hit', 0, counts)).toBeNull();
     itunes([track(a, 'Hit')]);
-    expect((await findPreview(a, 'Hit', 0, stats))?.preview).toBe('https://audio/Hit');
-    expect((await findPreview(a, 'Hit', 0, stats))?.preview).toBe('https://audio/Hit');
+    expect((await findPreview(a, 'Hit', 0, counts))?.preview).toBe('https://audio/Hit');
+    expect((await findPreview(a, 'Hit', 0, counts))?.preview).toBe('https://audio/Hit');
     expect(fetchMock).toHaveBeenCalledTimes(3);
-    // The cache hit isn't a lookup; throttling and the network error are failures.
-    expect(stats).toEqual({ lookups: 3, failed: 2 });
+    // The cache hit isn't a lookup; the server and the network error are failures.
+    expect(counts).toEqual({ lookups: 3, failed: 2, waitedMs: 0 });
+  });
+
+  it('leaves iTunes alone after a refusal, longer each time, until a search works again', async () => {
+    vi.useFakeTimers();
+    resetItunesLimits();
+    const counts = stats();
+    itunes([], 429);
+    expect(await findPreview(artist(), 'Refused', 0, counts)).toBeNull();
+    // Blocked: fails at once, without asking.
+    expect(await findPreview(artist(), 'Skipped', 0, counts)).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(counts).toEqual({ lookups: 1, failed: 2, waitedMs: 0 });
+
+    // After 2 minutes iTunes is asked again; refused again, it's left alone for 4.
+    vi.advanceTimersByTime(2 * 60_000);
+    itunes([], 403);
+    expect(await findPreview(artist(), 'Refused again', 0)).toBeNull();
+    vi.advanceTimersByTime(3 * 60_000);
+    expect(await findPreview(artist(), 'Still blocked', 0)).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(60_000);
+    const a = artist();
+    itunes([track(a, 'Works')]);
+    expect((await findPreview(a, 'Works', 0))?.preview).toBe('https://audio/Works');
+
+    // A success resets the pause to 2 minutes.
+    itunes([], 429);
+    await findPreview(artist(), 'Refused once more', 0);
+    vi.advanceTimersByTime(2 * 60_000);
+    itunes([]);
+    await findPreview(artist(), 'Asked again', 0);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  it('waits for the budget once the burst is used, but not for cached songs', async () => {
+    vi.useFakeTimers();
+    resetItunesLimits(1);
+    const a = artist();
+    const counts = stats();
+    itunes([track(a, 'First')]);
+    await findPreview(a, 'First', 0, counts);
+    // The budget is used up, but a cached song needs no search.
+    expect((await findPreview(a, 'First', 0, counts))?.preview).toBe('https://audio/First');
+
+    itunes([track(a, 'Second')]);
+    itunes([track(a, 'Third')]);
+    const second = findPreview(a, 'Second', 0, counts);
+    const third = findPreview(a, 'Third', 0, counts);
+    await vi.advanceTimersByTimeAsync(6000);
+    expect((await second)?.preview).toBe('https://audio/Second');
+    expect((await third)?.preview).toBe('https://audio/Third');
+    // Waiting side by side (3 s and 6 s), the load was held up 6 s, not 9.
+    expect(counts).toEqual({ lookups: 3, failed: 0, waitedMs: 6000 });
+  });
+
+  it('stops waiting for the budget when the load is cancelled', async () => {
+    vi.useFakeTimers();
+    resetItunesLimits(1);
+    itunes([]);
+    await findPreview(artist(), 'Uses the budget');
+    const cancel = new AbortController();
+    const counts = stats();
+    const waiting = findPreview(artist(), 'Never asked', 0, counts, cancel.signal);
+    cancel.abort();
+    expect(await waiting).toBeNull();
+    // A cancelled search is neither a lookup nor a failure.
+    expect(counts).toEqual({ lookups: 0, failed: 0, waitedMs: 0 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('evicts the oldest entry once the cache is full', async () => {
+    resetItunesLimits(Infinity);
     fetchMock.mockImplementation(async () => ({ ok: true, json: async () => ({ results: [] }) }));
     const first = artist();
     await findPreview(first, 'Oldest');

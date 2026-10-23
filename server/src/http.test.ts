@@ -9,7 +9,12 @@ import { cspDirectives } from './app.js';
 const realFetch = globalThis.fetch;
 const external = vi.fn<(url: string, init?: RequestInit) => Promise<unknown>>();
 
-const json = (body: unknown, ok = true, status = ok ? 200 : 500) => ({ ok, status, json: async () => body });
+const json = (body: unknown, ok = true, status = ok ? 200 : 500) => ({
+  ok,
+  status,
+  headers: new Headers(),
+  json: async () => body,
+});
 
 let server: TestServer;
 

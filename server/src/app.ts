@@ -179,7 +179,7 @@ export function createTunelineServer({
       return;
     }
 
-    const result = await getUserPlaylists(token);
+    const result = await getUserPlaylists(token, { sessionId, userId: getSession(sessionId)?.userId });
     if (!result.ok) {
       logger.warn({ problem: result.problem }, 'playlists_refused');
       const status = { not_allowlisted: 403, quota: 429, unavailable: 502 }[result.problem];
@@ -228,8 +228,8 @@ export function createTunelineServer({
       if (!res.writableFinished) abort.abort();
     });
 
-    const { songs, unavailablePlaylists, previewStats, yearsCorrected, duplicatesRemoved, previewsUnavailable } =
-      await loadSongs(token, playlistIds, target, new Set(excludeIds), abort.signal);
+    const { songs, unavailablePlaylists, previewStats, yearsCorrected, duplicatesRemoved, previewsUnavailable, pageStats } =
+      await loadSongs(token, playlistIds, target, new Set(excludeIds), abort.signal, sessionId);
     if (abort.signal.aborted) return;
     logger.info(
       {
@@ -239,6 +239,9 @@ export function createTunelineServer({
         // Measures whether loading hits iTunes' ~20 requests/min before adding a throttle.
         itunesLookups: previewStats.lookups,
         itunesFailed: previewStats.failed,
+        itunesWaitedMs: previewStats.waitedMs,
+        spotifyPagesFetched: pageStats.fetched,
+        spotifyPagesCached: pageStats.cached,
         yearsCorrected,
         duplicatesRemoved,
       },

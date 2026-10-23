@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AttemptLimiter, ConnectionCounter } from './limits.js';
+import { AttemptLimiter, ConnectionCounter, TokenBucket } from './limits.js';
 
 describe('ConnectionCounter', () => {
   it('counts per key up to the limit and forgets keys at zero', () => {
@@ -46,5 +46,52 @@ describe('AttemptLimiter', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect((limiter as any).attempts.size).toBe(1);
     expect(limiter.isBlocked('new')).toBe(true);
+  });
+});
+
+describe('TokenBucket', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('hands out the burst at once, then one token per interval, in order', async () => {
+    const bucket = new TokenBucket(2, 3000);
+    expect(await bucket.take()).toBe(0);
+    expect(await bucket.take()).toBe(0);
+
+    const order: string[] = [];
+    const third = bucket.take().then((waited) => order.push(`third after ${waited}`));
+    const fourth = bucket.take().then((waited) => order.push(`fourth after ${waited}`));
+    await vi.advanceTimersByTimeAsync(2999);
+    expect(order).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(order).toEqual(['third after 3000']);
+    await vi.advanceTimersByTimeAsync(3000);
+    await Promise.all([third, fourth]);
+    expect(order).toEqual(['third after 3000', 'fourth after 6000']);
+  });
+
+  it('refills up to its capacity while idle', async () => {
+    const bucket = new TokenBucket(2, 1000);
+    await bucket.take();
+    await bucket.take();
+    vi.advanceTimersByTime(10_000);
+    expect(await bucket.take()).toBe(0);
+    expect(await bucket.take()).toBe(0);
+    const third = bucket.take();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(await third).toBe(1000);
+  });
+
+  it('lets an aborted caller leave the queue without using a token', async () => {
+    const bucket = new TokenBucket(1, 1000);
+    await bucket.take();
+    const abort = new AbortController();
+    const leaving = bucket.take(abort.signal);
+    const staying = bucket.take();
+    abort.abort();
+    await expect(leaving).rejects.toThrow('aborted');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(await staying).toBe(1000);
+    await expect(bucket.take(abort.signal)).rejects.toThrow('aborted');
   });
 });

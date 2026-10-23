@@ -429,5 +429,6 @@ export async function loadSongs(
     previewStats,
     yearsCorrected: songs.filter((s) => corrected.has(s.id)).length,
     duplicatesRemoved,
+    previewsUnavailable: previewStats.failed >= MAX_ITUNES_FAILURES,
   };
 }

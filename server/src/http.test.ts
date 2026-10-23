@@ -166,6 +166,7 @@ describe('Spotify data routes', () => {
         expect.objectContaining({ id: 't1', title: 'Dream On', year: 1973, preview: 'https://audio-ssl.itunes.apple.com/d' }),
       ],
       unavailablePlaylists: [],
+      previewsUnavailable: false,
     });
   });
 

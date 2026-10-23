@@ -38,7 +38,11 @@ async function hostLobby() {
 beforeEach(() => {
   vi.mocked(isAuthenticated).mockResolvedValue(false);
   vi.mocked(isSeatActiveElsewhere).mockResolvedValue(false);
-  vi.mocked(loadSongsFromPlaylists).mockResolvedValue({ songs: [], unavailablePlaylists: [] });
+  vi.mocked(loadSongsFromPlaylists).mockResolvedValue({
+    songs: [],
+    unavailablePlaylists: [],
+    previewsUnavailable: false,
+  });
 });
 
 describe('start screens', () => {
@@ -190,6 +194,7 @@ describe('starting a game', () => {
     vi.mocked(loadSongsFromPlaylists).mockResolvedValue({
       songs: Array.from({ length: 20 }, (_, i) => song(1960 + i)),
       unavailablePlaylists: [],
+      previewsUnavailable: false,
     });
     await hostLobby();
     fireEvent.click(screen.getByText('Spiel starten →'));
@@ -203,6 +208,7 @@ describe('starting a game', () => {
     vi.mocked(loadSongsFromPlaylists).mockResolvedValue({
       songs: Array.from({ length: 20 }, (_, i) => song(1960 + i)),
       unavailablePlaylists: [{ id: 'a', problem: 'spotify_owned' }],
+      previewsUnavailable: false,
     });
     await hostLobby();
     fireEvent.click(screen.getByText('Spiel starten →'));
@@ -228,6 +234,7 @@ describe('starting a game', () => {
     vi.mocked(loadSongsFromPlaylists).mockResolvedValue({
       songs: [],
       unavailablePlaylists: [{ id: 'a', problem: 'not_owned' }],
+      previewsUnavailable: false,
     });
     await hostLobby();
     fireEvent.click(screen.getByText('Spiel starten →'));
@@ -239,11 +246,30 @@ describe('starting a game', () => {
     expect(emittedPayloads('cancel_loading')).toHaveLength(1);
   });
 
+  it('tells the host to wait, not to pick other playlists, when iTunes refuses', async () => {
+    vi.mocked(loadSongsFromPlaylists).mockResolvedValue({
+      songs: [],
+      unavailablePlaylists: [],
+      previewsUnavailable: true,
+    });
+    await hostLobby();
+    fireEvent.click(screen.getByText('Spiel starten →'));
+    expect(
+      await screen.findByText(
+        'Die Hörproben sind gerade nicht erreichbar – versuch es in ein paar Minuten nochmal.'
+      )
+    ).toBeInTheDocument();
+    expect(emittedPayloads('cancel_loading')).toHaveLength(1);
+    expect(emittedPayloads('start_game')).toHaveLength(0);
+  });
+
   it('lets the host cancel while songs load', async () => {
     vi.mocked(loadSongsFromPlaylists).mockImplementation(
       (_ids, _target, _exclude, signal) =>
         new Promise((resolve) =>
-          signal.addEventListener('abort', () => resolve({ songs: [], unavailablePlaylists: [] }))
+          signal.addEventListener('abort', () =>
+            resolve({ songs: [], unavailablePlaylists: [], previewsUnavailable: false })
+          )
         )
     );
     await hostLobby();

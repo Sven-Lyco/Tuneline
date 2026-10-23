@@ -228,13 +228,8 @@ export function createTunelineServer({
       if (!res.writableFinished) abort.abort();
     });
 
-    const { songs, unavailablePlaylists, previewStats, yearsCorrected, duplicatesRemoved } = await loadSongs(
-      token,
-      playlistIds,
-      target,
-      new Set(excludeIds),
-      abort.signal,
-    );
+    const { songs, unavailablePlaylists, previewStats, yearsCorrected, duplicatesRemoved, previewsUnavailable } =
+      await loadSongs(token, playlistIds, target, new Set(excludeIds), abort.signal);
     if (abort.signal.aborted) return;
     logger.info(
       {
@@ -249,7 +244,7 @@ export function createTunelineServer({
       },
       'songs_loaded',
     );
-    res.json({ songs, unavailablePlaylists } satisfies SongsResponse);
+    res.json({ songs, unavailablePlaylists, previewsUnavailable } satisfies SongsResponse);
   });
 
   // Serve built client in production. The client only uses "/" (state lives in the app and

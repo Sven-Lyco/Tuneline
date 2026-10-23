@@ -279,7 +279,8 @@ describe('loadSongs', () => {
         next: null,
       },
     });
-    const { songs, yearsCorrected } = await load(['p1'], 50);
+    const { songs, yearsCorrected, previewsUnavailable } = await load(['p1'], 50);
+    expect(previewsUnavailable).toBe(false);
     expect(Object.fromEntries(songs.map((s) => [s.title, s.year]))).toEqual({ 'Classic Hit': 1969, 'New Song': 2001 });
     expect(yearsCorrected).toBe(1);
     // iTunes gets Spotify's length to tell recordings apart.
@@ -410,10 +411,12 @@ describe('loadSongs', () => {
         next: null,
       },
     });
-    const { songs, previewStats } = await load(['p1'], 20);
+    const { songs, previewStats, previewsUnavailable } = await load(['p1'], 20);
     expect(songs).toEqual([]);
     // One batch of 10 went out; after its failures no further batch does.
     expect(previewStats).toEqual({ lookups: 10, failed: 10 });
+    // The client then says to wait, rather than to pick other playlists.
+    expect(previewsUnavailable).toBe(true);
     vi.mocked(findPreview).mockReset();
   });
 

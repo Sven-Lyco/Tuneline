@@ -53,7 +53,7 @@ describe('api/spotify', () => {
   });
 
   it('loads songs with exclusions and an abort signal, empty on errors', async () => {
-    const loaded = { songs: [{ id: 's1' }], unavailablePlaylists: [] };
+    const loaded = { songs: [{ id: 's1' }], unavailablePlaylists: [], previewsUnavailable: false };
     const fetch = respond(loaded);
     vi.stubGlobal('fetch', fetch);
     const signal = new AbortController().signal;
@@ -65,7 +65,7 @@ describe('api/spotify', () => {
       signal,
     });
 
-    const nothing = { songs: [], unavailablePlaylists: [] };
+    const nothing = { songs: [], unavailablePlaylists: [], previewsUnavailable: false };
     vi.stubGlobal('fetch', respond({}, false));
     expect(await loadSongsFromPlaylists(['p1'], 10, [], signal)).toEqual(nothing);
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('aborted')));
@@ -82,6 +82,7 @@ describe('api/spotify', () => {
     expect(await loadSongsFromPlaylists(['p1'], 10, [], new AbortController().signal)).toEqual({
       songs: [],
       unavailablePlaylists: [],
+      previewsUnavailable: false,
     });
     expect(await getUserPlaylists()).toEqual({ playlists: [], problem: 'unavailable' });
   });

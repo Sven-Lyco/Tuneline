@@ -136,8 +136,9 @@ function block(): void {
 }
 
 /**
- * iTunes searches that went out (cache misses), how many failed, and how long the budget made
- * them wait. Failures show whether song loading still runs into Apple's limit.
+ * iTunes searches that went out (cache misses), how many failed, and the longest wait of one
+ * search for the budget — about how much the budget held the load up (searches wait in parallel,
+ * so their waits don't add up). Failures show whether song loading still runs into Apple's limit.
  */
 export interface PreviewStats {
   lookups: number;
@@ -164,7 +165,7 @@ export async function findPreview(
   if (!isBlocked()) {
     try {
       const waited = await budget.take(signal);
-      if (stats) stats.waitedMs += waited;
+      if (stats) stats.waitedMs = Math.max(stats.waitedMs, waited);
     } catch {
       return null; // the load was cancelled
     }

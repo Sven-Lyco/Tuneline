@@ -258,10 +258,14 @@ describe('findPreview', () => {
     expect((await findPreview(a, 'First', 0, counts))?.preview).toBe('https://audio/First');
 
     itunes([track(a, 'Second')]);
+    itunes([track(a, 'Third')]);
     const second = findPreview(a, 'Second', 0, counts);
-    await vi.advanceTimersByTimeAsync(3000);
+    const third = findPreview(a, 'Third', 0, counts);
+    await vi.advanceTimersByTimeAsync(6000);
     expect((await second)?.preview).toBe('https://audio/Second');
-    expect(counts).toEqual({ lookups: 2, failed: 0, waitedMs: 3000 });
+    expect((await third)?.preview).toBe('https://audio/Third');
+    // Waiting side by side (3 s and 6 s), the load was held up 6 s, not 9.
+    expect(counts).toEqual({ lookups: 3, failed: 0, waitedMs: 6000 });
   });
 
   it('stops waiting for the budget when the load is cancelled', async () => {

@@ -311,7 +311,7 @@ export default function App() {
 
     const playerCount = lobbyState?.players.filter((p) => p.isConnected).length ?? 1;
     const songsNeeded = Math.ceil(playerCount * (rounds + 1) * 1.5);
-    const { songs, unavailablePlaylists } = await loadSongsFromPlaylists(
+    const { songs, unavailablePlaylists, previewsUnavailable } = await loadSongsFromPlaylists(
       selectedPlaylists.map((p) => p.id),
       songsNeeded,
       getPlayedSongIds(),
@@ -324,9 +324,13 @@ export default function App() {
     // Matches the server's minimum: a starting card plus at least one turn per player.
     if (songs.length < Math.max(playerCount + 3, playerCount * 2)) {
       socket.emit('cancel_loading');
-      setLoadingMsg(refused ?? 'Nicht genug Songs gefunden. Bitte andere Playlisten wählen.');
-      // The reason why Spotify refused is longer to read than the plain notice.
-      await sleep(refused ? 5000 : 2000);
+      // iTunes throttles the server's IP for a while: other playlists won't help, waiting will.
+      const reason = previewsUnavailable
+        ? 'Die Hörproben sind gerade nicht erreichbar – versuch es in ein paar Minuten nochmal.'
+        : refused;
+      setLoadingMsg(reason ?? 'Nicht genug Songs gefunden. Bitte andere Playlisten wählen.');
+      // A reason is longer to read than the plain notice.
+      await sleep(reason ? 5000 : 2000);
       setScreen('lobby');
       return;
     }

@@ -56,7 +56,11 @@ export async function loadSongsFromPlaylists(
   excludeIds: string[],
   signal: AbortSignal
 ): Promise<SongsResponse> {
-  const nothing: SongsResponse = { songs: [], unavailablePlaylists: [] };
+  const nothing: SongsResponse = {
+    songs: [],
+    unavailablePlaylists: [],
+    previewsUnavailable: false,
+  };
   try {
     const res = await fetch('/api/songs', {
       method: 'POST',

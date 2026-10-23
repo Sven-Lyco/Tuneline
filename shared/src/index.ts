@@ -25,6 +25,8 @@ export interface SongsResponse {
   songs: SongFull[];
   /** Playlists Spotify refused; the songs come from the others. */
   unavailablePlaylists: Array<{ id: string; problem: PlaylistProblem }>;
+  /** iTunes kept refusing the preview searches (throttling), so the load stopped early. */
+  previewsUnavailable: boolean;
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────

@@ -100,7 +100,8 @@ Tuneline/
       spotify.ts            PKCE OAuth server-seitig, Token-Refresh, Playlist/Track-Laden
       preview.ts            iTunes Preview-Suche (Originalaufnahme + Originaljahr) + in-memory Cache (nur serverseitig, kein HTTP-Endpunkt)
       versions.ts           Versionen erkennen (Original / Remaster / Remix, Live …), songKey() für Duplikate
-      limits.ts             ConnectionCounter, AttemptLimiter (Socket-Verbindungen und Fehlversuche pro IP)
+      limits.ts             ConnectionCounter, AttemptLimiter (Socket-Verbindungen und Fehlversuche pro IP), TokenBucket (iTunes-Budget)
+      playlistCache.ts      Pro Session: Playlist-Liste (snapshot_id, gefolgt?) + gelesene Playlist-Seiten (6 h)
       logger.ts             pino-Logger
       utils.ts              shuffle<T>(), generateCode()
     tsconfig.json
@@ -140,9 +141,12 @@ Tuneline/
 - Session via httpOnly-Cookie (`tuneline_session`), Token nie an den Client weitergegeben
 - **Development Mode (Stand 2026):** App-Besitzer braucht Premium, max. 5 Spotify-Nutzer (Hosts) über die User-Management-Allowlist im Dashboard; Gäste loggen sich nie bei Spotify ein
 - Client-IDs ab 11.02.2026 bekommen Songs nur aus eigenen/kollaborativen Playlists; Spotify-eigene Playlists sind für Dev-Mode-Apps gesperrt
+- **Gefolgte Playlists** (weder eigene — `owner.id` ≠ `userId` aus `/me` beim Login — noch kollaborativ) werden angeboten, bis Spotify eine davon mit 403 ablehnt; danach blendet `getUserPlaylists` sie aus (`followedPlaylistsRefused`, Log `followed_playlists_refused`, nur im Speicher → nach Neustart erst wieder nach einer Ablehnung)
+- **Playlist-Cache** (`server/src/playlistCache.ts`): gelesene Seiten pro Session + Playlist + `snapshot_id`, 6 h, max. 2000 Seiten; geänderte Playlist = neuer Snapshot = neu lesen; Logout/Session-Ende löscht ihn (`deleteSession`). `songs_loaded` loggt `spotifyPagesFetched`/`spotifyPagesCached`
+- **Spotify 429**: `Retry-After` ≤ 5 s wird einmal abgewartet und der Request wiederholt; länger → keine Spotify-API-Anfrage mehr bis dahin, für alle Hosts (Log `spotify_rate_limited`); ohne Header scheitert nur dieser Request
 - `server/src/spotify.ts` liest Songs über `/playlists/{id}/items` (max. 50 pro Seite, Song unter `item` oder `track`); wird die erste Seite abgelehnt, Rückfall auf das alte `/tracks` (Log: `playlist_items_fallback`)
 - Spotify-Fehler gehen mit Grund an den Client: `/api/playlists` → `not_allowlisted` (403) / `quota` (429) / `unavailable` (502); `/api/songs` → `SongsResponse.unavailablePlaylists` mit `not_owned` / `spotify_owned` / `quota` / `unavailable` (Texte in `client/src/utils/spotifyMessages.ts`)
-- iTunes Search API: offiziell ca. 20 Anfragen/Minute pro IP (gilt für die Server-IP); `songs_loaded` loggt `itunesLookups`/`itunesFailed` (außerdem `yearsCorrected`, `duplicatesRemoved`) — Tests (Okt. 2026): 40 Suchen in ~5 s ohne Fehler, aber ~70 in ~1 min → 403/429 und Sperre > 30 min (Nachfragen verlängert sie). `loadSongs()` bricht deshalb nach 5 gescheiterten Suchen ab (`MAX_ITUNES_FAILURES`) und meldet `SongsResponse.previewsUnavailable`; reichen die Songs dann nicht, sagt der Client „Die Hörproben sind gerade nicht erreichbar …“ statt „andere Playlisten wählen“. Eine echte Drosselung fehlt noch
+- iTunes Search API: offiziell ca. 20 Anfragen/Minute pro IP (gilt für die Server-IP); `songs_loaded` loggt `itunesLookups`/`itunesFailed` (außerdem `yearsCorrected`, `duplicatesRemoved`) — Tests (Okt. 2026): 40 Suchen in ~5 s ohne Fehler, aber ~70 in ~1 min → 403/429 und Sperre > 30 min (Nachfragen verlängert sie). **Drosselung** in `preview.ts`: ein `TokenBucket` für den ganzen Server, bis 40 Suchen sofort, dann eine alle 3 s (Cache-Treffer frei); nach 403/429 Pause von 2 min, bei erneuter Sperre doppelt bis 30 min, nach einem Erfolg wieder 2 min (Log `itunes_throttled`). `songs_loaded` loggt `itunesWaitedMs`. `loadSongs()` bricht nach 5 gescheiterten Suchen ab (`MAX_ITUNES_FAILURES`) und meldet `SongsResponse.previewsUnavailable`; reichen die Songs dann nicht, sagt der Client „Die Hörproben sind gerade nicht erreichbar …“ statt „andere Playlisten wählen“. Der Client fordert 1,2× die nötigen Songs an; der Ladescreen erklärt nach 8 s, dass iTunes bremst
 - Hintergrund mit Quellen (Quota, Playlist-Zugriff, Developer Policy, iTunes-Bedingungen, Spotify-Wiedergabe statt iTunes, Stand Oktober 2026): `docs/research/spotify-itunes-api-regeln.md`, Rohnotizen in `docs/research/notes/`
 
 ## Multiplayer-Architektur

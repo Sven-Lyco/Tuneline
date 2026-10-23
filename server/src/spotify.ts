@@ -143,12 +143,32 @@ export async function getValidToken(sessionId: string): Promise<string | null> {
 /** `status` 0 = no answer (network error or timeout). */
 type SpotifyResult<T> = { ok: true; data: T } | { ok: false; status: number };
 
-async function spotifyFetch<T>(token: string, path: string): Promise<SpotifyResult<T>> {
+// Spotify counts requests per app (since July 2026 per developer account), so a 429 with a long
+// Retry-After holds for every host: until then no request goes out, which would only prolong it.
+let spotifyBlockedUntil = 0;
+// A wait up to this long is sat out once; a longer one blocks.
+const MAX_RETRY_WAIT_MS = 5000;
+
+async function spotifyFetch<T>(token: string, path: string, retried = false): Promise<SpotifyResult<T>> {
+  if (Date.now() < spotifyBlockedUntil) return { ok: false, status: 429 };
   try {
     const response = await fetch(`https://api.spotify.com/v1${path}`, {
       headers: { Authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(10_000),
     });
+    if (response.status === 429) {
+      // Seconds; without the header (NaN/0) only this request fails.
+      const retryAfterMs = Number(response.headers.get('retry-after')) * 1000;
+      if (retryAfterMs > 0 && retryAfterMs <= MAX_RETRY_WAIT_MS && !retried) {
+        await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
+        return spotifyFetch<T>(token, path, true);
+      }
+      if (retryAfterMs > MAX_RETRY_WAIT_MS) {
+        spotifyBlockedUntil = Date.now() + retryAfterMs;
+        logger.warn({ retryAfterSeconds: retryAfterMs / 1000 }, 'spotify_rate_limited');
+      }
+      return { ok: false, status: 429 };
+    }
     if (!response.ok) return { ok: false, status: response.status };
     return { ok: true, data: (await response.json()) as T };
   } catch {

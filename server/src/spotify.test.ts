@@ -21,7 +21,12 @@ type SpotifyModule = typeof import('./spotify.js');
 let spotify: SpotifyModule;
 
 const fetchMock = vi.fn();
-const json = (body: unknown, ok = true, status = ok ? 200 : 500) => ({ ok, status, json: async () => body });
+const json = (body: unknown, ok = true, status = ok ? 200 : 500, headers: Record<string, string> = {}) => ({
+  ok,
+  status,
+  headers: new Headers(headers),
+  json: async () => body,
+});
 
 interface TrackInput {
   id?: string;
@@ -192,6 +197,44 @@ describe('getUserPlaylists', () => {
     expect(await problemFor(json({}, false, 429))).toEqual({ ok: false, problem: 'quota' });
     expect(await problemFor(json({}, false, 500))).toEqual({ ok: false, problem: 'unavailable' });
     expect(await problemFor(new Error('timeout'))).toEqual({ ok: false, problem: 'unavailable' });
+  });
+});
+
+describe('Spotify rate limits (429 with Retry-After)', () => {
+  const playlists = json({ items: [] });
+  const limited = (seconds?: number) =>
+    json({}, false, 429, seconds === undefined ? {} : { 'Retry-After': String(seconds) });
+
+  it('sits out a short wait once and asks again', async () => {
+    fetchMock.mockResolvedValueOnce(limited(2)).mockResolvedValueOnce(playlists);
+    const result = spotify.getUserPlaylists('token');
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(await result).toEqual({ ok: true, playlists: [] });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    // A second short wait in a row gives up rather than looping.
+    fetchMock.mockResolvedValueOnce(limited(1)).mockResolvedValueOnce(limited(1));
+    const again = spotify.getUserPlaylists('token');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(await again).toEqual({ ok: false, problem: 'quota' });
+  });
+
+  it('sends nothing to Spotify during a long wait, for any host', async () => {
+    fetchMock.mockResolvedValueOnce(limited(600));
+    expect(await spotify.getUserPlaylists('token')).toEqual({ ok: false, problem: 'quota' });
+    expect(await spotify.getUserPlaylists('other host')).toEqual({ ok: false, problem: 'quota' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(600_000);
+    fetchMock.mockResolvedValueOnce(playlists);
+    expect(await spotify.getUserPlaylists('token')).toEqual({ ok: true, playlists: [] });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('without Retry-After only fails that one request', async () => {
+    fetchMock.mockResolvedValueOnce(limited()).mockResolvedValueOnce(playlists);
+    expect(await spotify.getUserPlaylists('token')).toEqual({ ok: false, problem: 'quota' });
+    expect(await spotify.getUserPlaylists('token')).toEqual({ ok: true, playlists: [] });
   });
 });
 

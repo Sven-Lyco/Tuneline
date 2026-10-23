@@ -89,15 +89,28 @@ function pickBest(found: Candidate[], durationMs: number): PreviewMatch | null {
 
 // In-memory cache: "artist|title" → matching recordings (max 2000 entries, LRU-eviction). The pick
 // happens per call, since the Spotify length can differ between two tracks with the same title.
-const cache = new Map<string, Candidate[]>();
+// Entries expire like Apple's own responses (max-age ~21 h); the keys are Spotify metadata, which
+// may only be cached temporarily.
+const cache = new Map<string, { found: Candidate[]; expiresAt: number }>();
 const CACHE_MAX = 2000;
+const CACHE_TTL_MS = 21 * 60 * 60 * 1000;
 
-function cacheSet(key: string, value: Candidate[]): void {
+function cacheGet(key: string): Candidate[] | undefined {
+  const entry = cache.get(key);
+  if (!entry) return undefined;
+  if (Date.now() >= entry.expiresAt) {
+    cache.delete(key);
+    return undefined;
+  }
+  return entry.found;
+}
+
+function cacheSet(key: string, found: Candidate[]): void {
   if (cache.size >= CACHE_MAX) {
     const oldest = cache.keys().next().value;
     if (oldest !== undefined) cache.delete(oldest);
   }
-  cache.set(key, value);
+  cache.set(key, { found, expiresAt: Date.now() + CACHE_TTL_MS });
 }
 
 // ── iTunes budget ────────────────────────────────────────────────────────────
@@ -159,7 +172,7 @@ export async function findPreview(
 ): Promise<PreviewMatch | null> {
   const cacheKey = `${artist}|${title}`;
 
-  const cached = cache.get(cacheKey);
+  const cached = cacheGet(cacheKey);
   if (cached) return pickBest(cached, durationMs);
 
   if (!isBlocked()) {

@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { logger } from './logger.js';
 import type { SongFull } from '@tuneline/shared';
 import { songs } from './test/fixtures.js';
 import {
@@ -371,5 +372,28 @@ describe('abuse limits', () => {
     const blocked = waitFor(s, 'error');
     s.emit('join_room', { roomCode: host.roomCode, playerName: 'Ben' });
     expect((await blocked).message).toMatch(/Zu viele fehlgeschlagene Beitrittsversuche/);
+  });
+});
+
+describe('logs', () => {
+  it('keep player names out, also from the reason a join was refused', async () => {
+    const info = vi.spyOn(logger, 'info');
+    const warn = vi.spyOn(logger, 'warn');
+    try {
+      const host = await createRoom('Hostname Secret');
+      await join(host.roomCode, 'Guestname Secret');
+      const twin = await server.connect();
+      const refused = waitFor(twin, 'error');
+      twin.emit('join_room', { roomCode: host.roomCode, playerName: 'Guestname Secret' });
+      expect((await refused).message).toContain('Guestname Secret');
+
+      const logged = JSON.stringify([...info.mock.calls, ...warn.mock.calls]);
+      expect(logged).toContain('join_room');
+      expect(logged).toContain('join_room_denied');
+      expect(logged).not.toContain('Secret');
+    } finally {
+      info.mockRestore();
+      warn.mockRestore();
+    }
   });
 });

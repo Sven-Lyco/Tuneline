@@ -97,6 +97,8 @@ Required environment variables (runtime):
 | `NODE_ENV`             | Set to `production`                                |
 | `SPOTIFY_CLIENT_ID`    | Spotify Developer App client ID                    |
 | `SPOTIFY_REDIRECT_URI` | Redirect URI registered in Spotify Developer App   |
+| `OPERATOR_NAME`        | Who runs the instance (shown in the privacy policy) |
+| `OPERATOR_CONTACT`     | Contact for the privacy policy: e-mail or URL      |
 
 ## Planned Features
 

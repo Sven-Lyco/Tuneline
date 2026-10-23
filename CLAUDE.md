@@ -17,7 +17,7 @@ Spieler ordnen Songs chronologisch in ihre persönliche Timeline ein. Wer richti
 - **Express** — HTTP-Server + Static Serving des Client-Builds in Production
 - **ESLint v9** (flat config) + `typescript-eslint` + `eslint-config-prettier`
 - **Prettier** für Formatierung
-- Google Fonts (Space Mono + Outfit) direkt in `index.html` via `<link>`
+- Schriften (Space Mono + Outfit) lokal über Fontsource (`@fontsource/*`, Import in `main.tsx`) — nichts von Google-Servern
 
 ## Wichtige Konventionen
 
@@ -26,6 +26,8 @@ Spieler ordnen Songs chronologisch in ihre persönliche Timeline ein. Wer richti
   statt prop-forwarding, um React DOM-Warnings zu vermeiden
 - **TypeScript strict** — Client-Typen in `client/src/types.ts`, gemeinsame Typen in `shared/src/index.ts`
 - Entry point: `client/src/main.tsx`
+- **Datenschutz**: `PrivacyScreen.tsx` beschreibt, was Tuneline speichert, wo und wie lange. Bei neuen Daten, Storage-Keys, Cookies, externen Quellen oder Log-Feldern dort mitpflegen
+- **Logs ohne Personendaten**: keine Spielernamen (nur `playerId`), IPs nur gekürzt (`shortIp` in `logger.ts`), HTTP-Pfade ohne Query (`pathOnly` — der OAuth-Callback trägt `code`/`state`). Hilfreich bleiben Event-Namen, `roomCode`, `playerId`, Status, Dauer, Fehlergründe, Zähler
 
 ## Monorepo-Struktur
 
@@ -38,6 +40,7 @@ Tuneline/
       socket.ts             Socket.io-Singleton (typed mit Shared-Events)
       api/
         spotify.ts          Server-API-Wrapper: /api/auth/*, /api/playlists, /api/songs
+        legal.ts            /api/legal: Betreiber der Instanz für die Datenschutzerklärung
       utils/
         shuffle.ts          sortByYear<T>()
         audio.ts            playAudio, stopAudio, toggleAudio, getVolume, setVolume
@@ -50,6 +53,7 @@ Tuneline/
         useGameAudio.ts     playing, volume, startSong, stopSong, toggle, changeVolume
         useSocketEvents.ts  alle Socket-Events + abgeleiteter State (screen, gameState …)
         useRoomCodeCopy.ts  Clipboard-Copy + Feedback-State für Raum-Code
+        useLegalInfo.ts     Betreiberangaben laden (Datenschutz/Nutzungsbedingungen)
       components/
         GlobalStyles.tsx    Emotion Global — @keyframes + CSS Reset
         ErrorBoundary.tsx   React Error Boundary
@@ -61,6 +65,8 @@ Tuneline/
         PlaylistBadge.tsx   Playlist-Cover + Name Badge
         Reactions.tsx       Emoji-Reaktionen während des Spiels
         RoomCodeCopy.tsx    Raum-Code Anzeige mit Copy-Button
+        LegalPage.tsx       Layout der Rechtstexte + Betreiber/Kontakt (mailto oder Link)
+        LegalNotice.tsx     „Mit dem Login/Beitritt akzeptierst du …“ mit Links
         InviteQr.tsx        Einladungslink als QR-Code (Overlay; Lobby + Spiel-Header), qrcode.react
         ResumeBanner.tsx    „Zurück ins Spiel“ nach geschlossenem Tab
         TurnLimitPicker.tsx Zeitlimit-Auswahl (Aus/30/60/90 s)
@@ -74,6 +80,8 @@ Tuneline/
       screens/
         LoginScreen.tsx     Spotify-Login + Gast-Join-Button
         HelpScreen.tsx      Spielanleitung (Host + Spieler Tabs)
+        PrivacyScreen.tsx   Datenschutzerklärung (Spotify Terms V.12, DSGVO)
+        TermsScreen.tsx     Nutzungsbedingungen (Spotify Terms V.11)
         JoinScreen.tsx      Raum-Code + Name eingeben (Gäste)
         PlaylistScreen.tsx  Playlist-Auswahl des Hosts
         MenuScreen.tsx      Host-Name, Runden, Audio-Modus, Raum erstellen
@@ -145,6 +153,7 @@ Tuneline/
 - **Playlist-Cache** (`server/src/playlistCache.ts`): gelesene Seiten pro Session + Playlist + `snapshot_id`, 6 h, max. 2000 Seiten; geänderte Playlist = neuer Snapshot = neu lesen; Logout/Session-Ende löscht ihn (`deleteSession`). `songs_loaded` loggt `spotifyPagesFetched`/`spotifyPagesCached`
 - **Spotify 429**: `Retry-After` ≤ 5 s wird einmal abgewartet und der Request wiederholt; länger → keine Spotify-API-Anfrage mehr bis dahin, für alle Hosts (Log `spotify_rate_limited`); ohne Header scheitert nur dieser Request
 - `server/src/spotify.ts` liest Songs über `/playlists/{id}/items` (max. 50 pro Seite, Song unter `item` oder `track`); wird die erste Seite abgelehnt, Rückfall auf das alte `/tracks` (Log: `playlist_items_fallback`)
+- Playlist-Liste: `/me/playlists` seitenweise über `next`, max. 200 Playlists
 - Spotify-Fehler gehen mit Grund an den Client: `/api/playlists` → `not_allowlisted` (403) / `quota` (429) / `unavailable` (502); `/api/songs` → `SongsResponse.unavailablePlaylists` mit `not_owned` / `spotify_owned` / `quota` / `unavailable` (Texte in `client/src/utils/spotifyMessages.ts`)
 - iTunes Search API: offiziell ca. 20 Anfragen/Minute pro IP (gilt für die Server-IP); `songs_loaded` loggt `itunesLookups`/`itunesFailed` (außerdem `yearsCorrected`, `duplicatesRemoved`) — Tests (Okt. 2026): 40 Suchen in ~5 s ohne Fehler, aber ~70 in ~1 min → 403/429 und Sperre > 30 min (Nachfragen verlängert sie). **Drosselung** in `preview.ts`: ein `TokenBucket` für den ganzen Server, bis 40 Suchen sofort, dann eine alle 3 s (Cache-Treffer frei); nach 403/429 Pause von 2 min, bei erneuter Sperre doppelt bis 30 min, nach einem Erfolg wieder 2 min (Log `itunes_throttled`). `songs_loaded` loggt `itunesWaitedMs`. `loadSongs()` bricht nach 5 gescheiterten Suchen ab (`MAX_ITUNES_FAILURES`) und meldet `SongsResponse.previewsUnavailable`; reichen die Songs dann nicht, sagt der Client „Die Hörproben sind gerade nicht erreichbar …“ statt „andere Playlisten wählen“. Der Client fordert 1,2× die nötigen Songs an; der Ladescreen erklärt nach 8 s, dass iTunes bremst
 - Hintergrund mit Quellen (Quota, Playlist-Zugriff, Developer Policy, iTunes-Bedingungen, Spotify-Wiedergabe statt iTunes, Stand Oktober 2026): `docs/research/spotify-itunes-api-regeln.md`, Rohnotizen in `docs/research/notes/`
@@ -207,10 +216,10 @@ Server → Client: room_created, room_joined, rejoin_failed, session_replaced, r
   - `VITE_SERVER_URL` (Build) und `FRONTEND_ORIGIN` (Laufzeit) müssen dieselbe öffentliche Adresse der App sein — die CSP erlaubt Socket.io nur dorthin, sonst blockiert der Browser die Verbindung
   - `NODE_ENV` in Coolify auf **Runtime only** stellen (nicht Build-time), sonst überschreibt es das `development` im Dockerfile
 - Server serviert in Production das Client-Build als statische Dateien
-- Runtime-Env-Variablen in Coolify setzen: `PORT`, `FRONTEND_ORIGIN`, `NODE_ENV=production`, `SPOTIFY_CLIENT_ID`, `SPOTIFY_REDIRECT_URI`
+- Runtime-Env-Variablen in Coolify setzen: `PORT`, `FRONTEND_ORIGIN`, `NODE_ENV=production`, `SPOTIFY_CLIENT_ID`, `SPOTIFY_REDIRECT_URI`, `OPERATOR_NAME`, `OPERATOR_CONTACT` (Betreiber für die Datenschutzerklärung; Kontakt = E-Mail, z. B. kostenloser Alias, oder URL; bewusst nicht im Repo, jede Instanz zeigt ihren eigenen Betreiber)
 - Health-Check: `GET /health` → `{ ok: true }`
 - `app.set('trust proxy', 1)` — nötig hinter Coolify-Nginx für Rate-Limiter
-- `helmet` mit **Content-Security-Policy** (`cspDirectives()` in `app.ts`): nur eigene Skripte, Emotion-Inline-Styles + Google Fonts, Cover von `*.scdn.co`/`*.spotifycdn.com`, Audio von `audio-ssl.itunes.apple.com`, Socket.io auf `FRONTEND_ORIGIN`. **Neue externe Quellen dort eintragen**, sonst blockiert der Browser sie (nur im Production-Build sichtbar, im Dev liefert Vite die Seite)
+- `helmet` mit **Content-Security-Policy** (`cspDirectives()` in `app.ts`): nur eigene Skripte, Emotion-Inline-Styles, Schriften nur von `'self'`, Cover von `*.scdn.co`/`*.spotifycdn.com`, Audio von `audio-ssl.itunes.apple.com`, Socket.io auf `FRONTEND_ORIGIN`. **Neue externe Quellen dort eintragen**, sonst blockiert der Browser sie (nur im Production-Build sichtbar, im Dev liefert Vite die Seite)
 - Keine SPA-Fallback-Route: der Client nutzt nur `/` (+ `?room=`), unbekannte Pfade → 404 (Scanner wie `/.env`, `/wp-admin` landen dort; 404 wird als `info` geloggt)
 - Kein öffentlicher iTunes-Endpunkt: Previews sucht nur `loadSongs()` serverseitig
 - Container läuft als User `node`, spielt beim Build Alpine-Sicherheitsupdates ein und enthält kein npm (`osv-scanner scan image <image>` lokal zum Prüfen)

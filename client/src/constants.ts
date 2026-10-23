@@ -25,3 +25,6 @@ export const STORAGE_KEYS = {
   volume: 'tuneline_volume',
   playedSongs: 'tuneline_played_songs',
 } as const;
+
+/** The project's repository: source code and questions about the project. */
+export const SOURCE_URL = 'https://github.com/Sven-Lyco/Tuneline';

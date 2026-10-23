@@ -195,7 +195,11 @@ interface SpotifyPlaylistsResponse {
     collaborative?: boolean;
     snapshot_id?: string;
   }>;
+  next?: string | null;
 }
+
+// Playlists offered per host: 4 pages of /me/playlists. Spotify's lists are sorted by recent use.
+const MAX_PLAYLISTS = 200;
 
 // Set once Spotify refuses a playlist the host only follows: apps created since Feb 2026 can't read
 // those, and older ones only until Spotify ends their postponement. From then on followed playlists
@@ -234,17 +238,26 @@ export async function getUserPlaylists(
     return { ok: false, problem };
   }
 
-  const items = (result.data.items ?? []).filter(Boolean);
+  const items = [...(result.data.items ?? [])];
+  let next = result.data.next;
+  while (next && items.length < MAX_PLAYLISTS) {
+    const page = await spotifyFetch<SpotifyPlaylistsResponse>(token, next.replace('https://api.spotify.com/v1', ''));
+    // A later page failing keeps the playlists read so far.
+    if (!page.ok) break;
+    items.push(...(page.data.items ?? []));
+    next = page.data.next;
+  }
+  const listed = items.filter(Boolean).slice(0, MAX_PLAYLISTS);
   const isFollowed = (p: SpotifyPlaylistsResponse['items'][number]) =>
     !!host?.userId && p.owner?.id !== host.userId && !p.collaborative;
   if (host) {
     rememberPlaylists(
       host.sessionId,
-      items.map((p) => ({ id: p.id, snapshotId: p.snapshot_id ?? null, followed: isFollowed(p) })),
+      listed.map((p) => ({ id: p.id, snapshotId: p.snapshot_id ?? null, followed: isFollowed(p) })),
     );
   }
 
-  const playlists = items.filter((p) => !(followedPlaylistsRefused && isFollowed(p))).map((p) => ({
+  const playlists = listed.filter((p) => !(followedPlaylistsRefused && isFollowed(p))).map((p) => ({
     id: p.id,
     name: p.name,
     coverUrl: p.images?.[0]?.url ?? null,

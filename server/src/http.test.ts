@@ -46,6 +46,17 @@ const expiredSession = () =>
   cookieFor(createSession({ accessToken: 'at', refreshToken: 'rt', expiresAt: Date.now() - 1 }));
 
 describe('health and auth', () => {
+  it('tells who runs the instance, if configured', async () => {
+    expect(await (await get('/api/legal')).json()).toEqual({ operatorName: null, operatorContact: null });
+    const operator = { operatorName: 'Jane Doe', operatorContact: 'tuneline@example.com' };
+    const configured = await startServer({ operator });
+    try {
+      expect(await (await realFetch(`${configured.url}/api/legal`)).json()).toEqual(operator);
+    } finally {
+      await configured.close();
+    }
+  });
+
   it('reports health', async () => {
     const res = await get('/health', { headers: { 'x-request-id': 'req-1' } });
     expect(await res.json()).toEqual({ ok: true });
@@ -216,6 +227,9 @@ describe('production mode', () => {
       expect(directive('default-src')).toBe("default-src 'self'");
       expect(directive('script-src')).toBe("script-src 'self'");
       expect(directive('media-src')).toBe('media-src https://audio-ssl.itunes.apple.com');
+      // Fonts are bundled; nothing loads from Google.
+      expect(directive('font-src')).toBe("font-src 'self'");
+      expect(csp).not.toContain('google');
       expect(directive('img-src')).toContain('https://*.scdn.co');
       expect(directive('connect-src')).toBe(
         "connect-src 'self' https://tuneline.example wss://tuneline.example",

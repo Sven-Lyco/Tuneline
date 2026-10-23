@@ -21,6 +21,13 @@ export type SpotifyProblem = 'not_allowlisted' | 'quota' | 'unavailable';
 export type PlaylistProblem = 'not_owned' | 'spotify_owned' | 'quota' | 'unavailable';
 
 /** Response of `POST /api/songs`. */
+/** Who runs this instance — shown in the privacy policy. Set per deployment, never in the repo. */
+export interface LegalInfo {
+  operatorName: string | null;
+  /** An e-mail address or a URL. */
+  operatorContact: string | null;
+}
+
 export interface SongsResponse {
   songs: SongFull[];
   /** Playlists Spotify refused; the songs come from the others. */

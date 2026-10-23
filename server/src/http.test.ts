@@ -216,6 +216,9 @@ describe('production mode', () => {
       expect(directive('default-src')).toBe("default-src 'self'");
       expect(directive('script-src')).toBe("script-src 'self'");
       expect(directive('media-src')).toBe('media-src https://audio-ssl.itunes.apple.com');
+      // Fonts are bundled; nothing loads from Google.
+      expect(directive('font-src')).toBe("font-src 'self'");
+      expect(csp).not.toContain('google');
       expect(directive('img-src')).toContain('https://*.scdn.co');
       expect(directive('connect-src')).toBe(
         "connect-src 'self' https://tuneline.example wss://tuneline.example",

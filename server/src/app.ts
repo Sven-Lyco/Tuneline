@@ -47,8 +47,9 @@ export function cspDirectives(frontendOrigin: string) {
     scriptSrc: ["'self'"],
     scriptSrcAttr: ["'none'"],
     // Emotion injects <style> tags at runtime and the app sets style attributes.
-    styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-    fontSrc: ['https://fonts.gstatic.com'],
+    styleSrc: ["'self'", "'unsafe-inline'"],
+    // Bundled with the client (Fontsource), so no visitor's IP goes to Google.
+    fontSrc: ["'self'"],
     // Song covers (i.scdn.co) and playlist covers (mosaic.scdn.co, image-cdn-*.spotifycdn.com).
     imgSrc: ["'self'", 'data:', 'https://*.scdn.co', 'https://*.spotifycdn.com'],
     mediaSrc: ['https://audio-ssl.itunes.apple.com'],

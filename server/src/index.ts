@@ -12,6 +12,10 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 const { httpServer, io } = createTunelineServer({
   frontendOrigin: process.env.FRONTEND_ORIGIN ?? 'http://[::1]:5174',
   isProd: IS_PROD,
+  operator: {
+    operatorName: process.env.OPERATOR_NAME?.trim() || null,
+    operatorContact: process.env.OPERATOR_CONTACT?.trim() || null,
+  },
 });
 
 process.on('unhandledRejection', (reason) => {

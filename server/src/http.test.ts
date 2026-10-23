@@ -46,6 +46,17 @@ const expiredSession = () =>
   cookieFor(createSession({ accessToken: 'at', refreshToken: 'rt', expiresAt: Date.now() - 1 }));
 
 describe('health and auth', () => {
+  it('tells who runs the instance, if configured', async () => {
+    expect(await (await get('/api/legal')).json()).toEqual({ operatorName: null, operatorContact: null });
+    const operator = { operatorName: 'Jane Doe', operatorContact: 'tuneline@example.com' };
+    const configured = await startServer({ operator });
+    try {
+      expect(await (await realFetch(`${configured.url}/api/legal`)).json()).toEqual(operator);
+    } finally {
+      await configured.close();
+    }
+  });
+
   it('reports health', async () => {
     const res = await get('/health', { headers: { 'x-request-id': 'req-1' } });
     expect(await res.json()).toEqual({ ok: true });

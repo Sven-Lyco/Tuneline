@@ -1,4 +1,5 @@
 import styled from '@emotion/styled';
+import { LegalNotice } from '../components/LegalNotice';
 import { redirectToSpotify } from '../api/spotify';
 import { AppTitle, AppSubtitle } from '../components/AppTitle';
 import { CenteredScreen } from '../components/CenteredScreen';
@@ -7,6 +8,8 @@ import { Card } from '../components/Card';
 interface LoginScreenProps {
   onJoinAsGuest: () => void;
   onHelp: () => void;
+  onPrivacy: () => void;
+  onTerms: () => void;
 }
 
 const Tagline = styled.p`
@@ -122,7 +125,7 @@ const SpotifyIcon = () => (
   </svg>
 );
 
-export function LoginScreen({ onJoinAsGuest, onHelp }: LoginScreenProps) {
+export function LoginScreen({ onJoinAsGuest, onHelp, onPrivacy, onTerms }: LoginScreenProps) {
   return (
     <CenteredScreen>
       <AppTitle />
@@ -143,6 +146,7 @@ export function LoginScreen({ onJoinAsGuest, onHelp }: LoginScreenProps) {
           <SpotifyIcon />
           Mit Spotify einloggen
         </SpotifyButton>
+        <LegalNotice action="Mit dem Login" onTerms={onTerms} onPrivacy={onPrivacy} />
 
         <Divider>
           <DividerText>oder</DividerText>

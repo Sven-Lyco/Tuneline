@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import styled from '@emotion/styled';
+import { LegalNotice } from '../components/LegalNotice';
 import { AppTitle, AppSubtitle } from '../components/AppTitle';
 import { CenteredScreen } from '../components/CenteredScreen';
 import { Card } from '../components/Card';
@@ -10,6 +11,8 @@ interface JoinScreenProps {
   initialCode?: string;
   onJoin: (roomCode: string, name: string) => void;
   onBack: () => void;
+  onPrivacy: () => void;
+  onTerms: () => void;
 }
 
 // ── Styles ─────────────────────────────────────────────────────
@@ -59,7 +62,13 @@ const NameInput = styled(Input)`
 
 // ── Component ──────────────────────────────────────────────────
 
-export function JoinScreen({ initialCode = '', onJoin, onBack }: JoinScreenProps) {
+export function JoinScreen({
+  initialCode = '',
+  onJoin,
+  onBack,
+  onPrivacy,
+  onTerms,
+}: JoinScreenProps) {
   const [code, setCode] = useState(initialCode);
   const [name, setName] = useState('');
 
@@ -104,6 +113,7 @@ export function JoinScreen({ initialCode = '', onJoin, onBack }: JoinScreenProps
         >
           Beitreten →
         </PrimaryButton>
+        <LegalNotice action="Mit dem Beitritt" onTerms={onTerms} onPrivacy={onPrivacy} />
       </Card>
 
       <LinkButton style={{ marginTop: '1rem' }} onClick={onBack}>

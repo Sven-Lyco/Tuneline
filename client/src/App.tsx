@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import styled from '@emotion/styled';
-import type { SpotifyPlaylist } from './types';
+import type { Screen, SpotifyPlaylist } from './types';
 import { STORAGE_KEYS } from './constants';
 import type { AudioMode } from '@tuneline/shared';
 import { isAuthenticated, loadSongsFromPlaylists, logout } from './api/spotify';
@@ -28,6 +28,12 @@ import { GameScreen } from './screens/GameScreen';
 import { ResultScreen } from './screens/ResultScreen';
 const HelpScreen = lazy(() =>
   import('./screens/HelpScreen').then((m) => ({ default: m.HelpScreen }))
+);
+const PrivacyScreen = lazy(() =>
+  import('./screens/PrivacyScreen').then((m) => ({ default: m.PrivacyScreen }))
+);
+const TermsScreen = lazy(() =>
+  import('./screens/TermsScreen').then((m) => ({ default: m.TermsScreen }))
 );
 
 // ── Background ─────────────────────────────────────────────────
@@ -378,6 +384,13 @@ export default function App() {
     socket.emit('return_to_lobby');
   }, [stopSong]);
 
+  // Privacy policy and terms open from the login and the join screen, and lead back there.
+  const [legalReturn, setLegalReturn] = useState<Screen>('login');
+  const openLegal = (page: 'privacy' | 'terms') => {
+    setLegalReturn(screen);
+    setScreen(page);
+  };
+
   // ── Render ────────────────────────────────────────────────────
 
   return (
@@ -395,6 +408,8 @@ export default function App() {
             setScreen('join');
           }}
           onHelp={() => setScreen('help')}
+          onPrivacy={() => openLegal('privacy')}
+          onTerms={() => openLegal('terms')}
         />
       )}
 
@@ -409,7 +424,21 @@ export default function App() {
           initialCode={joinCode}
           onJoin={handleJoinRoom}
           onBack={() => setScreen('login')}
+          onPrivacy={() => openLegal('privacy')}
+          onTerms={() => openLegal('terms')}
         />
+      )}
+
+      {screen === 'privacy' && (
+        <Suspense fallback={null}>
+          <PrivacyScreen onBack={() => setScreen(legalReturn)} />
+        </Suspense>
+      )}
+
+      {screen === 'terms' && (
+        <Suspense fallback={null}>
+          <TermsScreen onBack={() => setScreen(legalReturn)} />
+        </Suspense>
       )}
 
       {screen === 'playlists' && (

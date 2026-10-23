@@ -10,8 +10,15 @@ import { LoadingScreen } from './LoadingScreen';
 import { LobbyScreen } from './LobbyScreen';
 import { GameScreen } from './GameScreen';
 import { ResultScreen } from './ResultScreen';
+import { PrivacyScreen } from './PrivacyScreen';
+import { TermsScreen } from './TermsScreen';
+import { getLegalInfo } from '../api/legal';
 import { getUserPlaylists, redirectToSpotify } from '../api/spotify';
 import { gameState, lobby, player, playlist, song } from '../test/data';
+
+vi.mock('../api/legal', () => ({
+  getLegalInfo: vi.fn(async () => ({ operatorName: null, operatorContact: null })),
+}));
 
 vi.mock('../api/spotify', () => ({
   getUserPlaylists: vi.fn(async () => ({ playlists: [], problem: null })),
@@ -22,13 +29,72 @@ describe('LoginScreen', () => {
   it('starts the Spotify login, the guest join or the help', () => {
     const onJoinAsGuest = vi.fn();
     const onHelp = vi.fn();
-    render(<LoginScreen onJoinAsGuest={onJoinAsGuest} onHelp={onHelp} />);
+    render(
+      <LoginScreen
+        onJoinAsGuest={onJoinAsGuest}
+        onHelp={onHelp}
+        onPrivacy={vi.fn()}
+        onTerms={vi.fn()}
+      />
+    );
     fireEvent.click(screen.getByText('Mit Spotify einloggen'));
     fireEvent.click(screen.getByText('Raum beitreten (Gast)'));
     fireEvent.click(screen.getByTitle('Spielanleitung'));
     expect(redirectToSpotify).toHaveBeenCalled();
     expect(onJoinAsGuest).toHaveBeenCalled();
     expect(onHelp).toHaveBeenCalled();
+  });
+
+  it('links the terms and the privacy policy before the login', () => {
+    const onPrivacy = vi.fn();
+    const onTerms = vi.fn();
+    render(
+      <LoginScreen
+        onJoinAsGuest={vi.fn()}
+        onHelp={vi.fn()}
+        onPrivacy={onPrivacy}
+        onTerms={onTerms}
+      />
+    );
+    expect(screen.getByText(/Mit dem Login akzeptierst du/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Nutzungsbedingungen'));
+    fireEvent.click(screen.getByText('Datenschutzerklärung'));
+    expect(onTerms).toHaveBeenCalled();
+    expect(onPrivacy).toHaveBeenCalled();
+  });
+});
+
+describe('PrivacyScreen and TermsScreen', () => {
+  const legal = (operatorName: string | null, operatorContact: string | null) =>
+    vi.mocked(getLegalInfo).mockResolvedValue({ operatorName, operatorContact });
+
+  it('name the operator, with a mail link or a web link as contact', async () => {
+    legal('Jane Doe', 'tuneline@example.com');
+    const onBack = vi.fn();
+    const { unmount } = render(<PrivacyScreen onBack={onBack} />);
+    expect(await screen.findByText('tuneline@example.com')).toHaveAttribute(
+      'href',
+      'mailto:tuneline@example.com'
+    );
+    expect(screen.getByText(/Jane Doe/)).toBeInTheDocument();
+    expect(screen.getByText(/begünstigter Dritter/, { selector: 'p' })).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Zurück'));
+    expect(onBack).toHaveBeenCalled();
+    unmount();
+
+    legal('Jane Doe', 'https://github.com/example/issues');
+    render(<TermsScreen onBack={vi.fn()} />);
+    expect(await screen.findByText('https://github.com/example/issues')).toHaveAttribute(
+      'href',
+      'https://github.com/example/issues'
+    );
+    expect(screen.getByText(/nicht dekompilieren/)).toBeInTheDocument();
+  });
+
+  it('say so when the instance has no operator set', async () => {
+    legal(null, null);
+    render(<PrivacyScreen onBack={vi.fn()} />);
+    expect(await screen.findByText(/Betreiberangaben fehlen/)).toBeInTheDocument();
   });
 });
 
@@ -49,7 +115,16 @@ describe('JoinScreen', () => {
   it('needs a six-letter code and a name before joining', () => {
     const onJoin = vi.fn();
     const onBack = vi.fn();
-    render(<JoinScreen initialCode="ab" onJoin={onJoin} onBack={onBack} />);
+    render(
+      <JoinScreen
+        initialCode="ab"
+        onJoin={onJoin}
+        onBack={onBack}
+        onPrivacy={vi.fn()}
+        onTerms={vi.fn()}
+      />
+    );
+    expect(screen.getByText(/Mit dem Beitritt akzeptierst du/)).toBeInTheDocument();
     const [code, name] = screen.getAllByRole('textbox');
     const join = screen.getByText('Beitreten →');
     expect(join).toBeDisabled();

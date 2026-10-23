@@ -5,7 +5,7 @@ import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
-import type { ClientToServerEvents, ServerToClientEvents, SongsResponse } from '@tuneline/shared';
+import type { ClientToServerEvents, LegalInfo, ServerToClientEvents, SongsResponse } from '@tuneline/shared';
 import {
   FAILED_JOIN_WINDOW_MS,
   MAX_FAILED_JOINS,
@@ -34,6 +34,8 @@ export interface TunelineServerOptions {
   isProd: boolean;
   /** Where the built client lives (tests point this at a temp folder). */
   clientDist?: string;
+  /** Who runs this instance (OPERATOR_NAME/OPERATOR_CONTACT), for the privacy policy. */
+  operator?: LegalInfo;
 }
 
 /**
@@ -79,6 +81,7 @@ export function createTunelineServer({
   frontendOrigin,
   isProd,
   clientDist = join(__dirname, '../../client/dist'),
+  operator = { operatorName: null, operatorContact: null },
 }: TunelineServerOptions) {
   const app = express();
   const httpServer = createServer(app);
@@ -113,6 +116,10 @@ export function createTunelineServer({
 
   app.get('/health', (_req, res) => {
     res.json({ ok: true });
+  });
+
+  app.get('/api/legal', (_req, res) => {
+    res.json(operator satisfies LegalInfo);
   });
 
   // ── Auth routes ───────────────────────────────────────────────────────────────

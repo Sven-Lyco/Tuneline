@@ -85,6 +85,21 @@ describe('start screens', () => {
     expect(await screen.findByText('Wähle eine oder mehrere Playlisten aus:')).toBeInTheDocument();
   });
 
+  it('opens the privacy policy and the terms, and goes back where they were opened', async () => {
+    openAt('/?room=room01');
+    fireEvent.click(await screen.findByText('Datenschutzerklärung'));
+    expect(await screen.findByText('Datenschutz')).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Zurück'));
+    // Back on the join screen, the code from the link still filled in.
+    expect(await screen.findByDisplayValue('ROOM01')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('← Zurück'));
+    fireEvent.click(await screen.findByText('Nutzungsbedingungen'));
+    expect(await screen.findByText('Was Tuneline ist')).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Zurück'));
+    expect(await screen.findByText('Mit Spotify einloggen')).toBeInTheDocument();
+  });
+
   it('shows the help and comes back', async () => {
     openAt('/');
     fireEvent.click(await screen.findByTitle('Spielanleitung'));

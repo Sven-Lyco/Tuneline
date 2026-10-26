@@ -1,0 +1,15 @@
+# Keeps the pinned Node.js base image in the Dockerfile current: Dependabot opens a
+# pull request when a newer release of the same major line is published.
+version: 2
+updates:
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+    allow:
+      # Only the Node.js image is pinned to an exact release
+      - dependency-name: node
+    ignore:
+      # Moving to a new Node.js major is a deliberate decision, not a routine bump
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]

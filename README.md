@@ -61,7 +61,7 @@ SPOTIFY_REDIRECT_URI=http://[::1]:5174/api/auth/callback
 
 ### 3. Install and run
 
-Requires Node.js 22+.
+Requires Node.js 22.23.4+ or 24.22.1+ (releases with the October 2026 security fixes; `npm ci` refuses older ones, see `engines` and `.npmrc`).
 
 ```bash
 npm install

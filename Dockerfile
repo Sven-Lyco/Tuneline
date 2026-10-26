@@ -1,12 +1,14 @@
 # ─── Build stage ─────────────────────────────────────────────────────────────
-FROM node:22-alpine AS builder
+# Exact Node.js release, so a build can never fall back to an older cached image.
+# Dependabot (.github/dependabot.yml) opens a pull request for newer 22.x releases.
+FROM node:22.23.4-alpine AS builder
 WORKDIR /app
 
 # Accept VITE_* build-time variables (injected by Coolify or docker build --build-arg)
 ARG VITE_SERVER_URL
 
 # Copy workspace manifests first for layer caching
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 COPY shared/package.json ./shared/
 COPY client/package.json ./client/
 COPY server/package.json ./server/
@@ -24,14 +26,14 @@ RUN npm run build -w @tuneline/client
 RUN npm run build -w @tuneline/server
 
 # ─── Production stage ────────────────────────────────────────────────────────
-FROM node:22-alpine AS production
+FROM node:22.23.4-alpine AS production
 WORKDIR /app
 
 # Security fixes for Alpine packages that are newer than the base image
 RUN apk upgrade --no-cache
 
 # Install only server runtime dependencies
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 COPY shared/package.json ./shared/
 COPY client/package.json ./client/
 COPY server/package.json ./server/

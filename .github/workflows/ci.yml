@@ -17,6 +17,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+          # The runner's cached Node.js can be older than the patched release that
+          # engines.node (engine-strict) requires; always resolve the newest one
+          check-latest: true
           cache: npm
 
       - name: Install dependencies

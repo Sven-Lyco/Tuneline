@@ -230,14 +230,24 @@ export function createTunelineServer({
       return;
     }
 
-    // The host can cancel loading; stop hitting Spotify/iTunes once nobody waits for the answer.
+    // The host can cancel loading; stop hitting Spotify, MusicBrainz and iTunes once nobody waits.
     const abort = new AbortController();
     res.on('close', () => {
       if (!res.writableFinished) abort.abort();
     });
 
-    const { songs, unavailablePlaylists, previewStats, yearsCorrected, duplicatesRemoved, previewsUnavailable, pageStats } =
-      await loadSongs(token, playlistIds, target, new Set(excludeIds), abort.signal, sessionId);
+    const {
+      songs,
+      unavailablePlaylists,
+      previewStats,
+      yearStats,
+      yearsCorrected,
+      yearsUnconfirmed,
+      duplicatesRemoved,
+      previewsUnavailable,
+      yearsUnavailable,
+      pageStats,
+    } = await loadSongs(token, playlistIds, target, new Set(excludeIds), abort.signal, sessionId);
     if (abort.signal.aborted) return;
     logger.info(
       {
@@ -248,14 +258,18 @@ export function createTunelineServer({
         itunesLookups: previewStats.lookups,
         itunesFailed: previewStats.failed,
         itunesWaitedMs: previewStats.waitedMs,
+        musicbrainzLookups: yearStats.lookups,
+        musicbrainzFailed: yearStats.failed,
+        musicbrainzWaitedMs: yearStats.waitedMs,
         spotifyPagesFetched: pageStats.fetched,
         spotifyPagesCached: pageStats.cached,
         yearsCorrected,
+        yearsUnconfirmed,
         duplicatesRemoved,
       },
       'songs_loaded',
     );
-    res.json({ songs, unavailablePlaylists, previewsUnavailable } satisfies SongsResponse);
+    res.json({ songs, unavailablePlaylists, previewsUnavailable, yearsUnavailable } satisfies SongsResponse);
   });
 
   // Serve built client in production. The client only uses "/" (state lives in the app and

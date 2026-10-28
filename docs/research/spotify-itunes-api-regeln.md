@@ -164,6 +164,33 @@ Die API lief am 21. Oktober 2026 normal, eine Abkündigung fand sich nicht. `pre
 
 Die gepflegte Alternative, die Apple Music API, verlangt ein Developer Token. Dafür ist eine kostenpflichtige Mitgliedschaft im Apple Developer Program nötig ([Apple: Generating Developer Tokens](https://developer.apple.com/documentation/applemusicapi/generating-developer-tokens)), laut Drittquellen rund 99 USD pro Jahr ([musickit.js.org](https://musickit.js.org/getting-started/)). Ihre Bedingungen richten sich an Apple-Music-Abonnenten, sie passt rechtlich also nicht erkennbar besser. In der Praxis duldet Apple Quiz-Apps mit Previews, etwa die Intro-Quiz-App Intro King im App Store ([App Store: Intro King](https://apps.apple.com/app/id6449006748)). Einen öffentlich bekannten Takedown wegen iTunes-Previews fand die Recherche nicht. Duldung ist allerdings keine Erlaubnis.
 
+## MusicBrainz liefert das Originaljahr, Spotify und iTunes oft nicht
+
+Spotify datiert einen Song über das Album, auf dem er liegt. iTunes datiert ihn über seine Veröffentlichungen dort. Bei älteren Songs haben beide oft nur Wiederveröffentlichungen und Sampler. Am 28. Oktober 2026 ergab ein eigener Test für „Schuld war nur der Bossa Nova“ (Manuela, 1963) bei Spotify nur Alben und Sampler ab 1992. iTunes führte den Song unter anderem auf den Samplern „Die ultimativen Kult Klassiker“ und „Echo der Frau … Leser-Wunschkonzert, Vol. 6“, beide mit 1992. Tuneline zeigte deshalb 1992. Am Albumnamen sind solche Sampler nicht zu erkennen, nur an `collectionArtistName: "Various Artists"`. Das Original kannte keine der beiden Quellen.
+
+MusicBrainz kannte es. Die Recording-Suche liefert pro Aufnahme `first-release-date`, laut Dokumentation „the release date of the earliest release including this recording“. Sie versteht Lucene-Syntax, also auch Datumsbereiche, und gibt höchstens 100 Treffer pro Anfrage zurück ([MusicBrainz API: Search](https://musicbrainz.org/doc/MusicBrainz_API/Search)).
+
+Eigene Tests am 28. Oktober 2026:
+
+- Eine Anfrage mit zehn Songs, verbunden per `OR` und je begrenzt auf `firstreleasedate:[1900 TO <Spotify-Jahr>]`, ergab 87 Treffer. Alle zehn Jahre stimmten, darunter Bossa Nova 1963, „Sugar Baby“ 1958 (Spotify: 1989) und „Dancing Queen“ 1976.
+- Ohne Datumsgrenze fehlte bei Songs mit über 100 Aufnahmen das Original manchmal auf der ersten Seite („Dancing Queen“ ergab 1978).
+- Eine Grenzunschärfe bleibt: „Nightshift“ ergibt 1984, weil die US-Single im Dezember 1984 erschien und das Album erst 1985.
+- Ein Testspiel mit echtem Login und der Playlist „HITSTER - Deutsch“ deckte einen weiteren Fehler auf. Dabei wurden 27 Songs geladen, mit 8 Anfragen an MusicBrainz in rund 20 Sekunden. Das Feld `first-release-date` einer Aufnahme taugt nicht als Jahr. Bei „In Da Club“ zählt es eine Promo-Single von 2002 mit, der Song erschien 2003. Bei „Sick and Tired“ (2001 statt 2004) und „Barbra Streisand“ (2009 statt 2010) passt es zu keiner der aufgelisteten Veröffentlichungen.
+- Die Suche liefert zu jeder Aufnahme alle Veröffentlichungen mit Datum und Status mit, für „Bohemian Rhapsody“ 356 Stück. Ein Lookup liefert nur 25. Nimmt man die früheste Veröffentlichung mit `status: Official`, stimmten alle 20 geprüften Songs, die drei Fehlerfälle eingeschlossen.
+- Ein zweites Testspiel mit 27 Songs zeigte eine Grenze dieser Regel. „Ordinary“ (Alex Warren) hängt bei MusicBrainz an der EP „You'll Be Alright, Kid (Chapter 1)“ vom 27.09.2024. Der Song erschien aber erst am 07.02.2025, die EP wurde digital vermutlich nachträglich erweitert. Liegt MusicBrainz genau ein Jahr vor Spotify, hat es meist recht („Jolene“ 1973, „Blinding Lights“ 2019), manchmal aber nicht. Entscheidung: Das MusicBrainz-Jahr gilt, solche seltenen Fehler werden in Kauf genommen.
+
+Die Regeln für Anfragen ([Rate Limiting](https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting), Stand „As of 2012-01-08“):
+
+- **Rate-Limit:** im Schnitt eine Anfrage pro Sekunde und IP. Darüber werden alle Anfragen dieser IP mit 503 abgelehnt, bis die Rate wieder sinkt.
+- **Globales Limit:** 300 Anfragen pro Sekunde über alle Nutzer, auch darüber gibt es 503.
+- **User-Agent:** Pflicht, im Format „Application name/<version> ( contact-url )“ oder mit Kontakt-E-Mail.
+
+Im Test kamen 503 auch bei einer Anfrage pro Sekunde. Die Header zeigen den Grund: `x-ratelimit-zone: global` und `Retry-After: 0`. MusicBrainz weist also bei Last einen Teil aller Anfragen ab, unabhängig von der IP. Von sechs direkt aufeinanderfolgenden Anfragen trafen zwei auf 503, der nächste Versuch ging meist durch. In einem Testspiel scheiterten mit drei Versuchen zwei von 14 Suchen, und je zehn Songs fielen dadurch raus. Seitdem versucht Tuneline es bis zu sechsmal im Abstand von einer Sekunde und wartet ein angegebenes `Retry-After` ab.
+
+Zur Lizenz: Recordings, Releases und Release Groups zählen zu den Kerndaten unter CC0 ([MusicBrainz Database](https://musicbrainz.org/doc/MusicBrainz_Database), [Data License](https://musicbrainz.org/doc/About/Data_License)). Suchindizes gehören zu den ergänzenden Daten unter CC BY-NC-SA 3.0. Tuneline übernimmt aus der Suche nur das Jahr und hält die Antworten 21 Stunden im Speicher. Die Schlüssel des Caches sind Spotify-Titel und -Interpreten, für die Spotifys Vorgabe „temporär“ gilt.
+
+Umgesetzt in `server/src/originalYear.ts`. Bestätigt MusicBrainz kein Jahr, nimmt `loadSongs()` den Song nicht ins Spiel.
+
 ## Spotify- und Apple-Attribution kollidieren auf der Aufdeck-Karte
 
 ### Spotify verlangt Logo, Rücklink und unveränderte Cover

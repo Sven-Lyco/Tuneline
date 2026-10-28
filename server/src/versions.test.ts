@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { baseTitle, isCompilationAlbum, normalize, songKey, versionOf } from './versions.js';
+import { baseTitle, normalize, plainTitle, songKey, versionOf } from './versions.js';
 
 describe('versionOf', () => {
   it('treats plain titles, edits and features as the original', () => {
@@ -35,6 +35,9 @@ describe('versionOf', () => {
       'Creep - Acoustic',
       'Blinding Lights (Sped Up)',
       'Take on Me (Symphonic Version)',
+      'Schuld war nur der Bossa Nova (Neuaufnahme)',
+      'Schuld war nur der Bossa (Neuaufn)',
+      'Junge, komm bald wieder (re-recording)',
     ]) {
       expect(versionOf(title), title).toBe('variant');
     }
@@ -44,6 +47,7 @@ describe('versionOf', () => {
     expect(versionOf('Suga Suga', 'Screwed & Chopped')).toBe('variant');
     expect(versionOf('Bohemian Rhapsody', 'Hungarian Rhapsody (Live In Budapest / 1986)')).toBe('variant');
     expect(versionOf('About a Girl', 'MTV Unplugged in New York')).toBe('variant');
+    expect(versionOf('Ganz in Weiß', 'Meine Hits als Neuaufnahmen')).toBe('variant');
     expect(versionOf('Violet', 'Live Through This')).toBe('original');
     expect(versionOf('Bohemian Rhapsody', 'A Night At The Opera (Deluxe Edition)')).toBe('original');
   });
@@ -62,31 +66,13 @@ describe('versionOf', () => {
   });
 });
 
-describe('isCompilationAlbum', () => {
-  it('spots best-ofs and reissues by their name (real iTunes album names)', () => {
-    for (const album of [
-      'Anthology',
-      'Gold: Commodores',
-      'The Definitive Collection: The Commodores',
-      "Motown: The Complete No. 1's",
-      'Elv1s: 30 #1 Hits',
-      'Pop Music: The Modern Era 1976-1999',
-      'Tutti Frutti - Best of Peter Kraus',
-      'Seine großen Erfolge',
-      'A Night At The Opera (Deluxe Edition)',
-    ]) {
-      expect(isCompilationAlbum(album), album).toBe(true);
-    }
-    for (const album of ['Nightshift', 'Thriller', 'From Elvis In Memphis', 'Rumours', 'Hunting High and Low', 'Fearless']) {
-      expect(isCompilationAlbum(album), album).toBe(false);
-    }
-  });
-});
-
 describe('song identity', () => {
   it('ignores accents, case and version suffixes', () => {
     expect(normalize('Beyoncé')).toBe('beyonce');
     expect(baseTitle('Suga Suga (feat. Frankie J)')).toBe('sugasuga');
+    expect(plainTitle('Schuld war nur der Bossa Nova (Blame It On the Bossa Nova) - 2001 Remaster')).toBe(
+      'Schuld war nur der Bossa Nova',
+    );
     expect(songKey('Baby Bash', 'Suga Suga - Radio Edit')).toBe(songKey('BABY BASH', 'Suga Suga'));
     expect(songKey('Baby Bash', 'Suga Suga')).not.toBe(songKey('Frankie J', 'Suga Suga'));
   });

@@ -1,6 +1,7 @@
 import { TokenBucket } from './limits.js';
 import { logger } from './logger.js';
-import { baseTitle, isCompilationAlbum, normalize, versionOf } from './versions.js';
+import { ExpiringCache } from './utils.js';
+import { MAX_LENGTH_DIFFERENCE, baseTitle, normalize, versionOf } from './versions.js';
 
 interface ItunesTrack {
   previewUrl?: string | null;
@@ -15,25 +16,15 @@ interface ItunesSearchResult {
   results: ItunesTrack[];
 }
 
-/** An iTunes recording of the searched song that has a preview. */
+/**
+ * An iTunes recording of the searched song that has a preview. Its date only helps to pick a
+ * recording: iTunes dates songs by best-ofs and reissues, so the year comes from MusicBrainz.
+ */
 interface Candidate {
   previewUrl: string;
   remaster: boolean;
   year: number; // 0 = unknown
-  // iTunes gives a plain year as January 1st, and compilations carry made-up ones ("1966-01-01"
-  // for a 1982 song); only a full date is trusted once there is one.
-  exactDate: boolean;
-  compilation: boolean; // a best-of or reissue: fine to play, but its date says little
   durationMs: number; // 0 = unknown
-}
-
-export interface PreviewMatch {
-  preview: string;
-  /**
-   * Earliest year of the song's releases on iTunes, best-ofs and reissues left out (their dates
-   * are unreliable). Spotify dates a song by the album it's on. null = unknown.
-   */
-  originalYear: number | null;
 }
 
 /**
@@ -59,19 +50,14 @@ function candidates(results: ItunesTrack[], artist: string, title: string): Cand
         previewUrl: r.previewUrl,
         remaster: version === 'remaster',
         year: parseInt(r.releaseDate ?? '', 10) || 0,
-        exactDate: !!r.releaseDate && !/^\d{4}-01-01/.test(r.releaseDate),
-        compilation: isCompilationAlbum(r.collectionName ?? ''),
         durationMs: r.trackTimeMillis ?? 0,
       },
     ];
   });
 }
 
-// Lengths further apart than this are another recording ("chopped & screwed", a re-recording …).
-const MAX_LENGTH_DIFFERENCE = 0.4;
-
 /** The original before a remaster, then the length closest to Spotify's, then the oldest release. */
-function pickBest(found: Candidate[], durationMs: number): PreviewMatch | null {
+function pickBest(found: Candidate[], durationMs: number): string | null {
   const off = (c: Candidate) => (durationMs > 0 && c.durationMs > 0 ? Math.abs(c.durationMs - durationMs) : 0);
   const fitting = found.filter((c) => off(c) <= durationMs * MAX_LENGTH_DIFFERENCE);
   if (fitting.length === 0) return null;
@@ -80,38 +66,14 @@ function pickBest(found: Candidate[], durationMs: number): PreviewMatch | null {
   const [best] = [...fitting].sort(
     (a, b) => Number(a.remaster) - Number(b.remaster) || off(a) - off(b) || oldest(a) - oldest(b),
   );
-  // Without a dated original release there is no year; Spotify's then stands.
-  const dated = fitting.filter((c) => c.year >= 1900 && !c.compilation);
-  const trusted = dated.some((c) => c.exactDate) ? dated.filter((c) => c.exactDate) : dated;
-  const years = trusted.map((c) => c.year);
-  return { preview: best.previewUrl, originalYear: years.length > 0 ? Math.min(...years) : null };
+  return best.previewUrl;
 }
 
 // In-memory cache: "artist|title" → matching recordings (max 2000 entries, LRU-eviction). The pick
 // happens per call, since the Spotify length can differ between two tracks with the same title.
 // Entries expire like Apple's own responses (max-age ~21 h); the keys are Spotify metadata, which
 // may only be cached temporarily.
-const cache = new Map<string, { found: Candidate[]; expiresAt: number }>();
-const CACHE_MAX = 2000;
-const CACHE_TTL_MS = 21 * 60 * 60 * 1000;
-
-function cacheGet(key: string): Candidate[] | undefined {
-  const entry = cache.get(key);
-  if (!entry) return undefined;
-  if (Date.now() >= entry.expiresAt) {
-    cache.delete(key);
-    return undefined;
-  }
-  return entry.found;
-}
-
-function cacheSet(key: string, found: Candidate[]): void {
-  if (cache.size >= CACHE_MAX) {
-    const oldest = cache.keys().next().value;
-    if (oldest !== undefined) cache.delete(oldest);
-  }
-  cache.set(key, { found, expiresAt: Date.now() + CACHE_TTL_MS });
-}
+const cache = new ExpiringCache<Candidate[]>(2000, 21 * 60 * 60 * 1000);
 
 // ── iTunes budget ────────────────────────────────────────────────────────────
 
@@ -160,8 +122,9 @@ export interface PreviewStats {
 }
 
 /**
- * `durationMs`: the Spotify track's length (0 = unknown), to tell recordings apart. `signal` ends
- * the wait for the budget when the load is cancelled.
+ * The preview URL of the song's original recording, or null. `durationMs`: the Spotify track's
+ * length (0 = unknown), to tell recordings apart. `signal` ends the wait for the budget when the
+ * load is cancelled.
  */
 export async function findPreview(
   artist: string,
@@ -169,10 +132,10 @@ export async function findPreview(
   durationMs = 0,
   stats?: PreviewStats,
   signal?: AbortSignal,
-): Promise<PreviewMatch | null> {
+): Promise<string | null> {
   const cacheKey = `${artist}|${title}`;
 
-  const cached = cacheGet(cacheKey);
+  const cached = cache.get(cacheKey);
   if (cached) return pickBest(cached, durationMs);
 
   if (!isBlocked()) {
@@ -209,7 +172,7 @@ export async function findPreview(
 
     const data = (await response.json()) as ItunesSearchResult;
     const found = candidates(data.results, artist, title);
-    cacheSet(cacheKey, found);
+    cache.set(cacheKey, found);
     const match = pickBest(found, durationMs);
     logger.debug({ artist, title, found: match !== null }, 'preview_fetched');
     return match;

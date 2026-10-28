@@ -29,7 +29,11 @@ const Spinner = styled.div`
   margin-bottom: 1.5rem;
 `;
 
+// Long reasons ("Die Hörproben sind gerade nicht erreichbar …") wrap like the hint below.
 const Message = styled.div`
+  max-width: 22rem;
+  padding: 0 1rem;
+  text-align: center;
   font-size: 0.9rem;
   color: #7a7a8e;
   animation: glow 1.5s infinite;
@@ -44,7 +48,8 @@ const Hint = styled.div`
   color: #555;
 `;
 
-// From here on a song load is most likely waiting for iTunes (about 20 searches a minute).
+// From here on a song load is most likely waiting for iTunes (about 20 searches a minute), or
+// for MusicBrainz checking the years (one search a second).
 const SLOW_AFTER_MS = 8000;
 
 export function LoadingScreen({ message, onCancel }: LoadingScreenProps) {
@@ -61,7 +66,7 @@ export function LoadingScreen({ message, onCancel }: LoadingScreenProps) {
       <Message>{message}</Message>
       <Hint>
         {slow
-          ? 'iTunes erlaubt nur wenige Suchen pro Minute – bei vielen Runden dauert das Laden ein paar Minuten.'
+          ? 'Jedes Erscheinungsjahr wird geprüft, und iTunes erlaubt nur wenige Suchen pro Minute – bei vielen Runden dauert das Laden ein paar Minuten.'
           : 'Das kann ein paar Sekunden dauern...'}
       </Hint>
       {onCancel && (

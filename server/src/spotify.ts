@@ -8,6 +8,7 @@ import type {
 } from '@tuneline/shared';
 import { type SessionData, getSession, updateSession } from './auth.js';
 import { logger } from './logger.js';
+import { type YearStats, findOriginalYears } from './originalYear.js';
 import { type PreviewStats, findPreview } from './preview.js';
 import { shuffle } from './utils.js';
 import { songKey, versionOf } from './versions.js';
@@ -306,7 +307,7 @@ interface TrackData {
   id: string;
   title: string;
   artist: string;
-  year: number;
+  year: number; // the album's: the song may be older (see findOriginalYears)
   cover: string | null;
   durationMs: number; // 0 = unknown
   isrc: string | null; // the recording's ID: the same on a single, its album and best-ofs
@@ -429,11 +430,17 @@ async function getPlaylistTracks(
 // Failed iTunes searches after which a load stops: iTunes is throttling this IP, and asking on
 // only keeps the block going. Too few songs now beats none for the next minutes.
 const MAX_ITUNES_FAILURES = 5;
+// Failed MusicBrainz searches (ten songs each) after which a load stops: without it no year can
+// be confirmed, and an unconfirmed year may be a reissue's.
+const MAX_YEAR_FAILURES = 3;
 
 export interface LoadSongsResult extends SongsResponse {
   previewStats: PreviewStats;
-  /** Songs whose year came from iTunes, because Spotify only knew a later release. */
+  yearStats: YearStats;
+  /** Songs whose year MusicBrainz put before Spotify's, which only knew a later release. */
   yearsCorrected: number;
+  /** Songs left out because MusicBrainz couldn't confirm their year. */
+  yearsUnconfirmed: number;
   /** Other versions of a song already in the pile (other playlist, single vs. album …). */
   duplicatesRemoved: number;
   pageStats: PageStats;
@@ -490,27 +497,44 @@ export async function loadSongs(
   const BATCH = 10;
   const result: SongFull[] = [];
   const previewStats: PreviewStats = { lookups: 0, failed: 0, waitedMs: 0 };
+  const yearStats: YearStats = { lookups: 0, failed: 0, waitedMs: 0 };
   const previews = new Set<string>();
   const corrected = new Set<string>();
+  let yearsUnconfirmed = 0;
 
   for (
     let i = 0;
-    i < shuffled.length && result.length < target && !signal.aborted && previewStats.failed < MAX_ITUNES_FAILURES;
+    i < shuffled.length &&
+    result.length < target &&
+    !signal.aborted &&
+    previewStats.failed < MAX_ITUNES_FAILURES &&
+    yearStats.failed < MAX_YEAR_FAILURES;
     i += BATCH
   ) {
     const batch = shuffled.slice(i, i + BATCH);
+    // The year first, in one search for the batch: iTunes allows far fewer searches, so it's
+    // only asked for songs that stay. Spotify dates a song by its album, often a reissue's year.
+    const years = await findOriginalYears(
+      batch.map(({ artist, title, durationMs, year }) => ({ artist, title, durationMs, latest: year })),
+      yearStats,
+      signal,
+    );
     const enriched = await Promise.all(
-      batch.map(async (track): Promise<(SongFull & { preview: string }) | null> => {
-        const match = await findPreview(track.artist, track.title, track.durationMs, previewStats, signal);
-        if (!match) return null;
-        // Spotify dates a song by its album, so a reissue or best-of shows a later year.
-        const year = match.originalYear !== null && match.originalYear < track.year ? match.originalYear : track.year;
+      batch.map(async (track, j): Promise<(SongFull & { preview: string }) | null> => {
+        const year = years[j];
+        if (year === null) {
+          // Unknown to MusicBrainz, or it couldn't be asked: the album's year may be a reissue's.
+          if (!signal.aborted) yearsUnconfirmed++;
+          return null;
+        }
+        const preview = await findPreview(track.artist, track.title, track.durationMs, previewStats, signal);
+        if (!preview) return null;
         if (year !== track.year) {
           corrected.add(track.id);
           logger.debug({ artist: track.artist, title: track.title, spotifyYear: track.year, year }, 'year_corrected');
         }
         const { id, title, artist, cover } = track;
-        return { id, title, artist, year, cover, preview: match.preview };
+        return { id, title, artist, year, cover, preview };
       })
     );
     for (const song of enriched) {
@@ -531,9 +555,12 @@ export async function loadSongs(
     songs,
     unavailablePlaylists,
     previewStats,
+    yearStats,
     yearsCorrected: songs.filter((s) => corrected.has(s.id)).length,
+    yearsUnconfirmed,
     duplicatesRemoved,
     previewsUnavailable: previewStats.failed >= MAX_ITUNES_FAILURES,
+    yearsUnavailable: yearStats.failed >= MAX_YEAR_FAILURES,
     pageStats,
   };
 }

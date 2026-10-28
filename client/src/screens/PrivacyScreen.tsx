@@ -79,7 +79,7 @@ export function PrivacyScreen({ onBack }: PrivacyScreenProps) {
         weder ausgewertet noch weitergegeben und regelmäßig gelöscht.
       </p>
 
-      <h2>Spotify und Apple</h2>
+      <h2>Spotify, Apple und MusicBrainz</h2>
       <ul>
         <li>
           Die Cover lädt dein Browser direkt von Spotify, die Hörproben direkt von Apple (iTunes).
@@ -102,8 +102,10 @@ export function PrivacyScreen({ onBack }: PrivacyScreenProps) {
           .
         </li>
         <li>
-          Der Server fragt die Spotify-Schnittstelle mit deinem Zugangsschlüssel ab und sucht
-          Hörproben bei iTunes nur nach Interpret und Titel, ohne Daten über dich.
+          Der Server fragt die Spotify-Schnittstelle mit deinem Zugangsschlüssel ab. Hörproben sucht
+          er bei iTunes, das Erscheinungsjahr bei MusicBrainz (MetaBrainz Foundation), beides nur
+          nach Interpret und Titel, ohne Daten über dich. Dein Browser hat mit MusicBrainz keinen
+          Kontakt.
         </li>
         <li>
           Der Server läuft bei einem Hosting-Anbieter, der dabei als Auftragsverarbeiter auf die

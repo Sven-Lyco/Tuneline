@@ -32,8 +32,7 @@ const release = (artistName: string, trackName: string, collectionName: string, 
   previewUrl: `https://audio/${collectionName}/${trackName}`,
 });
 
-const preview = async (artist: string, title: string, seconds = 0) =>
-  (await findPreview(artist, title, seconds * 1000))?.preview ?? null;
+const preview = (artist: string, title: string, seconds = 0) => findPreview(artist, title, seconds * 1000);
 
 // The cache is module-wide, so every test uses its own artist.
 let n = 0;
@@ -103,13 +102,10 @@ describe('findPreview', () => {
       release('Baby Bash', 'Suga Suga', 'Suga Suga - EP', '2003-08-15', 243),
       release('ProSource Karaoke Band', 'Suga Suga (Originally Performed by Baby Bash)', 'Karaoke', '2010-08-01', 239),
     ]);
-    expect(await findPreview('Baby Bash', 'Suga Suga', 239_000)).toEqual({
-      preview: "https://audio/Tha Smokin' Nephew/Suga Suga",
-      originalYear: 2003,
-    });
+    expect(await findPreview('Baby Bash', 'Suga Suga', 239_000)).toBe("https://audio/Tha Smokin' Nephew/Suga Suga");
   });
 
-  it("finds the original year behind a best-of, and skips re-recordings like Taylor's Version", async () => {
+  it("plays the album take, not a film edit, and skips re-recordings like Taylor's Version", async () => {
     itunes([
       release('Elvis Presley', 'Suspicious Minds', 'Elv1s: 30 #1 Hits', '1969-08-26', 272),
       release('Elvis Presley', 'Suspicious Minds (Film Edit)', 'ELVIS (Original Motion Picture Soundtrack)', '2022-06-24', 377),
@@ -117,20 +113,27 @@ describe('findPreview', () => {
       release('Elvis Presley', 'Suspicious Minds (Live)', 'Elvis: As Recorded at Madison Square Garden', '1972-06-18', 261),
       release('Elvis Presley', 'Suspicious Minds', 'From Elvis In Memphis', '1969-08-26', 263),
     ]);
-    expect(await findPreview('Elvis Presley', 'Suspicious Minds', 263_000)).toEqual({
-      preview: 'https://audio/From Elvis In Memphis/Suspicious Minds',
-      originalYear: 1969,
-    });
+    expect(await findPreview('Elvis Presley', 'Suspicious Minds', 263_000)).toBe(
+      'https://audio/From Elvis In Memphis/Suspicious Minds',
+    );
 
     itunes([
       release('Taylor Swift', 'Love Story (Taylor’s Version)', "Fearless (Taylor's Version)", '2021-02-11', 235),
       release('Taylor Swift', 'Love Story', 'Fearless', '2008-09-12', 235),
       release('Taylor Swift', 'Love Story (Pop mix)', 'Love Story (Pop Mix) - Single', '2009-01-06', 233),
     ]);
-    expect(await findPreview('Taylor Swift', 'Love Story', 235_000)).toEqual({
-      preview: 'https://audio/Fearless/Love Story',
-      originalYear: 2008,
-    });
+    expect(await findPreview('Taylor Swift', 'Love Story', 235_000)).toBe('https://audio/Fearless/Love Story');
+  });
+
+  it('skips German re-recordings ("Neuaufnahme") even when their length fits better (real iTunes results)', async () => {
+    itunes([
+      release('Manuela', 'Schuld war nur der Bossa Nova (Neuaufnahme)', 'Schuld war nur der Bossa Nova - Ihre 40 größten Erfolge - Folge 1', '2001-08-10', 167),
+      release('Manuela', 'Schuld war nur der Bossa (Neuaufn)', 'Schuld war nur der Bossa Nova (Remastered)', '2001-08-10', 167),
+      release('Manuela', 'Schuld war nur der Bossa Nova', '60 Hits - 60 Jahre Deutschland', '1992-09-28', 145),
+    ]);
+    expect(await findPreview('Manuela', 'Schuld war nur der Bossa Nova', 166_000)).toBe(
+      'https://audio/60 Hits - 60 Jahre Deutschland/Schuld war nur der Bossa Nova',
+    );
   });
 
   it('prefers the original over a remaster, then the closest length, then the oldest release', async () => {
@@ -141,11 +144,8 @@ describe('findPreview', () => {
       release(a, 'Hit', 'Best Of', '1985-06-01', 225),
       release(a, 'Hit', 'Extended Hits', '1970-01-01', 400),
     ]);
-    // The remaster still counts for the year; the 400 s take is too long to be the same recording.
-    expect(await findPreview(a, 'Hit', 228_000)).toEqual({
-      preview: 'https://audio/Album (Deluxe Edition)/Hit',
-      originalYear: 1984,
-    });
+    // The 400 s take is too long to be the same recording.
+    expect(await findPreview(a, 'Hit', 228_000)).toBe('https://audio/Album (Deluxe Edition)/Hit');
     // Same cached results, another Spotify length: the pick changes, nothing is fetched again.
     expect(await preview(a, 'Hit', 225)).toBe('https://audio/Best Of/Hit');
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -155,49 +155,24 @@ describe('findPreview', () => {
     expect(await preview(b, 'Song', 200)).toBe('https://audio/First/Song');
   });
 
-  it("leaves best-ofs out of the year: they carry other tracks' dates (real iTunes results)", async () => {
+  it("plays a best-of's preview: it's the same recording (real iTunes results)", async () => {
     itunes([
       release('The Commodores', 'Nightshift', 'Nightshift', '1985-01-01', 303),
       release('The Commodores', 'Nightshift (Single Version)', "Motown: The Complete No. 1's", '1985-01-31', 261),
       release('The Commodores', 'Nightshift (12-Inch Club Mix)', '20th Century Masters - The Millennium Collection', '2002-01-01', 423),
       release('The Commodores', 'Nightshift', 'Anthology', '1977-03-01', 304),
-      release('The Commodores', 'Nightshift', 'The Definitive Collection: The Commodores', '1977-03-01', 303),
-      release('The Commodores', 'Nightshift', 'Gold: Commodores', '1977-03-01', 304),
     ]);
-    // The best-of can still provide the preview; it's the same recording.
-    expect(await findPreview('Commodores', 'Nightshift', 304_000)).toEqual({
-      preview: 'https://audio/Anthology/Nightshift',
-      originalYear: 1985,
-    });
-
-    // Only best-ofs: no year from iTunes, Spotify's stands.
-    const a = artist();
-    itunes([release(a, 'Evergreen', 'Greatest Hits', '1960-05-01', 180)]);
-    expect((await findPreview(a, 'Evergreen', 180_000))?.originalYear).toBeNull();
+    expect(await findPreview('Commodores', 'Nightshift', 304_000)).toBe('https://audio/Anthology/Nightshift');
   });
 
-  it('trusts full release dates over January 1st placeholders from compilations (real iTunes results)', async () => {
-    itunes([
-      release('Michael Jackson', 'Billie Jean', 'Thriller', '1982-11-29', 293),
-      release('Michael Jackson', 'Billie Jean', 'Pop Music: The Modern Era 1976-1999', '1966-01-01', 293),
-      release('Michael Jackson', 'Billie Jean (Single Version)', 'Number Ones', '1982-11-30', 294),
-    ]);
-    expect((await findPreview('Michael Jackson', 'Billie Jean', 294_000))?.originalYear).toBe(1982);
-
-    // With only plain years, the earliest one still counts.
-    const a = artist();
-    itunes([release(a, 'Oldie', 'Best Of', '1999-01-01', 180), release(a, 'Oldie', 'Album', '1964-01-01', 180)]);
-    expect((await findPreview(a, 'Oldie', 180_000))?.originalYear).toBe(1964);
-  });
-
-  it('drops recordings of a clearly different length, and has no year without dates', async () => {
+  it('drops recordings of a clearly different length, but not ones without length or date', async () => {
     const a = artist();
     itunes([release(a, 'Slow Jam', 'Album', '2000-01-01', 380)]);
     expect(await preview(a, 'Slow Jam', 239)).toBeNull();
 
     const b = artist();
     itunes([track(b, 'Undated')]);
-    expect(await findPreview(b, 'Undated', 200_000)).toEqual({ preview: 'https://audio/Undated', originalYear: null });
+    expect(await preview(b, 'Undated', 200)).toBe('https://audio/Undated');
   });
 
   it('caches answers but retries after server or network errors, and counts both', async () => {
@@ -208,8 +183,8 @@ describe('findPreview', () => {
     fetchMock.mockRejectedValueOnce(new Error('offline'));
     expect(await findPreview(a, 'Hit', 0, counts)).toBeNull();
     itunes([track(a, 'Hit')]);
-    expect((await findPreview(a, 'Hit', 0, counts))?.preview).toBe('https://audio/Hit');
-    expect((await findPreview(a, 'Hit', 0, counts))?.preview).toBe('https://audio/Hit');
+    expect(await findPreview(a, 'Hit', 0, counts)).toBe('https://audio/Hit');
+    expect(await findPreview(a, 'Hit', 0, counts)).toBe('https://audio/Hit');
     expect(fetchMock).toHaveBeenCalledTimes(3);
     // The cache hit isn't a lookup; the server and the network error are failures.
     expect(counts).toEqual({ lookups: 3, failed: 2, waitedMs: 0 });
@@ -236,7 +211,7 @@ describe('findPreview', () => {
     vi.advanceTimersByTime(60_000);
     const a = artist();
     itunes([track(a, 'Works')]);
-    expect((await findPreview(a, 'Works', 0))?.preview).toBe('https://audio/Works');
+    expect(await findPreview(a, 'Works', 0)).toBe('https://audio/Works');
 
     // A success resets the pause to 2 minutes.
     itunes([], 429);
@@ -255,15 +230,15 @@ describe('findPreview', () => {
     itunes([track(a, 'First')]);
     await findPreview(a, 'First', 0, counts);
     // The budget is used up, but a cached song needs no search.
-    expect((await findPreview(a, 'First', 0, counts))?.preview).toBe('https://audio/First');
+    expect(await findPreview(a, 'First', 0, counts)).toBe('https://audio/First');
 
     itunes([track(a, 'Second')]);
     itunes([track(a, 'Third')]);
     const second = findPreview(a, 'Second', 0, counts);
     const third = findPreview(a, 'Third', 0, counts);
     await vi.advanceTimersByTimeAsync(6000);
-    expect((await second)?.preview).toBe('https://audio/Second');
-    expect((await third)?.preview).toBe('https://audio/Third');
+    expect(await second).toBe('https://audio/Second');
+    expect(await third).toBe('https://audio/Third');
     // Waiting side by side (3 s and 6 s), the load was held up 6 s, not 9.
     expect(counts).toEqual({ lookups: 3, failed: 0, waitedMs: 6000 });
   });

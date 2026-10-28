@@ -3,8 +3,8 @@
 ## Projekt
 
 Digitales Musik-Timeline-Partyspiel (ähnlich Hitster). Der Host wählt Spotify-Playlisten aus.
-Song-Metadaten (Titel, Interpret, Jahr, Cover) kommen von der Spotify Web API. Audio-Previews
-kommen über die iTunes Search API (30s Previews, kein Premium nötig).
+Song-Metadaten (Titel, Interpret, Cover) kommen von der Spotify Web API, das Erscheinungsjahr
+bestätigt MusicBrainz. Audio-Previews kommen über die iTunes Search API (30s Previews, kein Premium nötig).
 Spieler ordnen Songs chronologisch in ihre persönliche Timeline ein. Wer richtig platziert, bekommt einen Punkt.
 
 ## Tech Stack
@@ -13,6 +13,7 @@ Spieler ordnen Songs chronologisch in ihre persönliche Timeline ein. Wer richti
 - **Emotion** (`@emotion/styled`, `@emotion/react`) — CSS-in-JS, **keine `.css`-Dateien**
 - **Spotify Web API** — PKCE OAuth, Playlisten-Auswahl, Track-Metadaten
 - **iTunes Search API** — Audio-Previews (30s, kein Auth, CORS nativ, kein Premium nötig)
+- **MusicBrainz API** — Erscheinungsjahr der Originalveröffentlichung (kein Auth, 1 Anfrage/s, nur serverseitig)
 - **Socket.io** — Echtzeit-Kommunikation Client ↔ Server
 - **Express** — HTTP-Server + Static Serving des Client-Builds in Production
 - **ESLint v9** (flat config) + `typescript-eslint` + `eslint-config-prettier`
@@ -106,12 +107,13 @@ Tuneline/
       types.ts              Interne Server-Typen + Konstanten (Room, InternalPlayer, MAX_*)
       auth.ts               Session-Management (httpOnly Cookies, in-memory Map, 7 Tage TTL)
       spotify.ts            PKCE OAuth server-seitig, Token-Refresh, Playlist/Track-Laden
-      preview.ts            iTunes Preview-Suche (Originalaufnahme + Originaljahr) + in-memory Cache (nur serverseitig, kein HTTP-Endpunkt)
+      preview.ts            iTunes Preview-Suche (Originalaufnahme) + in-memory Cache (nur serverseitig, kein HTTP-Endpunkt)
+      originalYear.ts       Erscheinungsjahr über MusicBrainz (10 Songs pro Suche, 1 Anfrage/s) + in-memory Cache
       versions.ts           Versionen erkennen (Original / Remaster / Remix, Live …), songKey() für Duplikate
-      limits.ts             ConnectionCounter, AttemptLimiter (Socket-Verbindungen und Fehlversuche pro IP), TokenBucket (iTunes-Budget)
+      limits.ts             ConnectionCounter, AttemptLimiter (Socket-Verbindungen und Fehlversuche pro IP), TokenBucket (iTunes- und MusicBrainz-Budget)
       playlistCache.ts      Pro Session: Playlist-Liste (snapshot_id, gefolgt?) + gelesene Playlist-Seiten (6 h)
       logger.ts             pino-Logger
-      utils.ts              shuffle<T>(), generateCode()
+      utils.ts              shuffle<T>(), generateCode(), ExpiringCache (Caches mit Lebensdauer)
     tsconfig.json
     package.json            @tuneline/server
 
@@ -155,7 +157,8 @@ Tuneline/
 - `server/src/spotify.ts` liest Songs über `/playlists/{id}/items` (max. 50 pro Seite, Song unter `item` oder `track`); wird die erste Seite abgelehnt, Rückfall auf das alte `/tracks` (Log: `playlist_items_fallback`)
 - Playlist-Liste: `/me/playlists` seitenweise über `next`, max. 200 Playlists
 - Spotify-Fehler gehen mit Grund an den Client: `/api/playlists` → `not_allowlisted` (403) / `quota` (429) / `unavailable` (502); `/api/songs` → `SongsResponse.unavailablePlaylists` mit `not_owned` / `spotify_owned` / `quota` / `unavailable` (Texte in `client/src/utils/spotifyMessages.ts`)
-- iTunes Search API: offiziell ca. 20 Anfragen/Minute pro IP (gilt für die Server-IP); `songs_loaded` loggt `itunesLookups`/`itunesFailed` (außerdem `yearsCorrected`, `duplicatesRemoved`) — Tests (Okt. 2026): 40 Suchen in ~5 s ohne Fehler, aber ~70 in ~1 min → 403/429 und Sperre > 30 min (Nachfragen verlängert sie). **Drosselung** in `preview.ts`: ein `TokenBucket` für den ganzen Server, bis 40 Suchen sofort, dann eine alle 3 s (Cache-Treffer frei); nach 403/429 Pause von 2 min, bei erneuter Sperre doppelt bis 30 min, nach einem Erfolg wieder 2 min (Log `itunes_throttled`). `songs_loaded` loggt `itunesWaitedMs`. `loadSongs()` bricht nach 5 gescheiterten Suchen ab (`MAX_ITUNES_FAILURES`) und meldet `SongsResponse.previewsUnavailable`; reichen die Songs dann nicht, sagt der Client „Die Hörproben sind gerade nicht erreichbar …“ statt „andere Playlisten wählen“. Der Client fordert 1,2× die nötigen Songs an; der Ladescreen erklärt nach 8 s, dass iTunes bremst
+- iTunes Search API: offiziell ca. 20 Anfragen/Minute pro IP (gilt für die Server-IP); `songs_loaded` loggt `itunesLookups`/`itunesFailed` (außerdem `yearsCorrected`, `duplicatesRemoved`) — Tests (Okt. 2026): 40 Suchen in ~5 s ohne Fehler, aber ~70 in ~1 min → 403/429 und Sperre > 30 min (Nachfragen verlängert sie). **Drosselung** in `preview.ts`: ein `TokenBucket` für den ganzen Server, bis 40 Suchen sofort, dann eine alle 3 s (Cache-Treffer frei); nach 403/429 Pause von 2 min, bei erneuter Sperre doppelt bis 30 min, nach einem Erfolg wieder 2 min (Log `itunes_throttled`). `songs_loaded` loggt `itunesWaitedMs`. `loadSongs()` bricht nach 5 gescheiterten Suchen ab (`MAX_ITUNES_FAILURES`) und meldet `SongsResponse.previewsUnavailable`; reichen die Songs dann nicht, sagt der Client „Die Hörproben sind gerade nicht erreichbar …“ statt „andere Playlisten wählen“. Der Client fordert 1,2× die nötigen Songs an; der Ladescreen erklärt nach 8 s, dass Jahresprüfung und iTunes bremsen
+- MusicBrainz-API (`server/src/originalYear.ts`): 1 Anfrage/s pro IP, User-Agent mit Kontakt Pflicht (`OPERATOR_CONTACT`, sonst Repo-URL). 503 kommt oft vom globalen Limit (`x-ratelimit-zone: global`, `Retry-After: 0`; in Tests Okt. 2026 bei etwa jeder dritten Anfrage, auch bei 1/s) → bis zu 6 Versuche im Takt des Budgets, `Retry-After` wird abgewartet (über 10 s → aufgeben). Gesucht wird gebündelt: bis zu 10 Songs per `OR` in einer Recording-Suche (`limit=100`), je `firstreleasedate:[1900 TO <Spotify-Jahr>]`; ist die Antwort abgeschnitten (`count` > 100, z. B. „Yesterday“), fragt die nächste Suche nur noch nach Aufnahmen vor dem frühesten gefundenen Jahr (max. 3 Runden, dann einzeln). Cache 21 h, Fehler werden nicht gecacht. `songs_loaded` loggt `musicbrainzLookups`/`musicbrainzFailed`/`musicbrainzWaitedMs` und `yearsUnconfirmed`; Fehler → Log `musicbrainz_fetch_error`. `loadSongs()` bricht nach 3 gescheiterten Suchen ab (`MAX_YEAR_FAILURES`) und meldet `SongsResponse.yearsUnavailable` → Client: „Die Erscheinungsjahre lassen sich gerade nicht prüfen …“
 - Hintergrund mit Quellen (Quota, Playlist-Zugriff, Developer Policy, iTunes-Bedingungen, Spotify-Wiedergabe statt iTunes, Stand Oktober 2026): `docs/research/spotify-itunes-api-regeln.md`, Rohnotizen in `docs/research/notes/`
 
 ## Multiplayer-Architektur
@@ -199,9 +202,9 @@ Server → Client: room_created, room_joined, rejoin_failed, session_replaced, r
 - **Pause** (`pausedPlayerId`): nur wenn der Host oder der Spieler am Zug offline ist. Andere Disconnects → `game_state_updated` (Spieler erscheint „offline“). Kommt der Host nicht binnen 2 Min. zurück → Spielende
 - Übersprungene, beim Start offline gewesene und spät beitretende Spieler werden per `seatPlayer()` wieder in die Reihenfolge aufgenommen (ohne Karten: Startkarte vom Stapel, sonst Zuschauer bis zur nächsten Partie)
 - **Zeitlimit pro Zug** (`turnLimit`: 0/30/60/90 s): Server-Timer in `RoomManager.syncTurnTimer`, läuft nicht während Pausen; Ablauf zählt als falsch (`placement_result.timedOut`)
-- **Nur Originalversionen** (`server/src/versions.ts`): Versionshinweise zählen nur in Klammern bzw. nach „ - “ („Live and Let Die“ bleibt). Spotify-Tracks, die Remix, Live, Acoustic, Instrumental, re-recorded/„Taylor's Version“, Karaoke, Sped up … oder Remaster sind, fliegen in `parseTrack()` raus, ebenso Compilations, Neuauflage-Alben (Deluxe, Greatest Hits …) und Alben wie „Screwed & Chopped“/„MTV Unplugged“. „Radio Edit“, „Single Version“, „feat.“, „7\" Mix“/„Radio Mix“/„Original Mix“ gelten als Original
+- **Nur Originalversionen** (`server/src/versions.ts`): Versionshinweise zählen nur in Klammern bzw. nach „ - “ („Live and Let Die“ bleibt). Spotify-Tracks, die Remix, Live, Acoustic, Instrumental, re-recorded/„Taylor's Version“/„Neuaufnahme“, Karaoke, Sped up … oder Remaster sind, fliegen in `parseTrack()` raus, ebenso Compilations, Neuauflage-Alben (Deluxe, Greatest Hits …) und Alben wie „Screwed & Chopped“/„MTV Unplugged“. „Radio Edit“, „Single Version“, „feat.“, „7\" Mix“/„Radio Mix“/„Original Mix“ gelten als Original
 - **iTunes-Preview** (`findPreview`, 25 Treffer): gleicher Interpret und `baseTitle`, keine Variante, Länge höchstens 40 % neben der Spotify-Länge; Original vor Remaster, dann nächste Länge, dann ältestes Datum. Ohne passende Preview fällt der Song raus
-- **Jahr** = früheres von Spotify-Albumjahr und iTunes-Originaljahr. Für das iTunes-Jahr zählen keine Best-ofs/Reissues (`isCompilationAlbum`: Hits, Gold, Anthology, Collection, No. 1's, Jahresspannen …), weil sie fremde Daten tragen („Nightshift“ auf Commodores-Best-ofs: 1977 statt 1985). Daten auf den 1. Januar sind oft Platzhalter und zählen nur, wenn es kein genaues Datum gibt. Kennt iTunes kein Original, bleibt das Spotify-Jahr (lieber zu wenig korrigieren als falsch; z. B. bleibt „Sugar Baby“ auf Spotifys 1989 statt 1958)
+- **Jahr** = früheste **offizielle** Veröffentlichung (`releases[].status === 'Official'`) bei MusicBrainz unter den Aufnahmen desselben Interpreten mit gleichem `baseTitle`, ohne Varianten (auch laut `disambiguation`: „re-recording“, „live, …“, DJ-Mix), ohne Videos, Länge höchstens 40 % neben der Spotify-Länge. Nicht `first-release-date` der Aufnahme: das zählt Promos mit („In Da Club“: Promo-Single 2002, erschienen 2003) und passt manchmal zu gar keiner Veröffentlichung („Sick and Tired“: 2001 statt 2004). Das Spotify-Albumjahr ist nur die Obergrenze: Spotify und iTunes datieren ältere Songs oft nur über Wiederveröffentlichungen und Sampler („Schuld war nur der Bossa Nova“: 1992 statt 1963, „Sugar Baby“: 1989 statt 1958). **Bestätigt MusicBrainz kein Jahr, fliegt der Song raus** — lieber weniger Songs als ein falsches Jahr. Das iTunes-Datum zählt nicht fürs Jahr (nur zur Wahl der Preview). Grenzfall: Single im Dezember, Album im Januar → MusicBrainz nimmt das frühere Jahr („Nightshift“: 1984). Liegt MusicBrainz genau 1 Jahr vor Spotify, gilt trotzdem MusicBrainz (meist die Single im Vorjahr: „Jolene“ 1973, „Blinding Lights“ 2019). Seltene Datenfehler nehmen wir dafür bewusst in Kauf (Entscheidung Okt. 2026): „Ordinary“ (Alex Warren) hängt an einer EP vom September 2024 und kommt als 2024 statt 2025
 - **Duplikate**: ein Song pro Partie über alle Playlists und Versionen — gleiche Spotify-ID, gleiche ISRC, gleicher `songKey` (Interpret + Titel ohne Zusätze) oder gleiche Preview-URL
 - „Nochmal spielen“ und neue Räume: Der Host-Client schickt gespielte Song-IDs (`utils/playedSongs.ts`, localStorage, 24 h) als `excludeIds` an `/api/songs`; der Server nutzt sie – samt anderer Versionen desselben Songs – nur als Reserve
 - Bei Punktgleichstand am Ende: `ResultScreen` zeigt "Unentschieden!" statt arbiträrem Sieger

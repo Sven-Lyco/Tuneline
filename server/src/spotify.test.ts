@@ -1,19 +1,25 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSession, getSession } from './auth.js';
+import { findOriginalYears } from './originalYear.js';
 import { findPreview } from './preview.js';
 
-/** Title → the year iTunes knows the song from (none: iTunes has no year). */
-const itunesYears = vi.hoisted(() => new Map<string, number>());
+/** Title → the year MusicBrainz knows the song from (none: Spotify's year). */
+const originalYears = vi.hoisted(() => new Map<string, number>());
+
+// One search per batch; titles with "NoYear" are unknown to MusicBrainz.
+vi.mock('./originalYear.js', () => ({
+  findOriginalYears: vi.fn(async (queries: Array<{ title: string; latest: number }>, stats?: { lookups: number }) => {
+    if (stats) stats.lookups++;
+    return queries.map((q) => (q.title.includes('NoYear') ? null : (originalYears.get(q.title) ?? q.latest)));
+  }),
+}));
 
 // The preview URL depends on the title only, so two tracks with the same title share a preview.
 vi.mock('./preview.js', () => ({
   findPreview: vi.fn(async (_artist: string, title: string, _durationMs: number, stats?: { lookups: number }) => {
     if (stats) stats.lookups++;
     if (title.includes('NoPreview')) return null;
-    return {
-      preview: `https://audio-ssl.itunes.apple.com/${encodeURIComponent(title)}`,
-      originalYear: itunesYears.get(title) ?? null,
-    };
+    return `https://audio-ssl.itunes.apple.com/${encodeURIComponent(title)}`;
   }),
 }));
 
@@ -84,7 +90,7 @@ beforeAll(async () => {
 beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal('fetch', fetchMock);
-  itunesYears.clear();
+  originalYears.clear();
 });
 
 afterEach(() => {
@@ -283,7 +289,7 @@ describe('loadSongs', () => {
   const load = (ids: string[], target: number, exclude: string[] = [], signal = new AbortController().signal) =>
     spotify.loadSongs('token', ids, target, new Set(exclude), signal);
 
-  it('keeps only songs with a reliable year and a preview', async () => {
+  it('keeps only songs with a confirmed year and a preview', async () => {
     spotifyPages({
       '/playlists/p1/': {
         items: [
@@ -295,12 +301,13 @@ describe('loadSongs', () => {
           item({ name: 'Hits Again', albumName: 'Greatest Hits' }),
           item({ name: 'No Date', release: '' }),
           item({ name: 'NoPreview Song' }),
+          item({ name: 'NoYear Song' }),
           item({ name: 'Live Take - 1999 Version', artists: [], images: [] }),
         ],
         next: null,
       },
     });
-    const { songs, previewStats } = await load(['p1'], 50);
+    const { songs, previewStats, yearsUnconfirmed } = await load(['p1'], 50);
     expect(songs.map((s) => [s.title, s.year])).toEqual(
       expect.arrayContaining([
         ['Classic', 1975],
@@ -309,7 +316,9 @@ describe('loadSongs', () => {
     );
     expect(songs).toHaveLength(2);
     expect(songs.find((s) => s.title === 'Live Take')).toMatchObject({ artist: 'Unknown', cover: null });
-    expect(previewStats.lookups).toBe(3); // Classic, NoPreview Song, Live Take
+    // Classic, NoPreview Song, Live Take: a song without a confirmed year isn't searched on iTunes.
+    expect(previewStats.lookups).toBe(3);
+    expect(yearsUnconfirmed).toBe(1);
   });
 
   it('drops remixes, live takes, re-recordings and remasters, but not titles that only sound like one', async () => {
@@ -355,18 +364,25 @@ describe('loadSongs', () => {
     expect(duplicatesRemoved).toBe(3);
   });
 
-  it('takes the year from iTunes when Spotify only knows a later release', async () => {
-    itunesYears.set('Classic Hit', 1969).set('New Song', 2005);
+  it('takes the year from MusicBrainz, since Spotify often only knows a later release', async () => {
+    originalYears.set('Classic Hit', 1969);
     spotifyPages({
       '/playlists/p1/': {
         items: [item({ name: 'Classic Hit', release: '2009-03-01' }), item({ name: 'New Song', release: '2001-01-01' })],
         next: null,
       },
     });
-    const { songs, yearsCorrected, previewsUnavailable } = await load(['p1'], 50);
-    expect(previewsUnavailable).toBe(false);
+    const { songs, yearsCorrected, yearStats, previewsUnavailable, yearsUnavailable } = await load(['p1'], 50);
+    expect([previewsUnavailable, yearsUnavailable]).toEqual([false, false]);
     expect(Object.fromEntries(songs.map((s) => [s.title, s.year]))).toEqual({ 'Classic Hit': 1969, 'New Song': 2001 });
     expect(yearsCorrected).toBe(1);
+    // Both songs in one search, each up to its Spotify year.
+    expect(yearStats.lookups).toBe(1);
+    expect(findOriginalYears).toHaveBeenCalledWith(
+      expect.arrayContaining([{ artist: 'Band', title: 'Classic Hit', durationMs: 200_000, latest: 2009 }]),
+      yearStats,
+      expect.any(AbortSignal),
+    );
     // iTunes gets Spotify's length to tell recordings apart, and the load's signal to stop waiting.
     expect(findPreview).toHaveBeenCalledWith('Band', 'Classic Hit', 200_000, expect.anything(), expect.any(AbortSignal));
     // Only the song fields reach the client.
@@ -502,6 +518,34 @@ describe('loadSongs', () => {
     // The client then says to wait, rather than to pick other playlists.
     expect(previewsUnavailable).toBe(true);
     vi.mocked(findPreview).mockReset();
+  });
+
+  it('stops asking MusicBrainz once it keeps failing, and plays no song with an unconfirmed year', async () => {
+    vi.mocked(findOriginalYears).mockImplementation(async (queries, stats) => {
+      if (stats) {
+        stats.lookups++;
+        stats.failed++;
+      }
+      return queries.map(() => null);
+    });
+    spotifyPages({
+      '/playlists/p1/': {
+        items: Array.from({ length: 50 }, (_, i) => item({ id: `t${i}`, name: `T${i}` })),
+        next: null,
+      },
+    });
+    const { songs, yearStats, previewStats, yearsUnavailable, yearsUnconfirmed, previewsUnavailable } = await load(
+      ['p1'],
+      40,
+    );
+    expect(songs).toEqual([]);
+    // Three batches failed; the other two aren't asked.
+    expect(yearStats).toEqual({ lookups: 3, failed: 3, waitedMs: 0 });
+    expect(yearsUnconfirmed).toBe(30);
+    expect(previewStats.lookups).toBe(0);
+    // The client then says to wait, rather than to pick other playlists.
+    expect([yearsUnavailable, previewsUnavailable]).toEqual([true, false]);
+    vi.mocked(findOriginalYears).mockReset();
   });
 
   it('stops once the target is reached or the request is aborted', async () => {

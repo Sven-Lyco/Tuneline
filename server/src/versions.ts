@@ -14,9 +14,14 @@ export function normalize(s: string): string {
 
 const BRACKETS = /[([][^)\]]*[)\]]/g;
 
-/** Title without "(Remastered 2011)", "[Live]" or " - Radio Edit" style suffixes. */
+/** Title without "(Remastered 2011)", "[Live]" or " - Radio Edit" style suffixes, as written. */
+export function plainTitle(s: string): string {
+  return s.replace(BRACKETS, '').split(' - ')[0].trim();
+}
+
+/** plainTitle(), normalized: what two titles of the same song have in common. */
 export function baseTitle(s: string): string {
-  return normalize(s.replace(BRACKETS, '').split(' - ')[0]);
+  return normalize(plainTitle(s));
 }
 
 /** Two titles by one artist with the same key are the same song (other release, other version). */
@@ -33,25 +38,20 @@ function versionPart(title: string): string {
   return [...(title.match(BRACKETS) ?? []), dash >= 0 ? title.slice(dash + 3) : ''].join(' ');
 }
 
-// Another recording than the original. "Radio Edit", "Single Version" or "feat. …" are fine, and
-// so is a "7" Mix" or "Radio Mix": that's the single as released ("What Is Love (7" Mix)").
+// Another recording than the original ("Neuaufnahme": German for re-recording). "Radio Edit",
+// "Single Version" or "feat. …" are fine, and so is a "7" Mix" or "Radio Mix": that's the single
+// as released ("What Is Love (7" Mix)").
 const VARIANT =
-  /\b(?:re-?mix(?:es|ed)?|(?<!(?:original|radio|single|album|main|mono|stereo|7"|7”|7''|7 ?inch|7-inch) )mix|live|unplugged|acoustic|instrumental|a ?capp?ella|karaoke|re-?record(?:ed|ing)?|taylor['’]?s version|demo|slowed|sped[ -]up|screwed|chopped|nightcore|extended|club|dub|symphonic|orchestral|piano|cover|tribute|originally performed|lullaby)\b/i;
+  /\b(?:re-?mix(?:es|ed)?|(?<!(?:original|radio|single|album|main|mono|stereo|7"|7”|7''|7 ?inch|7-inch) )mix|live|unplugged|acoustic|instrumental|a ?capp?ella|karaoke|re-?record(?:ed|ing)?|taylor['’]?s version|demo|slowed|sped[ -]up|screwed|chopped|nightcore|extended|club|dub|symphonic|orchestral|piano|cover|tribute|originally performed|lullaby|neu-?aufn(?:ahme)?)\b/i;
 // Albums that only hold such recordings, even when the track title doesn't say so.
 const VARIANT_ALBUM =
-  /\b(?:karaoke|screwed|chopped|tribute|lullab(?:y|ies)|remix(?:es|ed)|re-?recorded|taylor['’]?s version|unplugged|instrumentals)\b/i;
+  /\b(?:karaoke|screwed|chopped|tribute|lullab(?:y|ies)|remix(?:es|ed)|re-?recorded|taylor['’]?s version|unplugged|instrumentals|neuaufnahmen?)\b/i;
 // No \b at the end: "Remastered2009", "Remasterizado" and "Re-Mastered" count too.
 const REMASTER = /\bre-?master/i;
 
-// Best-ofs, compilations and reissues. iTunes dates a song on them by the release or by another
-// track ("Nightshift" on five Commodores best-ofs: 1977-03-01, the song is from 1985).
-const COMPILATION_ALBUM =
-  /\b(?:greatest|best of|very best|essentials?|hits|gold|platinum|ultimate|definitive|anthology|collection|masters|number (?:ones|1'?s)|no\.? ?1'?s?|anniversary|deluxe|expanded|remaster(?:ed)?|erfolge|schlager)\b|#1|\b(?:19|20)\d{2}\s*[-–]\s*(?:19|20)?\d{2}\b/i;
-
-/** An album name that sounds like a best-of or reissue: its dates don't tell the song's year. */
-export function isCompilationAlbum(album: string): boolean {
-  return COMPILATION_ALBUM.test(album);
-}
+// Lengths further apart than this (share of the Spotify length) are another recording ("chopped &
+// screwed", a re-recording …).
+export const MAX_LENGTH_DIFFERENCE = 0.4;
 
 /**
  * - `original`: the song as first released.

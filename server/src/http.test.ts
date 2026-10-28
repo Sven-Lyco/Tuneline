@@ -172,6 +172,18 @@ describe('Spotify data routes', () => {
           next: null,
         });
       }
+      if (url.startsWith('https://musicbrainz.org')) {
+        return json({
+          count: 1,
+          recordings: [
+            {
+              title: 'Dream On',
+              'artist-credit': [{ name: 'Aerosmith' }],
+              releases: [{ date: '1973-01-05', status: 'Official' }],
+            },
+          ],
+        });
+      }
       return json({
         results: [{ artistName: 'Aerosmith', trackName: 'Dream On', previewUrl: 'https://audio-ssl.itunes.apple.com/d' }],
       });
@@ -183,6 +195,7 @@ describe('Spotify data routes', () => {
       ],
       unavailablePlaylists: [],
       previewsUnavailable: false,
+      yearsUnavailable: false,
     });
   });
 

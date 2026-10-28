@@ -319,12 +319,13 @@ export default function App() {
     // A starting card plus one per round for everyone. The server only sends songs with a preview;
     // the extra fifth is for players who join late and get a starting card from the pile.
     const songsNeeded = Math.ceil(playerCount * (rounds + 1) * 1.2);
-    const { songs, unavailablePlaylists, previewsUnavailable } = await loadSongsFromPlaylists(
-      selectedPlaylists.map((p) => p.id),
-      songsNeeded,
-      getPlayedSongIds(),
-      load.signal
-    );
+    const { songs, unavailablePlaylists, previewsUnavailable, yearsUnavailable } =
+      await loadSongsFromPlaylists(
+        selectedPlaylists.map((p) => p.id),
+        songsNeeded,
+        getPlayedSongIds(),
+        load.signal
+      );
     if (load.signal.aborted) return;
     setSongLoad(null);
     const refused = unavailablePlaylistsMessage(unavailablePlaylists, selectedPlaylists);
@@ -332,10 +333,13 @@ export default function App() {
     // Matches the server's minimum: a starting card plus at least one turn per player.
     if (songs.length < Math.max(playerCount + 3, playerCount * 2)) {
       socket.emit('cancel_loading');
-      // iTunes throttles the server's IP for a while: other playlists won't help, waiting will.
+      // iTunes throttles the server's IP or MusicBrainz is busy: other playlists won't help,
+      // waiting will.
       const reason = previewsUnavailable
         ? 'Die Hörproben sind gerade nicht erreichbar – versuch es in ein paar Minuten nochmal.'
-        : refused;
+        : yearsUnavailable
+          ? 'Die Erscheinungsjahre lassen sich gerade nicht prüfen – versuch es in ein paar Minuten nochmal.'
+          : refused;
       setLoadingMsg(reason ?? 'Nicht genug Songs gefunden. Bitte andere Playlisten wählen.');
       // A reason is longer to read than the plain notice.
       await sleep(reason ? 5000 : 2000);

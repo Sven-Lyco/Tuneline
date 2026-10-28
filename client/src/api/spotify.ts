@@ -60,6 +60,7 @@ export async function loadSongsFromPlaylists(
     songs: [],
     unavailablePlaylists: [],
     previewsUnavailable: false,
+    yearsUnavailable: false,
   };
   try {
     const res = await fetch('/api/songs', {

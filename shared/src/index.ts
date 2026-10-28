@@ -34,6 +34,8 @@ export interface SongsResponse {
   unavailablePlaylists: Array<{ id: string; problem: PlaylistProblem }>;
   /** iTunes kept refusing the preview searches (throttling), so the load stopped early. */
   previewsUnavailable: boolean;
+  /** MusicBrainz couldn't be asked for the songs' years, so the load stopped early. */
+  yearsUnavailable: boolean;
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────

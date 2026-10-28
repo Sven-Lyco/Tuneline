@@ -23,13 +23,15 @@ flowchart LR
     RM[RoomManager]
   end
   SP[(Spotify Web API)]
+  MB[(MusicBrainz)]
   IT[(iTunes Search API)]
   CDN[(audio-ssl.itunes.apple.com)]
 
   H -- "Playlist-IDs, excludeIds" --> API
   API -- "Token aus der Session" --> SP
+  API -- "Interpret, Titel, Spotify-Jahr (10 Songs pro Suche)" --> MB
   API -- "Interpret, Titel, Länge" --> IT
-  API -- "SongFull[]: nur Originalversionen mit Preview, Jahr ggf. von iTunes, ohne Doppelte" --> H
+  API -- "SongFull[]: nur Originalversionen mit Preview und von MusicBrainz bestätigtem Jahr, ohne Doppelte" --> H
   H -- "start_game mit den Songs" --> RM
   RM -- "während des Zugs: nur die Preview-URL" --> C
   RM -- "placement_result und game_over: kompletter Song" --> C

@@ -42,6 +42,7 @@ beforeEach(() => {
     songs: [],
     unavailablePlaylists: [],
     previewsUnavailable: false,
+    yearsUnavailable: false,
   });
 });
 
@@ -210,6 +211,7 @@ describe('starting a game', () => {
       songs: Array.from({ length: 20 }, (_, i) => song(1960 + i)),
       unavailablePlaylists: [],
       previewsUnavailable: false,
+      yearsUnavailable: false,
     });
     await hostLobby();
     fireEvent.click(screen.getByText('Spiel starten →'));
@@ -224,6 +226,7 @@ describe('starting a game', () => {
       songs: Array.from({ length: 20 }, (_, i) => song(1960 + i)),
       unavailablePlaylists: [{ id: 'a', problem: 'spotify_owned' }],
       previewsUnavailable: false,
+      yearsUnavailable: false,
     });
     await hostLobby();
     fireEvent.click(screen.getByText('Spiel starten →'));
@@ -250,6 +253,7 @@ describe('starting a game', () => {
       songs: [],
       unavailablePlaylists: [{ id: 'a', problem: 'not_owned' }],
       previewsUnavailable: false,
+      yearsUnavailable: false,
     });
     await hostLobby();
     fireEvent.click(screen.getByText('Spiel starten →'));
@@ -266,6 +270,7 @@ describe('starting a game', () => {
       songs: [],
       unavailablePlaylists: [],
       previewsUnavailable: true,
+      yearsUnavailable: false,
     });
     await hostLobby();
     fireEvent.click(screen.getByText('Spiel starten →'));
@@ -278,12 +283,34 @@ describe('starting a game', () => {
     expect(emittedPayloads('start_game')).toHaveLength(0);
   });
 
+  it('tells the host to wait when the years could not be checked', async () => {
+    vi.mocked(loadSongsFromPlaylists).mockResolvedValue({
+      songs: [],
+      unavailablePlaylists: [{ id: 'a', problem: 'not_owned' }],
+      previewsUnavailable: false,
+      yearsUnavailable: true,
+    });
+    await hostLobby();
+    fireEvent.click(screen.getByText('Spiel starten →'));
+    expect(
+      await screen.findByText(
+        'Die Erscheinungsjahre lassen sich gerade nicht prüfen – versuch es in ein paar Minuten nochmal.'
+      )
+    ).toBeInTheDocument();
+    expect(emittedPayloads('start_game')).toHaveLength(0);
+  });
+
   it('lets the host cancel while songs load', async () => {
     vi.mocked(loadSongsFromPlaylists).mockImplementation(
       (_ids, _target, _exclude, signal) =>
         new Promise((resolve) =>
           signal.addEventListener('abort', () =>
-            resolve({ songs: [], unavailablePlaylists: [], previewsUnavailable: false })
+            resolve({
+              songs: [],
+              unavailablePlaylists: [],
+              previewsUnavailable: false,
+              yearsUnavailable: false,
+            })
           )
         )
     );
